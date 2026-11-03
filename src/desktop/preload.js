@@ -1,6 +1,32 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async orderItems(action, orderId, value) {
+    if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
+        !['list', 'add', 'increment', 'decrement', 'remove'].includes(action)) return { ok: false };
+    const request = { action, orderId };
+    if (action === 'add') {
+      if (typeof value !== 'string' || !value.trim()) return { ok: false };
+      request.productId = value;
+    } else if (action !== 'list') {
+      if (!Number.isSafeInteger(value) || value <= 0) return { ok: false };
+      request.itemId = value;
+    }
+    try {
+      const response = await ipcRenderer.invoke('arra:order-items', request);
+      const data = response && response.data;
+      if (response && response.ok === true && data && Array.isArray(data.items) &&
+          Number.isSafeInteger(data.total) && data.total >= 0 && data.items.every(i =>
+            i && Number.isSafeInteger(i.id) && i.id > 0 && typeof i.productId === 'string' &&
+            typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
+            Number.isSafeInteger(i.quantity) && i.quantity > 0)) {
+        return { ok: true, data: { total: data.total, items: data.items.map(i => ({
+          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity
+        })) } };
+      }
+    } catch (_) {}
+    return { ok: false, error: 'Could not update order items' };
+  },
   async getApplicationInfo() {
     try {
       const response = await ipcRenderer.invoke('arra:application-info', {});

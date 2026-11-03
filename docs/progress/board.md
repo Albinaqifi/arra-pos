@@ -9,8 +9,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-003 | Done | Acceptance, review and testing passed; PR #3 merged. |
 | S-004 | Done | PR #4 merged. |
 | S-005 | Done | PR #5 merged. |
-| S-006 | In progress | Review and focused tests passed; awaiting PR and merge. |
+| S-006 | Done | PR #6 merged. |
+| S-007 | In progress | Review and focused tests passed; awaiting PR and merge. |
 
 ## Current
 
-S-006 is verified locally and awaits PR and merge.
+S-007 is verified locally and awaits PR and merge.

@@ -233,7 +233,7 @@ class WaiterDemo extends React.Component {
   }
   async openTable(id) {
     if (window.arra) {
-      if (this._opening) return;
+      if (this._opening || this._itemBusy) return;
       this._opening = true;
       try {
         const result = await window.arra.openOrder(id);
@@ -241,7 +241,15 @@ class WaiterDemo extends React.Component {
         if (!result.ok) { this.mut(n => this.toast(n, 'Could not open table. Try again.', 'err')); return; }
         this.mut(n => {
           const old = n.orders[id];
-          n.orders[id] = { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0, log: old?.log || [] };
+          n.orders[id] = { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0,
+            log: old?.log || [], itemsLoaded: old?.id === result.data.id && !!old.itemsLoaded };
+        });
+        const items = await window.arra.orderItems('list', result.data.id);
+        if (!this._mounted) return;
+        if (!items.ok) { this.mut(n => this.toast(n, 'Could not load order items. Try again.', 'err')); return; }
+        this.mut(n => {
+          n.orders[id].itemsLoaded = true;
+          this.replaceDesktopItems(n, id, items.data.items);
           n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = '';
         });
       } catch (_) { if (this._mounted) this.mut(n => this.toast(n, 'Could not open table. Try again.', 'err')); }
@@ -259,7 +267,27 @@ class WaiterDemo extends React.Component {
   }
 
   // ---------- order entry ----------
+  replaceDesktopItems(n, tableId, items) {
+    n.items = n.items.filter(i => i.tableId !== tableId).concat(items.map(i => ({
+      id: i.id, tableId, pid: i.productId, name: i.name, unit: i.unitPrice, qty: i.quantity,
+      mods: '', note: '', status: 'pending', round: 0, cxQty: 0, cx: []
+    })));
+  }
+  async changeDesktopItems(action, value) {
+    if (this._itemBusy) { this.mut(n => this.toast(n, 'Please wait for the order to save.', 'warn')); return; }
+    const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
+    if (!orderId) return;
+    this._itemBusy = true;
+    try {
+      const result = await window.arra.orderItems(action, orderId, value);
+      if (!this._mounted) return;
+      if (!result.ok) { this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); return; }
+      this.mut(n => this.replaceDesktopItems(n, tableId, result.data.items));
+    } catch (_) { if (this._mounted) this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); }
+    finally { this._itemBusy = false; }
+  }
   addProduct(pid) {
+    if (window.arra) return this.changeDesktopItems('add', pid);
     this.mut(n => {
       const p = this.menu().byId[pid];
       if (!p) return;
@@ -284,20 +312,21 @@ class WaiterDemo extends React.Component {
       n.modal = null;
     });
   }
-  incItem(id) { this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') i.qty++; }); }
+  incItem(id) { if (window.arra) return this.changeDesktopItems('increment', id); this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') i.qty++; }); }
   decItem(id) {
+    if (window.arra) return this.changeDesktopItems('decrement', id);
     this.mut(n => {
       const i = n.items.find(x => x.id === id); if (!i || i.status !== 'pending') return;
       if (i.qty > 1) i.qty--; else this.dropItem(n, i);
     });
   }
-  removeItem(id) { this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') this.dropItem(n, i); }); }
+  removeItem(id) { if (window.arra) return this.changeDesktopItems('remove', id); this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') this.dropItem(n, i); }); }
   dropItem(n, i) {
     n.items = n.items.filter(x => x.id !== i.id);
     this.log(n, i.tableId, 'Removed ' + i.name + ' (was not sent yet)');
     this.freeIfEmpty(n, i.tableId);
   }
-  openNote(id) { this.mut(n => { const i = n.items.find(x => x.id === id); n.modal = { type: 'note', itemId: id, text: i ? i.note : '' }; }); }
+  openNote(id) { if (window.arra) { this.mut(n => this.toast(n, 'Notes are not available yet.', 'warn')); return; } this.mut(n => { const i = n.items.find(x => x.id === id); n.modal = { type: 'note', itemId: id, text: i ? i.note : '' }; }); }
   saveNote() {
     this.mut(n => {
       const i = n.items.find(x => x.id === n.modal.itemId);
@@ -308,6 +337,7 @@ class WaiterDemo extends React.Component {
 
   // ---------- send / print ----------
   send() {
+    if (window.arra) { this.mut(n => this.toast(n, 'Sending orders is not available yet.', 'warn')); return; }
     this.mut(n => {
       const tid = n.tableId;
       const pend = n.items.filter(i => i.tableId === tid && i.status === 'pending');
@@ -522,16 +552,17 @@ class WaiterDemo extends React.Component {
       label: sec.label,
       tables: sec.ids.map(id => {
         const o = s.orders[id]; const tk = !!o; if (tk) taken++; else free++;
+        const figuresKnown = !window.arra || !tk || !!o.itemsLoaded;
         const its = s.items.filter(i => i.tableId === id);
         const unsent = its.filter(i => i.status === 'pending').reduce((a, i) => a + i.qty, 0);
         const cnt = its.reduce((a, i) => a + bq(i), 0);
         const issue = s.jobs.some(j => j.tableId === id && j.status === 'failed');
         const mins = tk ? Math.max(0, Math.round((now - o.openedAt) / 60000)) : 0;
         return {
-          num: String(id), taken: tk, free: !tk, total: money(tTotal(id)), waiter: tk ? o.openedBy : '',
-          count: cnt + (cnt === 1 ? ' item' : ' items'), mins: mins + ' min',
-          hasUnsent: unsent > 0, unsent: unsent + ' not sent', hasIssue: issue,
-          aria: tk ? 'Table ' + id + ', taken, ' + money(tTotal(id)) : 'Table ' + id + ', free',
+          num: String(id), taken: tk, free: !tk, total: figuresKnown ? money(tTotal(id)) : '—', waiter: tk ? o.openedBy : '',
+          count: figuresKnown ? cnt + (cnt === 1 ? ' item' : ' items') : 'Open to view items', mins: mins + ' min',
+          hasUnsent: figuresKnown && unsent > 0, unsent: unsent + ' not sent', hasIssue: issue,
+          aria: tk ? 'Table ' + id + ', taken' + (figuresKnown ? ', ' + money(tTotal(id)) : ', open to view items') : 'Table ' + id + ', free',
           style: 'min-height:156px; border-radius:22px; padding:16px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; gap:10px; text-align:left; ' + (tk ? 'background:#F97316; color:#1A0B00; border:2px solid #EA580C; box-shadow:0 10px 22px rgba(249,115,22,0.28)' : 'background:#FFFFFF; color:#0F172A; border:2px solid #E2E8F0; box-shadow:0 4px 12px rgba(15,23,42,0.04)'),
           open: () => this.openTable(id)
         };

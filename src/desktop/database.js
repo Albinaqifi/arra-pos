@@ -48,6 +48,18 @@ const migrations = [
     ) STRICT;
     CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open';`,
   },
+  {
+    version: 6,
+    sql: `CREATE TABLE order_items (
+      id INTEGER PRIMARY KEY,
+      order_id INTEGER NOT NULL REFERENCES orders(id),
+      product_id TEXT NOT NULL REFERENCES menu_products(id),
+      name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+      unit_price INTEGER NOT NULL CHECK (unit_price >= 0 AND unit_price <= 9007199254740991),
+      quantity INTEGER NOT NULL CHECK (quantity > 0 AND quantity <= 9007199254740991),
+      status TEXT NOT NULL CHECK (status IN ('pending', 'sent'))
+    ) STRICT;`,
+  },
 ];
 
 function migrate(db) {
