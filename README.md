@@ -21,6 +21,14 @@ The installed Electron runtime, React and application files run locally; no inte
 
 On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
 
+Create a development-only local account before signing in, with the desktop app closed, in an interactive PowerShell terminal:
+
+```powershell
+node src/desktop/bootstrap-user.js "$env:APPDATA\arra-pos-waiter-demo"
+```
+
+Enter a sample username and a password when prompted; password entry is hidden. The command creates only the first account and refuses to overwrite an existing account. There is no default password. It is a development bootstrap, not a production account management or recovery procedure. Credentials are stored as salted scrypt hashes locally. Signing out clears the in-memory session, as does closing the window. Service authorization is not yet implemented (S-010); the waiter selection and PINs remain simulated (S-011), and do not attribute actions to staff. Do not use this build for real operations.
+
 The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. Opening a desktop table creates or resumes its local active order.
 
 For the default Windows app-data directory, create the 16 sample tables with the following command in PowerShell, with the desktop app closed:
@@ -49,7 +57,7 @@ The original browser demo remains available with:
 npm start
 ```
 
-Open http://localhost:3000. In either version the restaurant sign-in fields are prefilled. Pick a waiter; for a waiter with a PIN, enter any four digits. These are simulated demo interactions, not authentication.
+Open http://localhost:3000. Browser sign-in accepts any nonempty values and is simulated. Pick a waiter; for a waiter with a PIN, enter any four digits. Waiter selection is simulated in both versions.
 
 If port 3000 is in use, choose another available port, for example:
 

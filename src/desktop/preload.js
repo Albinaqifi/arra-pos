@@ -1,6 +1,21 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async signIn(username, password) {
+    if (typeof username !== 'string' || typeof password !== 'string') return { ok: false };
+    try {
+      const result = await ipcRenderer.invoke('arra:sign-in', { username, password });
+      if (result && result.ok === true) return { ok: true };
+    } catch (_) {}
+    return { ok: false, error: 'Sign in failed' };
+  },
+  async signOut() {
+    try {
+      const result = await ipcRenderer.invoke('arra:sign-out', {});
+      if (result && result.ok === true) return { ok: true };
+    } catch (_) {}
+    return { ok: false, error: 'Sign out failed' };
+  },
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
         !['list', 'add', 'increment', 'decrement', 'remove', 'note'].includes(action)) return { ok: false };
