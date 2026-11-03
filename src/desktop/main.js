@@ -6,9 +6,11 @@ const { registerTables } = require('./tables');
 const { registerOrders } = require('./orders');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
+const { registerSession } = require('./session');
 
 let database;
 let mainWindow;
+let session;
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -23,7 +25,7 @@ function createWindow() {
   });
 
   mainWindow = window;
-  window.on('closed', () => { if (mainWindow === window) mainWindow = undefined; });
+  window.on('closed', () => { if (mainWindow === window) { mainWindow = undefined; if (session) session.signOut(); } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.loadFile(path.join(__dirname, '../../index.html'));
@@ -41,6 +43,7 @@ app.whenReady().then(() => {
   const isAllowedSender = (event) =>
     Boolean(mainWindow && event.sender === mainWindow.webContents &&
       event.senderFrame === mainWindow.webContents.mainFrame);
+  session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
   registerTables(require('electron').ipcMain, isAllowedSender, database);
   registerOrders(require('electron').ipcMain, isAllowedSender, database);

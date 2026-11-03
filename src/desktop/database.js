@@ -64,6 +64,16 @@ const migrations = [
     version: 7,
     sql: "ALTER TABLE order_items ADD COLUMN note TEXT NOT NULL DEFAULT '';",
   },
+  {
+    version: 8,
+    sql: `CREATE TABLE local_users (
+      id INTEGER PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE CHECK (length(trim(username)) > 0),
+      salt BLOB NOT NULL,
+      password_hash BLOB NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+    ) STRICT;`,
+  },
 ];
 
 function migrate(db) {
