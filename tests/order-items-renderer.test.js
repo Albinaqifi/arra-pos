@@ -3,6 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('a later simulated success retains the earlier uncertain-output warning', () => {
+  class Component { setState(update) { Object.assign(this.state, update); } }
+  const context = { React: { Component, createElement: (type, props, ...children) => ({ type, props, children }) }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} } };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.PrintJobs = PrintJobs;', context);
+  const panel = new context.PrintJobs({});
+  panel.state.jobs = [{ id: 1, destination: 'kitchen', tableId: 1, round: 1, attempts: 2, result: 'success', hadUncertain: 1 }];
+  assert.match(JSON.stringify(panel.render()), /earlier attempt was uncertain; duplicate output is possible/);
+});
+
 test('desktop screen loads and saves items, shows failures, and does not send demo orders', async () => {
   let rows = [], fail = false, reject = false, release;
   const api = {

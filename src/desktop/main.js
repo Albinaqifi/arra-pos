@@ -8,6 +8,7 @@ const { registerOrders } = require('./orders');
 const { registerMenuConfig } = require('./menu-config');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
+const { registerPrintJobs } = require('./print-jobs');
 const { registerSession } = require('./session');
 const { registerEmployeeConfig } = require('./employee-config');
 
@@ -55,6 +56,7 @@ app.whenReady().then(() => {
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session);
+  registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
