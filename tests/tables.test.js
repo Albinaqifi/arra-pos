@@ -1,0 +1,32 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { CHANNEL, registerTables, seedTables } = require('../src/desktop/tables');
+
+test('empty list, repeatable sample setup, and identities survive reopen', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-tables-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = openDatabase(dir);
+  let handler;
+  const trusted = {};
+  const register = () => registerTables({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, event => event === trusted, db);
+  register();
+  assert.deepEqual(handler(trusted, {}), { ok: true, data: [] });
+  seedTables(db);
+  seedTables(db);
+  const first = handler(trusted, {}).data.map(row => ({ ...row }));
+  assert.equal(first.length, 16);
+  assert.deepEqual(first[0], { id: 1, area: 'Inside' });
+  assert.deepEqual(first[15], { id: 16, area: 'Terrace' });
+  db.close();
+  db = openDatabase(dir);
+  register();
+  assert.deepEqual(handler(trusted, {}).data.map(row => ({ ...row })), first);
+  assert.deepEqual(handler({}, {}), { ok: false, error: 'Invalid request' });
+  for (const bad of [null, [], { extra: 1 }]) assert.deepEqual(handler(trusted, bad), { ok: false, error: 'Invalid request' });
+  db.close();
+  assert.deepEqual(handler(trusted, {}), { ok: false, error: 'Tables unavailable' });
+});

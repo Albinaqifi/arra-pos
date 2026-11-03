@@ -16,6 +16,13 @@ const migrations = [
     version: 2,
     sql: 'ALTER TABLE app_metadata ADD COLUMN updated_at TEXT;',
   },
+  {
+    version: 3,
+    sql: `CREATE TABLE dining_tables (
+      id INTEGER PRIMARY KEY NOT NULL CHECK (id > 0),
+      area TEXT NOT NULL CHECK (length(trim(area)) > 0)
+    ) STRICT;`,
+  },
 ];
 
 function migrate(db) {
