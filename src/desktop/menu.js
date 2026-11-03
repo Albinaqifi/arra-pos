@@ -13,7 +13,9 @@ function registerMenu(ipcMain, isAllowedSender, db, session) {
         FROM menu_products p JOIN menu_categories c ON c.id = p.category_id
         LEFT JOIN menu_categories parent ON parent.id = c.parent_id
         WHERE p.active = 1 AND c.active = 1 AND (c.parent_id IS NULL OR parent.active = 1) ORDER BY p.sort_order, p.rowid`).all();
-      return { ok: true, data: { categories, products } };
+      const groups = db.prepare('SELECT id, product_id AS productId, name, required FROM modifier_groups WHERE active = 1 ORDER BY rowid').all();
+      const options = db.prepare('SELECT id, group_id AS groupId, name, adjustment FROM modifier_options WHERE active = 1 ORDER BY rowid').all();
+      return { ok: true, data: { categories, products, groups, options } };
     } catch (_) {
       return { ok: false, error: 'Menu unavailable' };
     }

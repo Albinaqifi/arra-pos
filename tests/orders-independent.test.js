@@ -14,10 +14,10 @@ test('version 4 upgrade preserves existing tables and menu data', t => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
   seedTables(db);
-  db.exec("INSERT INTO menu_categories (id,name,active) VALUES ('c', 'Sample', 1); INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; DROP TABLE user_permissions; DROP TABLE local_users; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order; PRAGMA user_version = 4;");
+  db.exec("INSERT INTO menu_categories (id,name,active) VALUES ('c', 'Sample', 1); INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; DROP TABLE user_permissions; DROP TABLE local_users; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order; DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version = 4;");
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 12);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 13);
   assert.equal(db.prepare('SELECT count(*) AS n FROM dining_tables').get().n, 16);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'p'").get().price, 123);
   let open;

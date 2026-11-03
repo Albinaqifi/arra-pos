@@ -46,3 +46,22 @@ test('desktop screen loads and saves items, shows failures, and does not send de
   fail = true; await app.removeItem(7); assert.equal(app.state.items.length, 1); assert.match(app.state.toast.msg, /Could not save/);
   fail = false; await app.removeItem(7); assert.equal(app.state.items.length, 0);
 });
+test('modifier dialog locks during save, closes after success and remains retryable after failure', async () => {
+  let resolveSave, calls = 0;
+  const api = {
+    getMenu: async () => ({ ok:true, data:{ categories:[{id:'food',name:'Food'}], products:[{id:'p',categoryId:'food',name:'Dish',price:120}], groups:[{id:'g',productId:'p',name:'Size',required:1}], options:[{id:'o',groupId:'g',name:'Large',adjustment:10}] } }),
+    getTables: async () => ({ ok:true, data:[{id:1,area:'Inside',orderId:3,openedAt:1}] }),
+    openOrder: async () => ({ok:true,data:{id:3,tableId:1,openedAt:1}}),
+    orderItems: async action => action === 'list' ? {ok:true,data:{items:[],total:0}} : (calls++, await new Promise(resolve => { resolveSave = resolve; }))
+  };
+  class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
+  const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1);
+  app.addProduct('p'); app.renderVals().modGroups[0].options[0].pick();
+  const pending=app.modAdd(); assert.equal(calls,1); assert.equal(app.renderVals().modAddDisabled,true); assert.equal(app.renderVals().modGroups[0].options[0].disabled,true);
+  app.renderVals().closeModal(); app.renderVals().modGroups[0].options[0].pick(); await app.modAdd(); assert.equal(calls,1); assert.equal(app.state.modal.sel.g,0);
+  resolveSave({ok:false}); await pending; assert.equal(app.state.modal.saving,false); assert.equal(app.state.modal.sel.g,0);
+  const retry=app.modAdd(); assert.equal(calls,2); resolveSave({ok:true,data:{items:[{id:1,productId:'p',name:'Dish',unitPrice:130,quantity:1,note:'',modifiers:[]}],total:130}}); await retry;
+  assert.equal(app.state.modal,null); assert.equal(app.state.items.length,1);
+});

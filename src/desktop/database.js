@@ -119,6 +119,9 @@ const migrations = [
     ALTER TABLE new_user_permissions RENAME TO user_permissions;
     INSERT INTO user_permissions SELECT min(id), 'menu.change' FROM local_users HAVING count(*) > 0;`,
   },
+  { version: 13, sql: `CREATE TABLE modifier_groups (id TEXT PRIMARY KEY, product_id TEXT NOT NULL REFERENCES menu_products(id), name TEXT NOT NULL, required INTEGER NOT NULL CHECK(required IN (0,1)), active INTEGER NOT NULL CHECK(active IN (0,1))) STRICT;
+    CREATE TABLE modifier_options (id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES modifier_groups(id), name TEXT NOT NULL, adjustment INTEGER NOT NULL, active INTEGER NOT NULL CHECK(active IN (0,1))) STRICT;
+    CREATE TABLE order_item_modifiers (item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE, group_name TEXT NOT NULL, option_name TEXT NOT NULL, adjustment INTEGER NOT NULL) STRICT;` },
 ];
 
 function migrate(db) {
