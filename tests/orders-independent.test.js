@@ -15,7 +15,7 @@ test('version 4 upgrade preserves existing tables and menu data', t => {
   db.exec("INSERT INTO menu_categories VALUES ('c', 'Sample', 1); INSERT INTO menu_products VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; PRAGMA user_version = 4;");
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 7);
   assert.equal(db.prepare('SELECT count(*) AS n FROM dining_tables').get().n, 16);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'p'").get().price, 123);
   let open;

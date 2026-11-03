@@ -3,11 +3,14 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('arra', Object.freeze({
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
-        !['list', 'add', 'increment', 'decrement', 'remove'].includes(action)) return { ok: false };
+        !['list', 'add', 'increment', 'decrement', 'remove', 'note'].includes(action)) return { ok: false };
     const request = { action, orderId };
     if (action === 'add') {
       if (typeof value !== 'string' || !value.trim()) return { ok: false };
       request.productId = value;
+    } else if (action === 'note') {
+      if (!value || !Number.isSafeInteger(value.itemId) || value.itemId <= 0 || typeof value.note !== 'string') return { ok: false };
+      request.itemId = value.itemId; request.note = value.note;
     } else if (action !== 'list') {
       if (!Number.isSafeInteger(value) || value <= 0) return { ok: false };
       request.itemId = value;
@@ -19,9 +22,9 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
           Number.isSafeInteger(data.total) && data.total >= 0 && data.items.every(i =>
             i && Number.isSafeInteger(i.id) && i.id > 0 && typeof i.productId === 'string' &&
             typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
-            Number.isSafeInteger(i.quantity) && i.quantity > 0)) {
+            Number.isSafeInteger(i.quantity) && i.quantity > 0 && typeof i.note === 'string')) {
         return { ok: true, data: { total: data.total, items: data.items.map(i => ({
-          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity
+          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note
         })) } };
       }
     } catch (_) {}

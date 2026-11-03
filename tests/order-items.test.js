@@ -48,7 +48,7 @@ test('version 5 upgrade retains an open order and menu', t => {
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open'); DROP TABLE order_items; PRAGMA user_version = 5;");
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 6);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 7);
   assert.equal(db.prepare('SELECT opened_at FROM orders WHERE table_id = 1').get().opened_at, 123);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'qebapa'").get().price, 220);
   assert.equal(db.prepare('SELECT count(*) AS n FROM order_items').get().n, 0);

@@ -60,6 +60,10 @@ const migrations = [
       status TEXT NOT NULL CHECK (status IN ('pending', 'sent'))
     ) STRICT;`,
   },
+  {
+    version: 7,
+    sql: "ALTER TABLE order_items ADD COLUMN note TEXT NOT NULL DEFAULT '';",
+  },
 ];
 
 function migrate(db) {
