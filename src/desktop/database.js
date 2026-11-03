@@ -137,6 +137,17 @@ const migrations = [
     CREATE TRIGGER employee_credential_audit_no_delete BEFORE DELETE ON employee_credential_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
     CREATE TRIGGER employee_audit_no_update BEFORE UPDATE ON employee_permission_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
     CREATE TRIGGER employee_audit_no_delete BEFORE DELETE ON employee_permission_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;` },
+  { version: 15, sql: `CREATE TABLE application_audit (
+    id INTEGER PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), occurred_at INTEGER NOT NULL,
+    action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+    order_id INTEGER REFERENCES orders(id), context TEXT NOT NULL
+  ) STRICT;
+  CREATE TRIGGER application_audit_no_update BEFORE UPDATE ON application_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+  CREATE TRIGGER application_audit_no_delete BEFORE DELETE ON application_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+  CREATE TRIGGER application_audit_no_replace BEFORE INSERT ON application_audit WHEN EXISTS (SELECT 1 FROM application_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+  CREATE TRIGGER employee_permission_audit_no_replace BEFORE INSERT ON employee_permission_audit WHEN EXISTS (SELECT 1 FROM employee_permission_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+  CREATE TRIGGER employee_account_audit_no_replace BEFORE INSERT ON employee_account_audit WHEN EXISTS (SELECT 1 FROM employee_account_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+  CREATE TRIGGER employee_credential_audit_no_replace BEFORE INSERT ON employee_credential_audit WHEN EXISTS (SELECT 1 FROM employee_credential_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;` },
 ];
 
 function migrate(db) {

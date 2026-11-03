@@ -1,3 +1,4 @@
+const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:open-order';
 
@@ -23,6 +24,7 @@ function registerOrders(ipcMain, isAllowedSender, db, session) {
             SELECT t.id, ?, 'open' FROM dining_tables t LEFT JOIN dining_areas a ON a.id = t.area_id WHERE t.id = ? AND t.active = 1 AND COALESCE(a.active, 1) = 1
             ON CONFLICT DO NOTHING`).run(Date.now(), request.tableId);
           order = findOrder.get(request.tableId);
+          if (order) recordAudit(db, session.currentUserId(), 'open', 'order', order.id, order.id, { tableId: order.tableId });
         }
         db.exec('COMMIT');
         return order ? { ok: true, data: order } : { ok: false, error: 'Table unavailable' };

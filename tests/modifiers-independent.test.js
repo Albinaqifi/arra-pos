@@ -12,7 +12,7 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
   seedMenu(db);
-  db.exec(`DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
+  db.exec(`DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'orders.view'),(1,'orders.change');
     INSERT INTO dining_areas (id,name) VALUES (1,'Inside');
     INSERT INTO dining_tables (id,area,area_id) VALUES (1,'Inside',1);
@@ -21,7 +21,7 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
     DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version=12;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 14);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 15);
   assert.deepEqual({ ...db.prepare('SELECT name,unit_price,quantity FROM order_items').get() }, {name:'Historical',unit_price:200,quantity:2});
   db.exec(`INSERT INTO modifier_groups VALUES ('required','qebapa','Size',1,1),('optional','qebapa','Extra',0,1),('foreign','cola','Ice',0,1),('inactive','qebapa','Old',0,0);
     INSERT INTO modifier_options VALUES ('size','required','Large',30,1),('discount','optional','Discount',-500,1),('foreign-option','foreign','Ice',0,1),('old-option','inactive','Old',0,1),('disabled','required','Disabled',0,0);`);

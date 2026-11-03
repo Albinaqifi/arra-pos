@@ -1,3 +1,4 @@
+const { recordAudit } = require('./audit');
 const { randomBytes } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
 const { hashPassword, validUsername, validPassword } = require('./session');
@@ -33,7 +34,12 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
       }
       if (req.action === 'create' && keys(req, ['action', 'username', 'password', 'pin']) && validUsername(req.username) && validPassword(req.password) && validPin(req.pin)) {
         const [salt, hash] = credential(req.password); const [pinSalt, pinHash] = req.pin ? credential(req.pin) : [null, null];
-        db.prepare('INSERT INTO local_users(username, salt, password_hash, pin_salt, pin_hash) VALUES (?, ?, ?, ?, ?)').run(req.username, salt, hash, pinSalt, pinHash);
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const created = db.prepare('INSERT INTO local_users(username, salt, password_hash, pin_salt, pin_hash) VALUES (?, ?, ?, ?, ?)').run(req.username, salt, hash, pinSalt, pinHash);
+          recordAudit(db, actor, 'create', 'employee', created.lastInsertRowid, null, {});
+          db.exec('COMMIT');
+        } catch (e) { db.exec('ROLLBACK'); throw e; }
         return { ok: true };
       }
       if (req.action === 'account' && keys(req, ['action', 'id', 'username', 'active']) && validId(req.id) && validUsername(req.username) && typeof req.active === 'boolean') {
