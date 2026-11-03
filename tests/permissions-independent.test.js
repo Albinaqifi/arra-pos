@@ -35,11 +35,11 @@ test('failed version 9 migration rolls back and preserves existing order data', 
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password'); seedTables(db);
   db.prepare("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open')").run();
-  db.exec('PRAGMA user_version = 8'); db.close();
+  db.exec('DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 8'); db.close();
   assert.throws(() => openDatabase(dir));
   db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
   assert.equal(db.prepare('SELECT opened_at FROM orders WHERE table_id = 1').get().opened_at, 123);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 8);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 9);
   db.close();
 });

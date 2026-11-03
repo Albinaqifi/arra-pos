@@ -4,7 +4,7 @@ const { hasPermissions } = require('./permissions');
 const { hashPassword, validUsername, validPassword } = require('./session');
 const CHANNEL = 'arra:employee-config';
 // Financial permissions and scopes are deliberately absent while Q-01 is unresolved.
-const PERMISSIONS = ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change'];
+const PERMISSIONS = ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent'];
 const plain = x => x && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const keys = (x, names) => Reflect.ownKeys(x).length === names.length && names.every(n => Object.hasOwn(x, n));
 const validId = x => Number.isSafeInteger(x) && x > 0;

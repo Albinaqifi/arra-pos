@@ -24,7 +24,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-018 | Done | Review and focused testing passed; PR #26 merged. |
 | S-019 | In progress | Verified; PR #28 awaits merge. |
 | S-020 | In progress | Review and focused testing passed; awaiting PR and merge. |
+| S-021 | In progress | Review and focused testing passed; awaiting PR and merge. |
 
 ## Current
 
-S-020 — Move selected items.
+S-021 — Admin correction of sent items.

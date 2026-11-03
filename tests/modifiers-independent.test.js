@@ -18,10 +18,10 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
     INSERT INTO dining_tables (id,area,area_id) VALUES (1,'Inside',1);
     INSERT INTO orders VALUES (1,1,1,'open');
     INSERT INTO order_items (order_id,product_id,name,unit_price,quantity,status) VALUES (1,'qebapa','Historical',200,2,'pending');
-    DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 12;`);
+    DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 12;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 18);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 19);
   assert.deepEqual({ ...db.prepare('SELECT name,unit_price,quantity FROM order_items').get() }, {name:'Historical',unit_price:200,quantity:2});
   db.exec(`INSERT INTO modifier_groups VALUES ('required','qebapa','Size',1,1),('optional','qebapa','Extra',0,1),('foreign','cola','Ice',0,1),('inactive','qebapa','Old',0,0);
     INSERT INTO modifier_options VALUES ('size','required','Large',30,1),('discount','optional','Discount',-500,1),('foreign-option','foreign','Ice',0,1),('old-option','inactive','Old',0,1),('disabled','required','Disabled',0,0);`);
@@ -49,7 +49,7 @@ test('version 13 migration failure rolls back schema and preserves version 12 da
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-mod-migration-'));
   t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
   let db = openDatabase(dir);
-  db.exec("INSERT INTO app_metadata (key,value) VALUES ('sample','retained'); DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; CREATE TABLE modifier_options (conflict TEXT); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 12;");
+  db.exec("INSERT INTO app_metadata (key,value) VALUES ('sample','retained'); DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; CREATE TABLE modifier_options (conflict TEXT); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 12;");
   db.close();
   assert.throws(() => openDatabase(dir));
   const {DatabaseSync} = require('node:sqlite');

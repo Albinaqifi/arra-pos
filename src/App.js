@@ -469,7 +469,7 @@ class WaiterDemo extends React.Component {
   replaceDesktopItems(n, tableId, items) {
     n.items = n.items.filter(i => i.tableId !== tableId).concat(items.map(i => ({
       id: i.id, tableId, pid: i.productId, name: i.name, unit: i.unitPrice, qty: i.quantity,
-      mods: (i.modifiers || []).map(m => m.groupName + ': ' + m.optionName + ' (' + (m.adjustment >= 0 ? '+' : '') + m.adjustment + ')').join(' · '), note: i.note, status: i.status || 'pending', round: i.round || 0, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, cxQty: 0, cx: []
+      mods: (i.modifiers || []).map(m => m.groupName + ': ' + m.optionName + ' (' + (m.adjustment >= 0 ? '+' : '') + m.adjustment + ')').join(' · '), note: i.note, status: i.status || 'pending', round: i.round || 0, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, cxQty: i.correctedQuantity || 0, cx: (i.corrections || []).map(c => ({ qty: c.quantity, reason: c.reason, who: c.actor, t: c.occurredAt }))
     })));
   }
   async changeDesktopItems(action, value) {
@@ -628,7 +628,28 @@ class WaiterDemo extends React.Component {
 
   // ---------- cancel ----------
   openCancel(id) { this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
-  confirmCancel() {
+  async confirmCancel() {
+    if (window.arra) {
+      const m = this.state.modal;
+      if (!m || !m.reason || (m.reason === 'Other' && !m.other.trim()) || this._itemBusy) return;
+      const reason = m.reason === 'Other' ? m.other.trim() : m.reason;
+      const requestId = m.requestId || crypto.randomUUID();
+      const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
+      if (!orderId) return;
+      this._itemBusy = true;
+      this.mut(n => { n.modal.requestId = requestId; n.modal.saving = true; });
+      try {
+        const result = await window.arra.orderItems('correct', orderId, { itemId: m.itemId, quantity: m.qty, reason, requestId });
+        if (!this._mounted) return;
+        this.mut(n => {
+          if (result.ok) { this.replaceDesktopItems(n, tableId, result.data.items); n.modal = null; this.toast(n, 'Correction saved. Tell preparation staff in person.'); }
+          else if (result.rejected) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; this.toast(n, 'Correction rejected. Check authorization and quantity.', 'err'); }
+          else { n.modal.saving = false; n.modal.unresolved = true; this.toast(n, 'Correction status unknown. Retry before leaving.', 'err'); }
+        });
+      } catch (_) { if (this._mounted) this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; this.toast(n, 'Correction status unknown. Retry before leaving.', 'err'); }); }
+      finally { this._itemBusy = false; }
+      return;
+    }
     this.mut(n => {
       const m = n.modal; const i = n.items.find(x => x.id === m.itemId); if (!i) return;
       if (!m.reason || (m.reason === 'Other' && !m.other.trim())) return;
@@ -968,8 +989,8 @@ class WaiterDemo extends React.Component {
             routeLabel: i.route === 'bar' ? 'Bar' : 'Kitchen',
             routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
             hasCx: i.cxQty > 0,
-            cxText: c ? i.cxQty + ' cancelled · ' + c.reason + ' · ' + c.who + ' ' + hm(c.t) + ' · waiting for owner review' : '',
-            canCancel: !window.arra && qq > 0, cancel: () => this.openCancel(i.id), cancelAria: 'Cancel ' + i.name
+            cxText: c ? i.cxQty + ' cancelled total · latest: ' + c.qty + ' · ' + c.reason + ' · ' + c.who + ' ' + hm(c.t) + (window.arra ? '' : ' · waiting for owner review') : '',
+            canCancel: qq > 0, cancel: () => this.openCancel(i.id), cancelAria: 'Cancel ' + i.name
           };
         })
       };
@@ -1066,18 +1087,18 @@ class WaiterDemo extends React.Component {
       v.cxName = it ? it.name : ''; v.cxMods = it ? it.mods : ''; v.cxHasMods = !!(it && it.mods);
       v.cxMeta = it ? 'Round ' + it.round + ' · sent ' + hm(it.sentAt) + ' to ' + l : '';
       v.cxMulti = mx > 1; v.cxQty = String(md.qty); v.cxMax = 'of ' + mx;
-      v.cxInc = () => this.mut(n => { n.modal.qty = Math.min(mx, n.modal.qty + 1); });
-      v.cxDec = () => this.mut(n => { n.modal.qty = Math.max(1, n.modal.qty - 1); });
+      v.cxInc = () => this.mut(n => { if (!n.modal.requestId) n.modal.qty = Math.min(mx, n.modal.qty + 1); });
+      v.cxDec = () => this.mut(n => { if (!n.modal.requestId) n.modal.qty = Math.max(1, n.modal.qty - 1); });
       v.cxReasons = ['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'].map(r => ({
         label: r, pressed: String(md.reason === r), style: chip(md.reason === r),
-        pick: () => this.mut(n => { n.modal.reason = r; })
+        pick: () => this.mut(n => { if (!n.modal.requestId) n.modal.reason = r; })
       }));
       v.cxIsOther = md.reason === 'Other'; v.cxOther = md.other;
-      v.onCxOther = e => { const val = e.target.value; this.setState(st => ({ modal: Object.assign({}, st.modal, { other: val }) })); };
+      v.onCxOther = e => { const val = e.target.value; this.setState(st => st.modal.requestId ? null : ({ modal: Object.assign({}, st.modal, { other: val }) })); };
       const ok = !!md.reason && (md.reason !== 'Other' || md.other.trim().length > 0);
       v.cxDisabled = !ok;
       v.cxStyle = 'flex:2; ' + bigBtn(ok, '#DC2626', '#FFFFFF').replace('height:72px', 'height:64px');
-      v.cxInfo = 'The ' + l + ' already has this ticket. A cancel notice prints there, but if they already started, tell them in person too. This is saved under your name and goes to the owner for review.';
+      v.cxInfo = window.arra ? 'Only an authorized administrator signed in under their own name can save this correction. Tell preparation staff in person; no notice is printed.' : 'The ' + l + ' already has this ticket. A cancel notice prints there, but if they already started, tell them in person too. This is saved under your name and goes to the owner for review.';
       v.cxConfirm = () => this.confirmCancel();
     }
 
