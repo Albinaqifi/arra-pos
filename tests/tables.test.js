@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { openDatabase } = require('../src/desktop/database');
+const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
 const { CHANNEL, registerTables, seedTables } = require('../src/desktop/tables');
 
 test('empty list, repeatable sample setup, and identities survive reopen', t => {
@@ -12,7 +14,7 @@ test('empty list, repeatable sample setup, and identities survive reopen', t => 
   let db = openDatabase(dir);
   let handler;
   const trusted = {};
-  const register = () => registerTables({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, event => event === trusted, db);
+  const register = () => registerTables({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1 });
   register();
   assert.deepEqual(handler(trusted, {}), { ok: true, data: [] });
   seedTables(db);
@@ -28,5 +30,5 @@ test('empty list, repeatable sample setup, and identities survive reopen', t => 
   assert.deepEqual(handler({}, {}), { ok: false, error: 'Invalid request' });
   for (const bad of [null, [], { extra: 1 }]) assert.deepEqual(handler(trusted, bad), { ok: false, error: 'Invalid request' });
   db.close();
-  assert.deepEqual(handler(trusted, {}), { ok: false, error: 'Tables unavailable' });
+  assert.deepEqual(handler(trusted, {}), { ok: false, error: 'Access denied' });
 });

@@ -1,7 +1,8 @@
+const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:order-items';
 const validId = n => Number.isSafeInteger(n) && n > 0;
 
-function registerOrderItems(ipcMain, isAllowedSender, db) {
+function registerOrderItems(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, request) => {
     const keys = { list: ['action', 'orderId'], add: ['action', 'orderId', 'productId'],
       note: ['action', 'orderId', 'itemId', 'note'], increment: ['action', 'orderId', 'itemId'], decrement: ['action', 'orderId', 'itemId'], remove: ['action', 'orderId', 'itemId'] };
@@ -13,6 +14,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db) {
         (['increment', 'decrement', 'remove', 'note'].includes(request.action) && !validId(request.itemId)) ||
         (request.action === 'note' && typeof request.note !== 'string'))
       return { ok: false, error: 'Invalid request' };
+    if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, error: 'Access denied' };
     try {
       db.exec('BEGIN IMMEDIATE');
       try {

@@ -4,7 +4,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
-const { openDatabase } = require('../src/desktop/database');
+const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
 const { registerTables, seedTables } = require('../src/desktop/tables');
 
 test('desktop renderer displays persisted table identities, empty and failed states', async t => {
@@ -13,7 +15,7 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   let db = openDatabase(dir);
   const trusted = {};
   let handler;
-  const register = () => registerTables({ handle(_channel, fn) { handler = fn; } }, event => event === trusted, db);
+  const register = () => registerTables({ handle(_channel, fn) { handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1 });
   register();
   let api;
   let invoke = (_channel, request) => Promise.resolve(handler(trusted, JSON.parse(JSON.stringify(request))));

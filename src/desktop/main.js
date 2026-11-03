@@ -45,10 +45,10 @@ app.whenReady().then(() => {
       event.senderFrame === mainWindow.webContents.mainFrame);
   session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
-  registerTables(require('electron').ipcMain, isAllowedSender, database);
-  registerOrders(require('electron').ipcMain, isAllowedSender, database);
-  registerMenu(require('electron').ipcMain, isAllowedSender, database);
-  registerOrderItems(require('electron').ipcMain, isAllowedSender, database);
+  registerTables(require('electron').ipcMain, isAllowedSender, database, session);
+  registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
+  registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
+  registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

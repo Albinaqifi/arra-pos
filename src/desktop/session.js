@@ -11,7 +11,9 @@ function bootstrap(db, username, password) {
   db.exec('BEGIN IMMEDIATE');
   try {
     if (db.prepare('SELECT count(*) AS count FROM local_users').get().count !== 0) throw new Error('An account already exists');
-    db.prepare('INSERT INTO local_users (username, salt, password_hash) VALUES (?, ?, ?)').run(username, salt, hash);
+    const user = db.prepare('INSERT INTO local_users (username, salt, password_hash) VALUES (?, ?, ?)').run(username, salt, hash);
+    const grant = db.prepare('INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)');
+    for (const permission of ['tables.view', 'menu.view', 'orders.view', 'orders.change']) grant.run(user.lastInsertRowid, permission);
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
