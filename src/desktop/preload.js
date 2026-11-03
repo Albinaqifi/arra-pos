@@ -13,6 +13,26 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     }
     return { ok: false, error: 'Application information unavailable' };
   },
+  async getMenu() {
+    try {
+      const response = await ipcRenderer.invoke('arra:menu', {});
+      const validText = x => typeof x === 'string' && x.trim().length > 0;
+      if (response && response.ok === true && response.data &&
+          Array.isArray(response.data.categories) && Array.isArray(response.data.products) &&
+          response.data.categories.every(c => c && validText(c.id) && validText(c.name)) &&
+          response.data.products.every(p => p && validText(p.id) && validText(p.categoryId) &&
+            validText(p.name) && Number.isSafeInteger(p.price) && p.price >= 0 &&
+            response.data.categories.some(c => c.id === p.categoryId))) {
+        return { ok: true, data: {
+          categories: response.data.categories.map(c => ({ id: c.id, name: c.name })),
+          products: response.data.products.map(p => ({ id: p.id, categoryId: p.categoryId, name: p.name, price: p.price }))
+        } };
+      }
+    } catch (_) {
+      // Do not expose internal IPC errors to the screen.
+    }
+    return { ok: false, error: 'Menu unavailable. Restart the app and try again.' };
+  },
   async getTables() {
     try {
       const response = await ipcRenderer.invoke('arra:tables', {});

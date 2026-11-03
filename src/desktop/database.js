@@ -23,6 +23,21 @@ const migrations = [
       area TEXT NOT NULL CHECK (length(trim(area)) > 0)
     ) STRICT;`,
   },
+  {
+    version: 4,
+    sql: `CREATE TABLE menu_categories (
+      id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+      name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+      active INTEGER NOT NULL CHECK (active IN (0, 1))
+    ) STRICT;
+    CREATE TABLE menu_products (
+      id TEXT PRIMARY KEY NOT NULL CHECK (length(trim(id)) > 0),
+      category_id TEXT NOT NULL REFERENCES menu_categories(id),
+      name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+      price INTEGER NOT NULL CHECK (price >= 0 AND price <= 9007199254740991),
+      active INTEGER NOT NULL CHECK (active IN (0, 1))
+    ) STRICT;`,
+  },
 ];
 
 function migrate(db) {
