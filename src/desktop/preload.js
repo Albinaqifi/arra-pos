@@ -49,8 +49,9 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
         !['list', 'add', 'increment', 'decrement', 'remove', 'note'].includes(action)) return { ok: false };
     const request = { action, orderId };
     if (action === 'add') {
-      if (typeof value !== 'string' || !value.trim()) return { ok: false };
-      request.productId = value;
+      if (typeof value === 'string' && value.trim()) request.productId = value;
+      else if (value && typeof value.productId === 'string' && Array.isArray(value.optionIds)) { request.productId = value.productId; request.optionIds = value.optionIds; }
+      else return { ok: false };
     } else if (action === 'note') {
       if (!value || !Number.isSafeInteger(value.itemId) || value.itemId <= 0 || typeof value.note !== 'string') return { ok: false };
       request.itemId = value.itemId; request.note = value.note;
@@ -67,7 +68,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
             typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
             Number.isSafeInteger(i.quantity) && i.quantity > 0 && typeof i.note === 'string')) {
         return { ok: true, data: { total: data.total, items: data.items.map(i => ({
-          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note
+          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, modifiers: i.modifiers || []
         })) } };
       }
     } catch (_) {}
@@ -97,7 +98,8 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
             response.data.categories.some(c => c.id === p.categoryId))) {
         return { ok: true, data: {
           categories: response.data.categories.map(c => ({ id: c.id, name: c.name })),
-          products: response.data.products.map(p => ({ id: p.id, categoryId: p.categoryId, name: p.name, price: p.price }))
+          products: response.data.products.map(p => ({ id: p.id, categoryId: p.categoryId, name: p.name, price: p.price })),
+          groups: response.data.groups || [], options: response.data.options || []
         } };
       }
     } catch (_) {

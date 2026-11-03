@@ -33,9 +33,9 @@ test('version 11 upgrade retains menu, snapshots and grants and adds ordering', 
     INSERT INTO menu_categories (id,name,active) VALUES ('c','Category',1);
     INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p','c','Product',42,1);
     ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order;
-    PRAGMA user_version = 11;`);
+    DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version = 11;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,12);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,13);
   assert.deepEqual({...db.prepare('SELECT id,name,active,parent_id,sort_order FROM menu_categories').get()}, {id:'c',name:'Category',active:1,parent_id:null,sort_order:1});
   assert.deepEqual({...db.prepare('SELECT id,name,price,sort_order FROM menu_products').get()}, {id:'p',name:'Product',price:42,sort_order:1});
   assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission = 'menu.change'").all().map(r=>r.user_id),[1]);

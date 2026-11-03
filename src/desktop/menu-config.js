@@ -13,7 +13,9 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
     try {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         categories: db.prepare('SELECT id, name, active, parent_id AS parentId, sort_order AS sortOrder FROM menu_categories ORDER BY sort_order, rowid').all(),
-        products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder FROM menu_products ORDER BY sort_order, rowid').all()
+        products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder FROM menu_products ORDER BY sort_order, rowid').all(),
+        groups: db.prepare('SELECT id, product_id AS productId, name, required, active FROM modifier_groups ORDER BY rowid').all(),
+        options: db.prepare('SELECT id, group_id AS groupId, name, adjustment, active FROM modifier_options ORDER BY rowid').all()
       } };
       if (req.action === 'category' && keys(req, ['action', 'id', 'name', 'active', 'parentId', 'sortOrder']) && (req.id === null || id(req.id)) && name(req.name) && typeof req.active === 'boolean' && (req.parentId === null || id(req.parentId)) && number(req.sortOrder)) {
         if (req.parentId !== null) {
@@ -28,6 +30,18 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
         if (!db.prepare('SELECT 1 FROM menu_categories WHERE id = ?').get(req.categoryId)) return { ok: false, error: 'Category unavailable' };
         if (req.id === null) db.prepare('INSERT INTO menu_products (id, category_id, name, price, active, sort_order) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), req.categoryId, req.name, req.price, Number(req.active), req.sortOrder);
         else if (!db.prepare('UPDATE menu_products SET category_id = ?, name = ?, price = ?, active = ?, sort_order = ? WHERE id = ?').run(req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.id).changes) return { ok: false, error: 'Product unavailable' };
+        return { ok: true };
+      }
+      if (req.action === 'group' && keys(req, ['action','id','productId','name','required','active']) && (req.id === null || id(req.id)) && id(req.productId) && name(req.name) && typeof req.required === 'boolean' && typeof req.active === 'boolean') {
+        if (!db.prepare('SELECT 1 FROM menu_products WHERE id = ?').get(req.productId)) return { ok: false, error: 'Product unavailable' };
+        if (req.id === null) db.prepare('INSERT INTO modifier_groups VALUES (?, ?, ?, ?, ?)').run(randomUUID(), req.productId, req.name, Number(req.required), Number(req.active));
+        else if (!db.prepare('UPDATE modifier_groups SET name = ?, required = ?, active = ? WHERE id = ? AND product_id = ?').run(req.name, Number(req.required), Number(req.active), req.id, req.productId).changes) return { ok: false, error: 'Group unavailable' };
+        return { ok: true };
+      }
+      if (req.action === 'option' && keys(req, ['action','id','groupId','name','adjustment','active']) && (req.id === null || id(req.id)) && id(req.groupId) && name(req.name) && Number.isSafeInteger(req.adjustment) && typeof req.active === 'boolean') {
+        if (!db.prepare('SELECT 1 FROM modifier_groups WHERE id = ?').get(req.groupId)) return { ok: false, error: 'Group unavailable' };
+        if (req.id === null) db.prepare('INSERT INTO modifier_options VALUES (?, ?, ?, ?, ?)').run(randomUUID(), req.groupId, req.name, req.adjustment, Number(req.active));
+        else if (!db.prepare('UPDATE modifier_options SET name = ?, adjustment = ?, active = ? WHERE id = ? AND group_id = ?').run(req.name, req.adjustment, Number(req.active), req.id, req.groupId).changes) return { ok: false, error: 'Option unavailable' };
         return { ok: true };
       }
       return { ok: false, error: 'Invalid request' };
