@@ -24,7 +24,7 @@ test('desktop screen loads and saves items, shows failures, and does not send de
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
-  const load = async () => { const app = new context.Demo(); app.componentDidMount(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1); return app; };
+  const load = async () => { const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1); return app; };
   let app = await load();
   await app.addProduct('p'); await app.incItem(7);
   assert.equal(app.state.items[0].qty, 2);

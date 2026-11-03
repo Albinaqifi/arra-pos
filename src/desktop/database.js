@@ -87,6 +87,11 @@ const migrations = [
       UNION ALL SELECT 'orders.view' UNION ALL SELECT 'orders.change'
     ) WHERE id = (SELECT min(id) FROM local_users);`,
   },
+  {
+    version: 10,
+    sql: `ALTER TABLE local_users ADD COLUMN pin_salt BLOB;
+    ALTER TABLE local_users ADD COLUMN pin_hash BLOB;`,
+  },
 ];
 
 function migrate(db) {

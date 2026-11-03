@@ -14,7 +14,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-008 | Done | Review and testing passed; PR #8 merged. |
 | S-009 | Done | Review and testing passed; PR #9 merged. |
 | S-010 | Done | Review and testing passed; PR #10 merged. |
+| S-011 | In progress | Review and testing passed; awaiting PR and merge. |
 
 ## Current
 
-No story is currently in progress.
+S-011 — Select and switch waiter.

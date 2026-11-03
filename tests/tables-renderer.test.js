@@ -27,7 +27,7 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
   async function load() {
     const app = new context.Demo();
-    app.componentDidMount();
+    app.componentDidMount(); app.loadDesktopData();
     await new Promise(resolve => setImmediate(resolve));
     return app.renderVals();
   }
