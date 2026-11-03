@@ -38,6 +38,16 @@ const migrations = [
       active INTEGER NOT NULL CHECK (active IN (0, 1))
     ) STRICT;`,
   },
+  {
+    version: 5,
+    sql: `CREATE TABLE orders (
+      id INTEGER PRIMARY KEY,
+      table_id INTEGER NOT NULL REFERENCES dining_tables(id),
+      opened_at INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('open', 'completed'))
+    ) STRICT;
+    CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open';`,
+  },
 ];
 
 function migrate(db) {
