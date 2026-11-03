@@ -2,6 +2,8 @@
 
 This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop tables, active table orders, pending items and their notes, and the sample menu persist locally. Other screen actions remain simulated.
 
+Preparation tickets have local simulated print jobs and attempt history. The desktop simulation controls choose success, failure, or uncertain for each destination; they do not control a physical printer. An uncertain result means output cannot be confirmed, so check before retrying. Tickets created before print jobs were introduced are recorded as uncertain because no attempt result was saved at the time.
+
 ## Desktop window
 
 Install Node.js 22.12 or later and run the following once while connected to the internet, from this directory:

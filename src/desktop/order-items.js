@@ -35,6 +35,9 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
                 if (!selected.length) continue;
                 const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;
                 for (const item of selected) db.prepare('INSERT INTO preparation_ticket_items (ticket_id, item_id, quantity) VALUES (?, ?, ?)').run(ticketId, item.id, item.quantity);
+                const jobId = db.prepare('INSERT INTO print_jobs (ticket_id, created_at) VALUES (?, ?)').run(ticketId, Date.now()).lastInsertRowid;
+                const result = db.prepare('SELECT result FROM simulated_printers WHERE destination = ?').get(destination).result;
+                db.prepare('INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) VALUES (?, ?, ?, ?, ?)').run(jobId, 'initial-' + jobId, session.currentUserId(), Date.now(), result);
               }
               db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(request.orderId);
               recordAudit(db, session.currentUserId(), 'send', 'preparation_round', roundId, request.orderId, { number, itemIds: pending.map(i => i.id), adapter: 'simulated' });

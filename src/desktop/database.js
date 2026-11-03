@@ -152,6 +152,14 @@ const migrations = [
     CREATE TABLE preparation_rounds (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), request_id TEXT NOT NULL UNIQUE, number INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES local_users(id), sent_at INTEGER NOT NULL, UNIQUE(order_id, number)) STRICT;
     CREATE TABLE preparation_tickets (id INTEGER PRIMARY KEY, round_id INTEGER NOT NULL REFERENCES preparation_rounds(id), destination TEXT NOT NULL CHECK(destination IN ('kitchen','bar')), adapter TEXT NOT NULL CHECK(adapter = 'simulated'), UNIQUE(round_id, destination)) STRICT;
     CREATE TABLE preparation_ticket_items (ticket_id INTEGER NOT NULL REFERENCES preparation_tickets(id), item_id INTEGER NOT NULL UNIQUE REFERENCES order_items(id), quantity INTEGER NOT NULL CHECK(quantity > 0), PRIMARY KEY(ticket_id, item_id)) STRICT;` },
+  { version: 17, sql: `CREATE TABLE simulated_printers (destination TEXT PRIMARY KEY CHECK(destination IN ('kitchen','bar')), result TEXT NOT NULL CHECK(result IN ('success','failed','uncertain'))) STRICT;
+    INSERT INTO simulated_printers VALUES ('kitchen','success'),('bar','success');
+    CREATE TABLE print_jobs (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL UNIQUE REFERENCES preparation_tickets(id), created_at INTEGER NOT NULL) STRICT;
+    CREATE TABLE print_attempts (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES print_jobs(id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER REFERENCES local_users(id), occurred_at INTEGER NOT NULL, result TEXT NOT NULL CHECK(result IN ('success','failed','uncertain'))) STRICT;
+    INSERT INTO print_jobs (ticket_id, created_at) SELECT t.id, r.sent_at FROM preparation_tickets t JOIN preparation_rounds r ON r.id=t.round_id;
+    INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) SELECT j.id, 'legacy-' || j.id, NULL, j.created_at, 'uncertain' FROM print_jobs j;
+    CREATE TRIGGER print_attempts_no_update BEFORE UPDATE ON print_attempts BEGIN SELECT RAISE(ABORT, 'Attempts are append-only'); END;
+    CREATE TRIGGER print_attempts_no_delete BEFORE DELETE ON print_attempts BEGIN SELECT RAISE(ABORT, 'Attempts are append-only'); END;` },
 ];
 
 function migrate(db) {
