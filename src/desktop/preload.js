@@ -33,13 +33,26 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     }
     return { ok: false, error: 'Menu unavailable. Restart the app and try again.' };
   },
+  async openOrder(tableId) {
+    if (!Number.isSafeInteger(tableId) || tableId <= 0) return { ok: false, error: 'Invalid request' };
+    try {
+      const response = await ipcRenderer.invoke('arra:open-order', { tableId });
+      const o = response && response.data;
+      if (response && response.ok === true && o && Number.isSafeInteger(o.id) && o.id > 0 &&
+          o.tableId === tableId && Number.isSafeInteger(o.openedAt) && o.openedAt > 0)
+        return { ok: true, data: { id: o.id, tableId: o.tableId, openedAt: o.openedAt } };
+    } catch (_) {}
+    return { ok: false, error: 'Could not open table. Try again.' };
+  },
   async getTables() {
     try {
       const response = await ipcRenderer.invoke('arra:tables', {});
       if (response && response.ok === true && Array.isArray(response.data) &&
           response.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 &&
-            typeof t.area === 'string' && t.area.trim().length > 0)) {
-        return { ok: true, data: response.data.map(t => ({ id: t.id, area: t.area })) };
+            typeof t.area === 'string' && t.area.trim().length > 0 &&
+            ((t.orderId === null && t.openedAt === null) ||
+             (Number.isSafeInteger(t.orderId) && t.orderId > 0 && Number.isSafeInteger(t.openedAt) && t.openedAt > 0)))) {
+        return { ok: true, data: response.data.map(t => ({ id: t.id, area: t.area, orderId: t.orderId, openedAt: t.openedAt })) };
       }
     } catch (_) {
       // Do not expose internal IPC errors to the screen.

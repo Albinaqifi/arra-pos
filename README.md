@@ -1,6 +1,6 @@
 # Arra POS waiter demo
 
-This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop table identities and the sample menu persist locally; demo orders and other screen changes reset when the page is refreshed or the app closes.
+This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop tables, active table orders and the sample menu persist locally; order items and other screen changes are simulated and reset when the app closes.
 
 ## Desktop window
 
@@ -21,7 +21,7 @@ The installed Electron runtime, React and application files run locally; no inte
 
 On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
 
-The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. This connection does not persist the demo orders yet.
+The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. Opening a desktop table creates or resumes its local active order.
 
 For the default Windows app-data directory, create the 16 sample tables with the following command in PowerShell, with the desktop app closed:
 
@@ -37,7 +37,7 @@ Create the sample menu separately, with the desktop app closed:
 node src/desktop/seed-menu.js "$env:APPDATA\arra-pos-waiter-demo"
 ```
 
-The seed is repeatable and does not overwrite existing records, including inactive ones. A fresh desktop menu is empty until seeded. Desktop menu prices are sample whole denar amounts; modifiers and editing are deferred. The browser demo keeps its original in-memory menu. Orders and the other actions remain simulated.
+The seed is repeatable and does not overwrite existing records, including inactive ones. A fresh desktop menu is empty until seeded. Desktop menu prices are sample whole denar amounts; modifiers and editing are deferred. The browser demo keeps its original in-memory menu. Order items and other actions remain simulated. Moving and closing desktop orders are not yet available.
 
 Run the database and bridge tests with `npm test` on Node.js 22.13 or later.
 

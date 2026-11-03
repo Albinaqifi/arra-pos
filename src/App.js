@@ -43,7 +43,11 @@ class WaiterDemo extends React.Component {
           if (!section) { section = { label: table.area, ids: [] }; sections.push(section); }
           section.ids.push(table.id);
         });
-        this.setState({ sections, tableLoad: 'ready' });
+        const orders = {};
+        result.data.forEach(table => {
+          if (table.orderId !== null) orders[table.id] = { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [] };
+        });
+        this.setState({ sections, orders, tableLoad: 'ready' });
       }).catch(() => { if (this._mounted) this.setState({ tableLoad: 'error' }); });
     }
   }
@@ -176,6 +180,7 @@ class WaiterDemo extends React.Component {
       { no: 1042, table: 'Table 6', closedAt: now - 110 * m, waiter: 'Arta', method: 'Cash', account: 'A', total: 940, count: 5 },
       { no: 1041, table: 'Table 2', closedAt: now - 150 * m, waiter: 'Besnik', method: 'Card', account: 'A', total: 1860, count: 7 }
     ];
+    if (window.arra) { st.orders = {}; st.items = []; st.history = []; }
     return st;
   }
 
@@ -189,7 +194,7 @@ class WaiterDemo extends React.Component {
     this._tt = setTimeout(() => this.setState({ toast: null }), 4200);
   }
   log(n, tid, text) { const o = n.orders[tid]; if (o) o.log.push({ t: Date.now(), who: this.who(n), text }); }
-  freeIfEmpty(n, tid) { const o = n.orders[tid]; if (o && o.rounds === 0 && !n.items.some(x => x.tableId === tid)) delete n.orders[tid]; }
+  freeIfEmpty(n, tid) { if (window.arra) return; const o = n.orders[tid]; if (o && o.rounds === 0 && !n.items.some(x => x.tableId === tid)) delete n.orders[tid]; }
   rlabel(k) { return k === 'bar' ? 'Bar' : 'Kitchen'; }
 
   // ---------- login / waiter ----------
@@ -226,7 +231,25 @@ class WaiterDemo extends React.Component {
       n.screen = 'tables'; n.modal = null;
     });
   }
-  openTable(id) { this.mut(n => { n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = ''; }); }
+  async openTable(id) {
+    if (window.arra) {
+      if (this._opening) return;
+      this._opening = true;
+      try {
+        const result = await window.arra.openOrder(id);
+        if (!this._mounted) return;
+        if (!result.ok) { this.mut(n => this.toast(n, 'Could not open table. Try again.', 'err')); return; }
+        this.mut(n => {
+          const old = n.orders[id];
+          n.orders[id] = { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0, log: old?.log || [] };
+          n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = '';
+        });
+      } catch (_) { if (this._mounted) this.mut(n => this.toast(n, 'Could not open table. Try again.', 'err')); }
+      finally { this._opening = false; }
+      return;
+    }
+    this.mut(n => { n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = ''; });
+  }
   togglePrinter(k) {
     const names = { kitchen: 'Kitchen', bar: 'Bar', A: 'Bill A', B: 'Bill B' };
     this.mut(n => {
@@ -349,6 +372,7 @@ class WaiterDemo extends React.Component {
 
   // ---------- move ----------
   confirmMoveTable() {
+    if (window.arra) { this.mut(n => this.toast(n, 'Moving orders is not available yet.', 'warn')); return; }
     this.mut(n => {
       const from = n.tableId, to = n.modal.dest;
       if (to == null || to === from || n.orders[to]) return;
@@ -362,6 +386,7 @@ class WaiterDemo extends React.Component {
     });
   }
   confirmMoveItems() {
+    if (window.arra) { this.mut(n => this.toast(n, 'Moving items is not available yet.', 'warn')); return; }
     this.mut(n => {
       const from = n.tableId, to = n.modal.dest;
       const ids = Object.keys(n.modal.sel).filter(k => n.modal.sel[k]);
@@ -405,6 +430,7 @@ class WaiterDemo extends React.Component {
     });
   }
   paid() {
+    if (window.arra) { this.mut(n => this.toast(n, 'Closing orders is not available yet.', 'warn')); return; }
     this.mut(n => {
       const b = n.modal; const tid = n.tableId;
       if (!b || !b.printed) return;
@@ -516,7 +542,7 @@ class WaiterDemo extends React.Component {
     // order screen
     const tid = s.tableId; const o = tid ? s.orders[tid] : null;
     v.tableName = tid ? 'Table ' + tid : '';
-    v.orderMeta = o ? 'Opened ' + hm(o.openedAt) + ' by ' + o.openedBy + ' · ' + Math.max(0, Math.round((now - o.openedAt) / 60000)) + ' min' : 'Free. Add products to open it.';
+    v.orderMeta = o ? 'Opened ' + hm(o.openedAt) + (o.openedBy ? ' by ' + o.openedBy : '') + ' · ' + Math.max(0, Math.round((now - o.openedAt) / 60000)) + ' min' : 'Free. Add products to open it.';
     v.statusLabel = o ? 'Taken' : 'Free';
     v.statusStyle = 'height:36px; padding:0 14px; border-radius:999px; display:inline-flex; align-items:center; font-size:15px; font-weight:800; ' + (o ? 'background:#F97316; color:#1A0B00' : 'background:#DCFCE7; color:#14532D');
     const cat = M.catById[s.cat] || { subs: [] };

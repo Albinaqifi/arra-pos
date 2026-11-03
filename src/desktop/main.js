@@ -3,6 +3,7 @@ const path = require('node:path');
 const { openDatabase } = require('./database');
 const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
+const { registerOrders } = require('./orders');
 const { registerMenu } = require('./menu');
 
 let database;
@@ -41,6 +42,7 @@ app.whenReady().then(() => {
       event.senderFrame === mainWindow.webContents.mainFrame);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
   registerTables(require('electron').ipcMain, isAllowedSender, database);
+  registerOrders(require('electron').ipcMain, isAllowedSender, database);
   registerMenu(require('electron').ipcMain, isAllowedSender, database);
   createWindow();
   app.on('activate', () => {
