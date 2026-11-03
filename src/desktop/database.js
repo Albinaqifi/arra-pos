@@ -148,6 +148,10 @@ const migrations = [
   CREATE TRIGGER employee_permission_audit_no_replace BEFORE INSERT ON employee_permission_audit WHEN EXISTS (SELECT 1 FROM employee_permission_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
   CREATE TRIGGER employee_account_audit_no_replace BEFORE INSERT ON employee_account_audit WHEN EXISTS (SELECT 1 FROM employee_account_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
   CREATE TRIGGER employee_credential_audit_no_replace BEFORE INSERT ON employee_credential_audit WHEN EXISTS (SELECT 1 FROM employee_credential_audit WHERE id = NEW.id) BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;` },
+  { version: 16, sql: `ALTER TABLE menu_products ADD COLUMN destination TEXT NOT NULL DEFAULT 'kitchen' CHECK(destination IN ('kitchen', 'bar'));
+    CREATE TABLE preparation_rounds (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), request_id TEXT NOT NULL UNIQUE, number INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES local_users(id), sent_at INTEGER NOT NULL, UNIQUE(order_id, number)) STRICT;
+    CREATE TABLE preparation_tickets (id INTEGER PRIMARY KEY, round_id INTEGER NOT NULL REFERENCES preparation_rounds(id), destination TEXT NOT NULL CHECK(destination IN ('kitchen','bar')), adapter TEXT NOT NULL CHECK(adapter = 'simulated'), UNIQUE(round_id, destination)) STRICT;
+    CREATE TABLE preparation_ticket_items (ticket_id INTEGER NOT NULL REFERENCES preparation_tickets(id), item_id INTEGER NOT NULL UNIQUE REFERENCES order_items(id), quantity INTEGER NOT NULL CHECK(quantity > 0), PRIMARY KEY(ticket_id, item_id)) STRICT;` },
 ];
 
 function migrate(db) {

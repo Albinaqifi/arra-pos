@@ -15,7 +15,7 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
       const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         categories: db.prepare('SELECT id, name, active, parent_id AS parentId, sort_order AS sortOrder FROM menu_categories ORDER BY sort_order, rowid').all(),
-        products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder FROM menu_products ORDER BY sort_order, rowid').all(),
+        products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder, destination FROM menu_products ORDER BY sort_order, rowid').all(),
         groups: db.prepare('SELECT id, product_id AS productId, name, required, active FROM modifier_groups ORDER BY rowid').all(),
         options: db.prepare('SELECT id, group_id AS groupId, name, adjustment, active FROM modifier_options ORDER BY rowid').all()
       } };
@@ -28,10 +28,10 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
         else if (!db.prepare('UPDATE menu_categories SET name = ?, active = ?, parent_id = ?, sort_order = ? WHERE id = ?').run(req.name, Number(req.active), req.parentId, req.sortOrder, req.id).changes) return { ok: false, error: 'Category unavailable' };
         return { ok: true };
       }
-      if (req.action === 'product' && keys(req, ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder']) && (req.id === null || id(req.id)) && id(req.categoryId) && name(req.name) && number(req.price) && typeof req.active === 'boolean' && number(req.sortOrder)) {
+      if (req.action === 'product' && (keys(req, ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder']) || (keys(req, ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder', 'destination']) && ['kitchen', 'bar'].includes(req.destination))) && (req.id === null || id(req.id)) && id(req.categoryId) && name(req.name) && number(req.price) && typeof req.active === 'boolean' && number(req.sortOrder)) {
         if (!db.prepare('SELECT 1 FROM menu_categories WHERE id = ?').get(req.categoryId)) return { ok: false, error: 'Category unavailable' };
-        if (req.id === null) db.prepare('INSERT INTO menu_products (id, category_id, name, price, active, sort_order) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), req.categoryId, req.name, req.price, Number(req.active), req.sortOrder);
-        else if (!db.prepare('UPDATE menu_products SET category_id = ?, name = ?, price = ?, active = ?, sort_order = ? WHERE id = ?').run(req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.id).changes) return { ok: false, error: 'Product unavailable' };
+        if (req.id === null) db.prepare('INSERT INTO menu_products (id, category_id, name, price, active, sort_order, destination) VALUES (?, ?, ?, ?, ?, ?, ?)').run(randomUUID(), req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || 'kitchen');
+        else if (!db.prepare('UPDATE menu_products SET category_id = ?, name = ?, price = ?, active = ?, sort_order = ?, destination = COALESCE(?, destination) WHERE id = ?').run(req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || null, req.id).changes) return { ok: false, error: 'Product unavailable' };
         return { ok: true };
       }
       if (req.action === 'group' && keys(req, ['action','id','productId','name','required','active']) && (req.id === null || id(req.id)) && id(req.productId) && name(req.name) && typeof req.required === 'boolean' && typeof req.active === 'boolean') {

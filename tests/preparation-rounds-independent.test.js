@@ -1,0 +1,33 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const { seedTables } = require('../src/desktop/tables');
+const { seedMenu } = require('../src/desktop/menu');
+const { registerOrderItems } = require('../src/desktop/order-items');
+
+test('direct sends reject missing grants, invalid tokens and empty orders without changing state', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-send-denied-'));
+  const db = authorizedDatabase(openDatabase(dir));
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open')");
+  let handler; const trusted = {};
+  registerOrderItems({ handle: (_, fn) => { handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1 });
+  const send = requestId => handler(trusted, { action: 'send', orderId: 1, requestId });
+  assert.equal(send('empty').ok, false);
+  assert.equal(handler(trusted, { action: 'add', orderId: 1, productId: 'qebapa' }).ok, true);
+  for (const token of ['', 'invalid token', 'x'.repeat(101), null]) assert.equal(send(token).ok, false);
+  db.prepare("DELETE FROM user_permissions WHERE user_id = 1 AND permission = 'orders.change'").run();
+  assert.equal(send('denied').ok, false);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM preparation_rounds').get().n, 0);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM preparation_tickets').get().n, 0);
+  assert.equal(db.prepare('SELECT status FROM order_items').get().status, 'pending');
+  db.prepare("INSERT INTO user_permissions VALUES (1, 'orders.change')").run();
+  assert.equal(send('allowed').ok, true);
+  assert.equal(send('empty-after-send').ok, false);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM preparation_rounds').get().n, 1);
+});
