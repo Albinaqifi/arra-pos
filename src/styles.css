@@ -1,0 +1,8 @@
+body { margin: 0; background: #F4F6FB; }
+a { color: #1D4ED8; }
+a:hover { color: #1E3A8A; }
+button { font-family: inherit; cursor: pointer; transition: transform .06s ease, box-shadow .15s ease; }
+button:disabled { cursor: not-allowed; }
+button:active:not(:disabled) { transform: scale(.97); }
+button:focus-visible, input:focus-visible { outline: 3px solid #2563EB; outline-offset: 2px; }
+input { font-family: inherit; }
