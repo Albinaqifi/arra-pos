@@ -16,8 +16,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-010 | Done | Review and testing passed; PR #10 merged. |
 | S-011 | Done | Review and testing passed; PR #12 merged. |
 | S-012 | Done | Review and testing passed; PR #14 merged. |
-| S-013 | In progress | Review and focused testing passed; awaiting PR and merge. |
+| S-013 | Done | Review and focused testing passed; PR #16 merged. |
 
 ## Current
 
-S-013 is in progress.
+No story is currently in progress.
