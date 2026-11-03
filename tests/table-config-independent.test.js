@@ -27,14 +27,14 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     PRAGMA user_version = 10;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 13);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 14);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);
   assert.deepEqual(db.prepare('SELECT user_id FROM user_permissions WHERE permission = ?').all('tables.change').map(x => x.user_id), [3]);
   let user = 4; const handlers = {}; const event = {};
   const ipc = { handle: (channel, handler) => { handlers[channel] = handler; } };
-  const allowed = e => e === event, session = { currentUserId: () => user };
+  const allowed = e => e === event, session = { currentUserId: () => user, authenticatedUserId: () => user };
   registerTableConfig(ipc, allowed, db, session); registerTables(ipc, allowed, db, session); registerOrders(ipc, allowed, db, session);
   const config = req => handlers['arra:table-config'](event, req);
   assert.equal(config({action: 'list'}).error, 'Access denied');

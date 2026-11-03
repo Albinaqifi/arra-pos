@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async employeeConfig(request) {
+    try { return await ipcRenderer.invoke('arra:employee-config', request); }
+    catch (_) { return { ok: false, error: 'Employee configuration unavailable' }; }
+  },
   async menuConfig(request) {
     try { return await ipcRenderer.invoke('arra:menu-config', request); }
     catch (_) { return { ok: false, error: 'Configuration unavailable' }; }

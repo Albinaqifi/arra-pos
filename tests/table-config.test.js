@@ -15,7 +15,7 @@ test('configuration permissions, validation, persistence and open-order safeguar
   const trusted = {};
   const register = () => {
     const ipc = { handle(channel, fn) { if (channel === 'arra:table-config') config = fn; if (channel === 'arra:open-order') open = fn; if (channel === 'arra:tables') list = fn; } };
-    const allowed = e => e === trusted, session = { currentUserId: () => current };
+    const allowed = e => e === trusted, session = { currentUserId: () => current, authenticatedUserId: () => current };
     registerTableConfig(ipc, allowed, db, session); registerOrders(ipc, allowed, db, session); registerTables(ipc, allowed, db, session);
   };
   db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');"); register();

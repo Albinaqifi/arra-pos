@@ -9,6 +9,7 @@ const { registerMenuConfig } = require('./menu-config');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
 const { registerSession } = require('./session');
+const { registerEmployeeConfig } = require('./employee-config');
 
 let database;
 let mainWindow;
@@ -47,6 +48,7 @@ app.whenReady().then(() => {
       event.senderFrame === mainWindow.webContents.mainFrame);
   session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
+  registerEmployeeConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);

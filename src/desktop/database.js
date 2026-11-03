@@ -122,6 +122,21 @@ const migrations = [
   { version: 13, sql: `CREATE TABLE modifier_groups (id TEXT PRIMARY KEY, product_id TEXT NOT NULL REFERENCES menu_products(id), name TEXT NOT NULL, required INTEGER NOT NULL CHECK(required IN (0,1)), active INTEGER NOT NULL CHECK(active IN (0,1))) STRICT;
     CREATE TABLE modifier_options (id TEXT PRIMARY KEY, group_id TEXT NOT NULL REFERENCES modifier_groups(id), name TEXT NOT NULL, adjustment INTEGER NOT NULL, active INTEGER NOT NULL CHECK(active IN (0,1))) STRICT;
     CREATE TABLE order_item_modifiers (item_id INTEGER NOT NULL REFERENCES order_items(id) ON DELETE CASCADE, group_name TEXT NOT NULL, option_name TEXT NOT NULL, adjustment INTEGER NOT NULL) STRICT;` },
+  { version: 14, sql: `CREATE TABLE new_user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL CHECK(permission IN ('tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change')), PRIMARY KEY(user_id, permission)) STRICT;
+    INSERT INTO new_user_permissions SELECT * FROM user_permissions;
+    DROP TABLE user_permissions;
+    ALTER TABLE new_user_permissions RENAME TO user_permissions;
+    INSERT INTO user_permissions SELECT min(id), 'employees.view' FROM local_users HAVING count(*) > 0;
+    INSERT INTO user_permissions SELECT min(id), 'employees.change' FROM local_users HAVING count(*) > 0;
+    CREATE TABLE employee_permission_audit (id INTEGER PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), target_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL, granted INTEGER NOT NULL CHECK(granted IN (0,1)), occurred_at INTEGER NOT NULL) STRICT;
+    CREATE TABLE employee_account_audit (id INTEGER PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), target_id INTEGER NOT NULL REFERENCES local_users(id), old_username TEXT NOT NULL, new_username TEXT NOT NULL, old_active INTEGER NOT NULL, new_active INTEGER NOT NULL, occurred_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER employee_account_audit_no_update BEFORE UPDATE ON employee_account_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+    CREATE TRIGGER employee_account_audit_no_delete BEFORE DELETE ON employee_account_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+    CREATE TABLE employee_credential_audit (id INTEGER PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), target_id INTEGER NOT NULL REFERENCES local_users(id), password_changed INTEGER NOT NULL CHECK(password_changed IN (0,1)), pin_changed INTEGER NOT NULL CHECK(pin_changed IN (0,1)), occurred_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER employee_credential_audit_no_update BEFORE UPDATE ON employee_credential_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+    CREATE TRIGGER employee_credential_audit_no_delete BEFORE DELETE ON employee_credential_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+    CREATE TRIGGER employee_audit_no_update BEFORE UPDATE ON employee_permission_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;
+    CREATE TRIGGER employee_audit_no_delete BEFORE DELETE ON employee_permission_audit BEGIN SELECT RAISE(ABORT, 'Audit is append-only'); END;` },
 ];
 
 function migrate(db) {

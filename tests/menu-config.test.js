@@ -8,7 +8,7 @@ const { registerOrderItems } = require('../src/desktop/order-items');
 test('menu management enforces grants and preserves order snapshots across edits and restart', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-config-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir), current = 1, config, menu, items; const trusted = {};
-  const register = () => { const ipc = { handle(c, f) { if(c === 'arra:menu-config') config = f; if(c === 'arra:menu') menu = f; if(c === 'arra:order-items') items = f; } }; const allowed = e => e === trusted, session = { currentUserId: () => current }; registerMenuConfig(ipc, allowed, db, session); registerMenu(ipc, allowed, db, session); registerOrderItems(ipc, allowed, db, session); };
+  const register = () => { const ipc = { handle(c, f) { if(c === 'arra:menu-config') config = f; if(c === 'arra:menu') menu = f; if(c === 'arra:order-items') items = f; } }; const allowed = e => e === trusted, session = { currentUserId: () => current, authenticatedUserId: () => current }; registerMenuConfig(ipc, allowed, db, session); registerMenu(ipc, allowed, db, session); registerOrderItems(ipc, allowed, db, session); };
   db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO user_permissions VALUES (1, 'menu.change'), (1, 'menu.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'menu.view'); INSERT INTO dining_areas (id,name) VALUES (1,'A'); INSERT INTO dining_tables (id,area,area_id) VALUES (1,'A',1); INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open');"); seedMenu(db); db.exec('UPDATE menu_categories SET sort_order = rowid'); register();
   const cat = { action: 'category', id: null, name: 'Specials', active: true, parentId: null, sortOrder: 0 };
   current = null; assert.equal(config(trusted, cat).ok, false); current = 2; assert.equal(config(trusted, cat).ok, false); current = 1; assert.equal(config({}, cat).ok, false); assert.equal(config(trusted, {...cat, extra: true}).ok, false); assert.equal(config(trusted, cat).ok, true);
@@ -28,14 +28,14 @@ test('menu management enforces grants and preserves order snapshots across edits
 test('version 11 upgrade retains menu, snapshots and grants and adds ordering', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-upgrade-')); t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
   let db = openDatabase(dir);
-  db.exec(`INSERT INTO local_users (id, username, salt, password_hash) VALUES (1,'admin',x'00',x'00'), (2,'staff',x'00',x'00');
+  db.exec(`DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id, username, salt, password_hash) VALUES (1,'admin',x'00',x'00'), (2,'staff',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'menu.view'), (2,'menu.view');
     INSERT INTO menu_categories (id,name,active) VALUES ('c','Category',1);
     INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p','c','Product',42,1);
     ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order;
     DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version = 11;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,13);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,14);
   assert.deepEqual({...db.prepare('SELECT id,name,active,parent_id,sort_order FROM menu_categories').get()}, {id:'c',name:'Category',active:1,parent_id:null,sort_order:1});
   assert.deepEqual({...db.prepare('SELECT id,name,price,sort_order FROM menu_products').get()}, {id:'p',name:'Product',price:42,sort_order:1});
   assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission = 'menu.change'").all().map(r=>r.user_id),[1]);
