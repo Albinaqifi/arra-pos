@@ -13,7 +13,7 @@ function bootstrap(db, username, password) {
     if (db.prepare('SELECT count(*) AS count FROM local_users').get().count !== 0) throw new Error('An account already exists');
     const user = db.prepare('INSERT INTO local_users (username, salt, password_hash) VALUES (?, ?, ?)').run(username, salt, hash);
     const grant = db.prepare('INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)');
-    for (const permission of ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change']) grant.run(user.lastInsertRowid, permission);
+    for (const permission of ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change']) grant.run(user.lastInsertRowid, permission);
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
@@ -66,6 +66,11 @@ function createSession(db) {
         return { ok: true };
       } catch (_) { return fail(); }
     },
+    authenticatedUserId() { return restaurantActive() ? restaurantId : null; },
+    invalidateUser(id) {
+      if (restaurantId === id) { restaurantId = null; activeId = null; }
+      else if (activeId === id) activeId = null;
+    },
     currentUserId() {
       if (activeId === null || !restaurantActive()) { activeId = null; return null; }
       try {
@@ -89,4 +94,4 @@ function registerSession(ipcMain, isAllowedSender, db) {
   });
   return session;
 }
-module.exports = { bootstrap, createSession, registerSession };
+module.exports = { bootstrap, createSession, registerSession, hashPassword, validUsername, validPassword };

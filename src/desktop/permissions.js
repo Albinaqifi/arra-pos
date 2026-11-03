@@ -3,6 +3,7 @@ function hasPermissions(db, session, ...permissions) {
   try {
     const id = session?.currentUserId();
     if (id == null) return false;
+    if (permissions.some(p => ['tables.change', 'menu.change', 'employees.view', 'employees.change'].includes(p)) && session.authenticatedUserId() !== id) return false;
     const check = db.prepare('SELECT 1 FROM user_permissions WHERE user_id = ? AND permission = ?');
     return permissions.every(permission => Boolean(check.get(id, permission)));
   } catch (_) { return false; }
