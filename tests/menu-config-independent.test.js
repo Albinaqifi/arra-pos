@@ -12,7 +12,7 @@ test('upgrade preserves existing order and direct menu requests handle denial an
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-independent-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
-  db.exec(`DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id, username, salt, password_hash) VALUES (10, 'sample-admin', x'00', x'00'), (11, 'sample-staff', x'00', x'00');
+  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id, username, salt, password_hash) VALUES (10, 'sample-admin', x'00', x'00'), (11, 'sample-staff', x'00', x'00');
     INSERT INTO user_permissions VALUES (10, 'menu.view'), (10, 'orders.view'), (10, 'orders.change'), (11, 'menu.view');
     INSERT INTO dining_areas (id, name) VALUES (1, 'Inside');
     INSERT INTO dining_tables (id, area, area_id) VALUES (1, 'Inside', 1);

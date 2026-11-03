@@ -5,6 +5,7 @@ const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
 const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
+const { registerBills } = require('./bills');
 const { registerMoveOrder } = require('./move-order');
 const { registerMoveItems } = require('./move-items');
 const { registerMenuConfig } = require('./menu-config');
@@ -56,6 +57,7 @@ app.whenReady().then(() => {
   registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
+  registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveItems(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
