@@ -31,7 +31,7 @@ test('simulated failure and uncertainty persist, retries refer to one job and ne
 test('version 16 tickets migrate without claiming confirmed output', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-print-upgrade-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO preparation_rounds (order_id,request_id,number,actor_id,sent_at) VALUES (1,'old',1,1,10); INSERT INTO preparation_tickets (round_id,destination,adapter) VALUES (1,'kitchen','simulated'); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; PRAGMA user_version=16;");
+  db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO preparation_rounds (order_id,request_id,number,actor_id,sent_at) VALUES (1,'old',1,1,10); INSERT INTO preparation_tickets (round_id,destination,adapter) VALUES (1,'kitchen','simulated'); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; ALTER TABLE preparation_rounds DROP COLUMN table_id; PRAGMA user_version=16;");
   db.close(); db = openDatabase(dir);
   assert.deepEqual({ ...db.prepare('SELECT j.ticket_id, a.result, a.actor_id FROM print_jobs j JOIN print_attempts a ON a.job_id=j.id').get() }, { ticket_id: 1, result: 'uncertain', actor_id: null });
   assert.equal(db.prepare('SELECT count(*) n FROM preparation_tickets').get().n, 1); db.close();
@@ -64,4 +64,43 @@ test('direct requests require grants and retry rolls back if audit recording fai
   assert.equal(call({ action: 'retry', jobId, requestId: 'rollback' }).ok, true);
   assert.equal(db.prepare('SELECT count(*) n FROM print_attempts').get().n, 2);
   assert.equal(db.prepare('SELECT count(*) n FROM order_items').get().n, 1);
+});
+
+test('print jobs retain their send-time table through moves and retries', t => {
+  const { registerMoveOrder } = require('../src/desktop/move-order');
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-print-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
+  let items,jobs,move; const session={currentUserId:()=>1}, ipc=fn=>({handle:(_,f)=>fn(f)});
+  registerOrderItems(ipc(f=>items=f),()=>true,db,session); registerPrintJobs(ipc(f=>jobs=f),()=>true,db,session); registerMoveOrder(ipc(f=>move=f),()=>true,db,session);
+  jobs({}, {action:'simulate',destination:'kitchen',result:'failed'}); items({}, {action:'add',orderId:1,productId:'qebapa'}); items({}, {action:'send',orderId:1,requestId:'before'});
+  const before=jobs({}, {action:'list'}).data.jobs[0]; assert.equal(before.tableId,1);
+  assert.equal(move({}, {orderId:1,sourceId:1,destinationId:2,requestId:'move'}).ok,true);
+  assert.equal(jobs({}, {action:'list'}).data.jobs[0].tableId,1);
+  assert.equal(jobs({}, {action:'retry',jobId:before.id,requestId:'retry'}).ok,true);
+  const after=jobs({}, {action:'list'}).data.jobs[0]; assert.equal(after.tableId,1); assert.equal(after.id,before.id); assert.equal(after.attempts,2);
+  items({}, {action:'add',orderId:1,productId:'espresso'}); items({}, {action:'send',orderId:1,requestId:'after'});
+  assert.deepEqual(jobs({}, {action:'list'}).data.jobs.map(j=>j.tableId),[2,1]); db.close();
+});
+
+test('version 17 jobs retain table and history after migration', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-upgrade-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
+  let items; registerOrderItems({handle:(_,f)=>items=f},()=>true,db,{currentUserId:()=>1});
+  items({}, {action:'add',orderId:1,productId:'qebapa'}); items({}, {action:'send',orderId:1,requestId:'legacy'});
+  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id; PRAGMA user_version=17'); db.close();
+  db=openDatabase(dir); assert.equal(db.prepare('SELECT table_id FROM preparation_rounds').get().table_id,1);
+  db.exec('UPDATE orders SET table_id=2 WHERE id=1');
+  let jobs; registerPrintJobs({handle:(_,f)=>jobs=f},()=>true,db,{currentUserId:()=>1});
+  assert.equal(jobs({}, {action:'list'}).data.jobs[0].tableId,1); assert.equal(db.prepare('SELECT count(*) n FROM print_attempts').get().n,1); db.close();
+});
+
+test('failed version 18 migration leaves version 17 data intact', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-upgrade-fail-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let db=authorizedDatabase(openDatabase(dir)); seedTables(db);
+  db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO app_metadata(key,value) VALUES ('sample','kept'); PRAGMA user_version=17"); db.close();
+  assert.throws(()=>openDatabase(dir));
+  const { DatabaseSync }=require('node:sqlite'); db=new DatabaseSync(path.join(dir,'arra.sqlite'));
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,17); assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value,'kept'); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);
+  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,18); db.close();
 });

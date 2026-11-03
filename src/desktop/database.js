@@ -160,6 +160,8 @@ const migrations = [
     INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) SELECT j.id, 'legacy-' || j.id, NULL, j.created_at, 'uncertain' FROM print_jobs j;
     CREATE TRIGGER print_attempts_no_update BEFORE UPDATE ON print_attempts BEGIN SELECT RAISE(ABORT, 'Attempts are append-only'); END;
     CREATE TRIGGER print_attempts_no_delete BEFORE DELETE ON print_attempts BEGIN SELECT RAISE(ABORT, 'Attempts are append-only'); END;` },
+  { version: 18, sql: `ALTER TABLE preparation_rounds ADD COLUMN table_id INTEGER REFERENCES dining_tables(id);
+    UPDATE preparation_rounds SET table_id = (SELECT table_id FROM orders WHERE id = preparation_rounds.order_id);` },
 ];
 
 function migrate(db) {

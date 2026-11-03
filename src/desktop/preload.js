@@ -118,6 +118,11 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     }
     return { ok: false, error: 'Menu unavailable. Restart the app and try again.' };
   },
+  async moveOrder(orderId, sourceId, destinationId, requestId) {
+    if (![orderId, sourceId, destinationId].every(x => Number.isSafeInteger(x) && x > 0) || typeof requestId !== 'string') return { ok: false };
+    try { return (await ipcRenderer.invoke('arra:move-order', { orderId, sourceId, destinationId, requestId }))?.ok ? { ok: true } : { ok: false }; }
+    catch (_) { return { ok: false }; }
+  },
   async openOrder(tableId) {
     if (!Number.isSafeInteger(tableId) || tableId <= 0) return { ok: false, error: 'Invalid request' };
     try {
