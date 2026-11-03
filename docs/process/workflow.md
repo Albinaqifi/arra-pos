@@ -23,6 +23,8 @@ When Git exists, preserve unrelated work, record the base and final revisions, a
 
 Each story has `docs/progress/handoffs/S-xxx.md`: story and state; what changed; acceptance evidence and commands; reviewer findings and resolution; tester results; outstanding issues and next action. Keep it brief and do not include secrets. If independent roles are unavailable, document that limitation and do not mark the independent step as passed.
 
+Include the story's board and handoff updates in its PR. Since a story can only be marked Done after its PR is merged, carry the verified post-merge status updates into the next PR, or open a separate documentation PR if there is no next story. Commit those updates on a branch so they do not leave the worktree dirty or obstruct switching and pulling. Preserve unrelated user changes and never mark a story Done before its merge.
+
 ## Story states
 
 - **Todo:** not started or not ready.
