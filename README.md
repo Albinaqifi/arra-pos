@@ -1,6 +1,6 @@
 # Arra POS waiter demo
 
-This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a database, printer or payment system. Changes reset when the page is refreshed or the app closes.
+This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Screen changes reset when the page is refreshed or the app closes; the new local database is a foundation and is not yet connected to the demo screens.
 
 ## Desktop window
 
@@ -18,6 +18,10 @@ npm run desktop
 ```
 
 The installed Electron runtime, React and application files run locally; no internet connection or remote login is required to start or use the demo. Close the desktop window to exit. This is a development setup, not an installer for restaurant use.
+
+On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
+
+Run the database tests with `npm test` on Node.js 22.13 or later.
 
 ## Browser demo
 

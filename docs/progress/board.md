@@ -4,8 +4,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
-| S-001 | In progress | Acceptance and review passed; pull request preparation underway. |
+| S-001 | Done | Acceptance and review passed; PR #1 merged. |
+| S-002 | In progress | Acceptance, review and testing passed; changes await PR and merge. |
 
 ## Current
 
-S-001 is awaiting pull request and merge. Desktop and browser acceptance checks passed.
+S-002 is verified locally and awaits PR and merge.
