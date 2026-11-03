@@ -17,6 +17,8 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     CREATE TABLE orders (id INTEGER PRIMARY KEY, table_id INTEGER NOT NULL REFERENCES dining_tables(id), opened_at INTEGER NOT NULL, status TEXT NOT NULL) STRICT;
     CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open';
     CREATE TABLE local_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL, salt BLOB NOT NULL, password_hash BLOB NOT NULL, active INTEGER NOT NULL DEFAULT 1, pin_salt BLOB, pin_hash BLOB) STRICT;
+    CREATE TABLE menu_categories (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, active INTEGER NOT NULL) STRICT;
+    CREATE TABLE menu_products (id TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL REFERENCES menu_categories(id), name TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;
     CREATE TABLE user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL, PRIMARY KEY(user_id, permission)) STRICT;
     INSERT INTO dining_tables VALUES (12, 'Inside'), (19, 'Terrace');
     INSERT INTO orders VALUES (7, 12, 123, 'open'), (8, 19, 100, 'completed');
@@ -25,7 +27,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     PRAGMA user_version = 10;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 12);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);

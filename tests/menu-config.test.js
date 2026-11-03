@@ -1,0 +1,43 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { registerMenuConfig } = require('../src/desktop/menu-config');
+const { registerMenu, seedMenu } = require('../src/desktop/menu');
+const { registerOrderItems } = require('../src/desktop/order-items');
+test('menu management enforces grants and preserves order snapshots across edits and restart', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-config-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = openDatabase(dir), current = 1, config, menu, items; const trusted = {};
+  const register = () => { const ipc = { handle(c, f) { if(c === 'arra:menu-config') config = f; if(c === 'arra:menu') menu = f; if(c === 'arra:order-items') items = f; } }; const allowed = e => e === trusted, session = { currentUserId: () => current }; registerMenuConfig(ipc, allowed, db, session); registerMenu(ipc, allowed, db, session); registerOrderItems(ipc, allowed, db, session); };
+  db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO user_permissions VALUES (1, 'menu.change'), (1, 'menu.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'menu.view'); INSERT INTO dining_areas (id,name) VALUES (1,'A'); INSERT INTO dining_tables (id,area,area_id) VALUES (1,'A',1); INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open');"); seedMenu(db); db.exec('UPDATE menu_categories SET sort_order = rowid'); register();
+  const cat = { action: 'category', id: null, name: 'Specials', active: true, parentId: null, sortOrder: 0 };
+  current = null; assert.equal(config(trusted, cat).ok, false); current = 2; assert.equal(config(trusted, cat).ok, false); current = 1; assert.equal(config({}, cat).ok, false); assert.equal(config(trusted, {...cat, extra: true}).ok, false); assert.equal(config(trusted, cat).ok, true);
+  let categories = config(trusted, {action:'list'}).data.categories; const special = categories.find(c => c.name === 'Specials');
+  assert.equal(config(trusted, {...cat, id: null, name:'Child', parentId:special.id}).ok, true); categories = config(trusted, {action:'list'}).data.categories; const child = categories.find(c=>c.name==='Child');
+  assert.equal(config(trusted, {...cat, id:special.id, parentId:child.id}).ok, false);
+  const product = { action:'product', id:null, categoryId:child.id, name:'Soup', price:120, active:true, sortOrder:0 };
+  for (const price of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1]) assert.equal(config(trusted, {...product, price}).ok, false);
+  assert.equal(config(trusted, product).ok, true); const soup = config(trusted,{action:'list'}).data.products.find(p=>p.name==='Soup');
+  assert.equal(items(trusted, {action:'add', orderId:1, productId:soup.id}).ok,true);
+  assert.equal(config(trusted,{...product, id:soup.id, name:'New soup', price:150}).ok,true);
+  assert.equal(config(trusted,{...cat, id:special.id, active:false}).ok,true); assert.equal(menu(trusted,{}).data.products.some(p=>p.id===soup.id),false); assert.equal(items(trusted,{action:'add',orderId:1,productId:soup.id}).ok,false);
+  db.close(); db=openDatabase(dir); register(); assert.equal(config(trusted,{action:'list'}).data.products.find(p=>p.id===soup.id).price,150); assert.deepEqual({...db.prepare('SELECT name,unit_price AS price FROM order_items').get()}, {name:'Soup',price:120});
+  assert.equal(config(trusted,{...cat,id:special.id,active:true,sortOrder:0}).ok,true); assert.equal(menu(trusted,{}).data.categories[0].id,special.id); assert.equal(menu(trusted,{}).data.products.find(p=>p.id===soup.id).price,150); db.close();
+});
+
+test('version 11 upgrade retains menu, snapshots and grants and adds ordering', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-upgrade-')); t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
+  let db = openDatabase(dir);
+  db.exec(`INSERT INTO local_users (id, username, salt, password_hash) VALUES (1,'admin',x'00',x'00'), (2,'staff',x'00',x'00');
+    INSERT INTO user_permissions VALUES (1,'menu.view'), (2,'menu.view');
+    INSERT INTO menu_categories (id,name,active) VALUES ('c','Category',1);
+    INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p','c','Product',42,1);
+    ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order;
+    PRAGMA user_version = 11;`);
+  db.close(); db = openDatabase(dir);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,12);
+  assert.deepEqual({...db.prepare('SELECT id,name,active,parent_id,sort_order FROM menu_categories').get()}, {id:'c',name:'Category',active:1,parent_id:null,sort_order:1});
+  assert.deepEqual({...db.prepare('SELECT id,name,price,sort_order FROM menu_products').get()}, {id:'p',name:'Product',price:42,sort_order:1});
+  assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission = 'menu.change'").all().map(r=>r.user_id),[1]);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM user_permissions WHERE permission = 'menu.view'").get().n,2); db.close();
+});

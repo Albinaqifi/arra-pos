@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async menuConfig(request) {
+    try { return await ipcRenderer.invoke('arra:menu-config', request); }
+    catch (_) { return { ok: false, error: 'Configuration unavailable' }; }
+  },
   async tableConfig(request) {
     try {
       const r = await ipcRenderer.invoke('arra:table-config', request);
