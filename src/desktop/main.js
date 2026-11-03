@@ -1,8 +1,10 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const path = require('node:path');
 const { openDatabase } = require('./database');
+const { registerApplicationInfo } = require('./application-info');
 
 let database;
+let mainWindow;
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -12,9 +14,12 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
+  mainWindow = window;
+  window.on('closed', () => { if (mainWindow === window) mainWindow = undefined; });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.loadFile(path.join(__dirname, '../../index.html'));
@@ -29,6 +34,9 @@ app.whenReady().then(() => {
     app.quit();
     return;
   }
+  registerApplicationInfo(require('electron').ipcMain, (event) =>
+    Boolean(mainWindow && event.sender === mainWindow.webContents &&
+      event.senderFrame === mainWindow.webContents.mainFrame));
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
