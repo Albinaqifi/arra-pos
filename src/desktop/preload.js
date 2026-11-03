@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async orderHistory(orderId) {
+    if (orderId !== null && (!Number.isSafeInteger(orderId) || orderId <= 0)) return { ok: false };
+    try { return await ipcRenderer.invoke('arra:order-history', { orderId }); } catch (_) { return { ok: false }; }
+  },
   async printJobs(request) {
     try { return await ipcRenderer.invoke('arra:print-jobs', request); }
     catch (_) { return { ok: false, error: 'Print jobs unavailable. Try again.' }; }
