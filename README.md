@@ -1,6 +1,6 @@
 # Arra POS waiter demo
 
-This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop table identities persist locally; demo orders and other screen changes reset when the page is refreshed or the app closes.
+This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop table identities and the sample menu persist locally; demo orders and other screen changes reset when the page is refreshed or the app closes.
 
 ## Desktop window
 
@@ -30,6 +30,14 @@ node src/desktop/seed-tables.js "$env:APPDATA\arra-pos-waiter-demo"
 ```
 
 For a different app-data location, pass that directory instead. This setup can be repeated without duplicating tables or overwriting existing table records. A fresh database shows an empty table list until this command is run. The browser demo continues to use its in-memory sample tables.
+
+Create the sample menu separately, with the desktop app closed:
+
+```powershell
+node src/desktop/seed-menu.js "$env:APPDATA\arra-pos-waiter-demo"
+```
+
+The seed is repeatable and does not overwrite existing records, including inactive ones. A fresh desktop menu is empty until seeded. Desktop menu prices are sample whole denar amounts; modifiers and editing are deferred. The browser demo keeps its original in-memory menu. Orders and the other actions remain simulated.
 
 Run the database and bridge tests with `npm test` on Node.js 22.13 or later.
 
