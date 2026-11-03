@@ -21,7 +21,9 @@ The installed Electron runtime, React and application files run locally; no inte
 
 On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
 
-Run the database tests with `npm test` on Node.js 22.13 or later.
+The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. This connection does not persist the demo orders yet.
+
+Run the database and bridge tests with `npm test` on Node.js 22.13 or later.
 
 ## Browser demo
 
