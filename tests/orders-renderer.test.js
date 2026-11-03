@@ -14,7 +14,7 @@ test('desktop opens and restores an order and reports an open failure', async ()
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
-  const load = async () => { const app = new context.Demo(); app.componentDidMount(); await new Promise(resolve => setImmediate(resolve)); return app; };
+  const load = async () => { const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); return app; };
   let app = await load();
   assert.equal(app.renderVals().sections[0].tables[0].free, true);
   failItems = true; await app.openTable(1);

@@ -27,7 +27,7 @@ Create a development-only local account before signing in, with the desktop app 
 node src/desktop/bootstrap-user.js "$env:APPDATA\arra-pos-waiter-demo"
 ```
 
-Enter a sample username and a password when prompted; password entry is hidden. The command creates only the first account and refuses to overwrite an existing account. There is no default password. It is a development bootstrap, not a production account management or recovery procedure. Credentials are stored as salted scrypt hashes locally. Signing out clears the in-memory session, as does closing the window. The first account receives the current development permissions for table and menu viewing and order viewing and changes. Existing S-009 databases grant those permissions only to their first account on upgrade. The desktop services check the active account and its grants on every request; configurable permission management is planned for S-015. Waiter selection and PINs remain simulated (S-011), and do not attribute actions to staff. Do not use this build for real operations.
+Enter a sample username and a password when prompted; password entry is hidden. The command creates only the first account and refuses to overwrite an existing account. There is no default password. It is a development bootstrap, not a production account management or recovery procedure. Credentials are stored as salted scrypt hashes locally. Signing out clears the in-memory session, as does closing the window. The first account receives the current development permissions for table and menu viewing and order viewing and changes. Existing S-009 databases grant those permissions only to their first account on upgrade. The desktop services check the active account and its grants on every request; configurable permission management is planned for S-015. After restaurant sign-in, select an active local user; service permissions are checked against that selected identity. The development bootstrap user has no PIN. Optional PIN hashes can be stored with a per-PIN salt; staff and PIN configuration is planned for S-015. Selecting a user without a PIN cannot verify who is physically using the PC, so attribution is weaker. Four-digit PINs are also guessable and have no rate limiting yet. The current order services do not record an audit history; action history is planned for S-016. Do not use this build for real operations.
 
 The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. Opening a desktop table creates or resumes its local active order.
 
@@ -57,7 +57,7 @@ The original browser demo remains available with:
 npm start
 ```
 
-Open http://localhost:3000. Browser sign-in accepts any nonempty values and is simulated. Pick a waiter; for a waiter with a PIN, enter any four digits. Waiter selection is simulated in both versions.
+Open http://localhost:3000. Browser sign-in accepts any nonempty values and is simulated. Pick a waiter; for a waiter with a PIN, enter any four digits. Waiter selection is simulated only in the browser demo.
 
 If port 3000 is in use, choose another available port, for example:
 

@@ -1,6 +1,21 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async getWaiters() {
+    try {
+      const r = await ipcRenderer.invoke('arra:waiters', {});
+      if (r?.ok && Array.isArray(r.data) && r.data.every(w => Number.isSafeInteger(w.id) && w.id > 0 && typeof w.name === 'string' && w.name.trim() && typeof w.hasPin === 'boolean'))
+        return { ok: true, data: r.data.map(w => ({ id: w.id, name: w.name, hasPin: w.hasPin })) };
+    } catch (_) {}
+    return { ok: false };
+  },
+  async selectWaiter(id, pin) {
+    if (!Number.isSafeInteger(id) || id <= 0 || typeof pin !== 'string') return { ok: false };
+    try { return (await ipcRenderer.invoke('arra:select-waiter', { id, pin }))?.ok ? { ok: true } : { ok: false }; } catch (_) { return { ok: false }; }
+  },
+  async clearWaiter() {
+    try { return (await ipcRenderer.invoke('arra:clear-waiter', {}))?.ok ? { ok: true } : { ok: false }; } catch (_) { return { ok: false }; }
+  },
   async signIn(username, password) {
     if (typeof username !== 'string' || typeof password !== 'string') return { ok: false };
     try {

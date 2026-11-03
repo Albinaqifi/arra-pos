@@ -21,6 +21,8 @@ test('direct operations require current grants, with view distinct from change',
   const invoke = (channel, data) => handlers['arra:' + channel](trusted, data);
   for (const [channel, data] of [['tables', {}], ['menu', {}], ['open-order', { tableId: 1 }], ['order-items', { action: 'list', orderId: 1 }]]) assert.equal(invoke(channel, data).ok, false);
   assert.equal(session.signIn({ username: 'sample', password: 'sample password' }).ok, true);
+  assert.equal(invoke('tables', {}).ok, false);
+  assert.equal(session.selectWaiter({ id: 1, pin: '' }).ok, true);
   assert.equal(invoke('tables', {}).ok, true); assert.equal(invoke('menu', {}).ok, true);
   const orderId = invoke('open-order', { tableId: 1 }).data.id;
   assert.equal(invoke('order-items', { action: 'add', orderId, productId: 'qebapa' }).ok, true);
@@ -48,7 +50,7 @@ test('version 8 upgrade grants only the first existing account and preserves it 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-permission-upgrade-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password');
-  db.exec("INSERT INTO local_users (username, salt, password_hash) VALUES ('other', x'00', x'00'); DROP TABLE user_permissions; PRAGMA user_version = 8;");
+  db.exec("INSERT INTO local_users (username, salt, password_hash) VALUES ('other', x'00', x'00'); DROP TABLE user_permissions; ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; PRAGMA user_version = 8;");
   db.close(); db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions WHERE user_id = 1').get().n, 4);
   assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions WHERE user_id = 2').get().n, 0);
