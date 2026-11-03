@@ -1,0 +1,57 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { DatabaseSync } = require('node:sqlite');
+const { openDatabase } = require('../src/desktop/database');
+const { registerTableConfig } = require('../src/desktop/table-config');
+const { registerTables } = require('../src/desktop/tables');
+const { registerOrders } = require('../src/desktop/orders');
+
+test('version 10 upgrade retains orders and grants and protects moved open orders', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-upgrade-independent-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
+  db.exec(`CREATE TABLE dining_tables (id INTEGER PRIMARY KEY, area TEXT NOT NULL) STRICT;
+    CREATE TABLE orders (id INTEGER PRIMARY KEY, table_id INTEGER NOT NULL REFERENCES dining_tables(id), opened_at INTEGER NOT NULL, status TEXT NOT NULL) STRICT;
+    CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open';
+    CREATE TABLE local_users (id INTEGER PRIMARY KEY, username TEXT NOT NULL, salt BLOB NOT NULL, password_hash BLOB NOT NULL, active INTEGER NOT NULL DEFAULT 1, pin_salt BLOB, pin_hash BLOB) STRICT;
+    CREATE TABLE user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL, PRIMARY KEY(user_id, permission)) STRICT;
+    INSERT INTO dining_tables VALUES (12, 'Inside'), (19, 'Terrace');
+    INSERT INTO orders VALUES (7, 12, 123, 'open'), (8, 19, 100, 'completed');
+    INSERT INTO local_users (id, username, salt, password_hash) VALUES (3, 'sample-admin', x'00', x'00'), (4, 'sample-waiter', x'00', x'00');
+    INSERT INTO user_permissions VALUES (3, 'tables.view'), (3, 'orders.view'), (3, 'orders.change'), (4, 'tables.view');
+    PRAGMA user_version = 10;`);
+  db.close();
+  db = openDatabase(dir);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
+    {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
+  ]);
+  assert.deepEqual(db.prepare('SELECT user_id FROM user_permissions WHERE permission = ?').all('tables.change').map(x => x.user_id), [3]);
+  let user = 4; const handlers = {}; const event = {};
+  const ipc = { handle: (channel, handler) => { handlers[channel] = handler; } };
+  const allowed = e => e === event, session = { currentUserId: () => user };
+  registerTableConfig(ipc, allowed, db, session); registerTables(ipc, allowed, db, session); registerOrders(ipc, allowed, db, session);
+  const config = req => handlers['arra:table-config'](event, req);
+  assert.equal(config({action: 'list'}).error, 'Access denied');
+  assert.equal(config({action: 'area', id: null, name: 'New', active: true}).error, 'Access denied');
+  assert.equal(config({action: 'table', id: 12, areaId: 1, capacity: 2, active: false, create: false}).error, 'Access denied');
+  user = 3;
+  assert.equal(handlers['arra:table-config']({}, {action: 'list'}).ok, false);
+  const areas = config({action: 'list'}).data.areas;
+  const inside = areas.find(a => a.name === 'Inside').id, terrace = areas.find(a => a.name === 'Terrace').id;
+  assert.equal(config({action: 'table', id: 12, areaId: terrace, capacity: 9, active: true, create: false}).ok, true);
+  assert.equal(config({action: 'area', id: terrace, name: 'Terrace', active: false}).error, 'Area has an open order');
+  assert.equal(config({action: 'table', id: 12, areaId: inside, capacity: 9, active: false, create: false}).error, 'Table has an open order');
+  assert.equal(handlers['arra:open-order'](event, {tableId: 12}).data.id, 7);
+  assert.equal(config({action: 'area', id: inside, name: 'Inside', active: false}).ok, true);
+  assert.equal(config({action: 'table', id: 19, areaId: inside, capacity: 4, active: true, create: false}).error, 'Area unavailable');
+  assert.equal(db.prepare('SELECT table_id FROM orders WHERE id = 8').get().table_id, 19);
+  db.close();
+  db = openDatabase(dir);
+  assert.deepEqual({...db.prepare('SELECT area_id, capacity, active FROM dining_tables WHERE id = 12').get()}, {area_id: terrace, capacity: 9, active: 1});
+  assert.equal(db.prepare('SELECT table_id FROM orders WHERE id = 7').get().table_id, 12);
+  db.close();
+});

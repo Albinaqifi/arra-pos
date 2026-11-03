@@ -3,6 +3,7 @@ const path = require('node:path');
 const { openDatabase } = require('./database');
 const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
+const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
@@ -45,6 +46,7 @@ app.whenReady().then(() => {
       event.senderFrame === mainWindow.webContents.mainFrame);
   session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
+  registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);

@@ -48,9 +48,9 @@ test('version 5 upgrade retains an open order and menu', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-item-upgrade-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open'); DROP TABLE order_items; DROP TABLE user_permissions; DROP TABLE local_users; PRAGMA user_version = 5;");
+  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open'); DROP TABLE order_items; DROP TABLE user_permissions; DROP TABLE local_users; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; PRAGMA user_version = 5;");
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 10);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
   assert.equal(db.prepare('SELECT opened_at FROM orders WHERE table_id = 1').get().opened_at, 123);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'qebapa'").get().price, 220);
   assert.equal(db.prepare('SELECT count(*) AS n FROM order_items').get().n, 0);

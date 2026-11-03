@@ -92,6 +92,20 @@ const migrations = [
     sql: `ALTER TABLE local_users ADD COLUMN pin_salt BLOB;
     ALTER TABLE local_users ADD COLUMN pin_hash BLOB;`,
   },
+  {
+    version: 11,
+    sql: `CREATE TABLE dining_areas (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE CHECK(length(trim(name)) > 0), active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1))) STRICT;
+    INSERT INTO dining_areas (name) SELECT DISTINCT area FROM dining_tables;
+    ALTER TABLE dining_tables ADD COLUMN area_id INTEGER REFERENCES dining_areas(id);
+    ALTER TABLE dining_tables ADD COLUMN capacity INTEGER NOT NULL DEFAULT 4 CHECK(capacity > 0 AND capacity <= 1000);
+    ALTER TABLE dining_tables ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1));
+    UPDATE dining_tables SET area_id = (SELECT id FROM dining_areas WHERE name = dining_tables.area);
+    CREATE TABLE new_user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL CHECK(permission IN ('tables.view', 'tables.change', 'menu.view', 'orders.view', 'orders.change')), PRIMARY KEY(user_id, permission)) STRICT;
+    INSERT INTO new_user_permissions SELECT * FROM user_permissions;
+    DROP TABLE user_permissions;
+    ALTER TABLE new_user_permissions RENAME TO user_permissions;
+    INSERT INTO user_permissions SELECT min(id), 'tables.change' FROM local_users HAVING count(*) > 0;`,
+  },
 ];
 
 function migrate(db) {

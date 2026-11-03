@@ -20,7 +20,7 @@ function registerOrders(ipcMain, isAllowedSender, db, session) {
             return { ok: false, error: 'Access denied' };
           }
           db.prepare(`INSERT INTO orders (table_id, opened_at, status)
-            SELECT id, ?, 'open' FROM dining_tables WHERE id = ?
+            SELECT t.id, ?, 'open' FROM dining_tables t LEFT JOIN dining_areas a ON a.id = t.area_id WHERE t.id = ? AND t.active = 1 AND COALESCE(a.active, 1) = 1
             ON CONFLICT DO NOTHING`).run(Date.now(), request.tableId);
           order = findOrder.get(request.tableId);
         }
