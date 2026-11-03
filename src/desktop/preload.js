@@ -50,9 +50,12 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   },
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
-        !['list', 'add', 'increment', 'decrement', 'remove', 'note'].includes(action)) return { ok: false };
+        !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send'].includes(action)) return { ok: false };
     const request = { action, orderId };
-    if (action === 'add') {
+    if (action === 'send') {
+      if (typeof value !== 'string') return { ok: false };
+      request.requestId = value;
+    } else if (action === 'add') {
       if (typeof value === 'string' && value.trim()) request.productId = value;
       else if (value && typeof value.productId === 'string' && Array.isArray(value.optionIds)) { request.productId = value.productId; request.optionIds = value.optionIds; }
       else return { ok: false };
@@ -72,7 +75,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
             typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
             Number.isSafeInteger(i.quantity) && i.quantity > 0 && typeof i.note === 'string')) {
         return { ok: true, data: { total: data.total, items: data.items.map(i => ({
-          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, modifiers: i.modifiers || []
+          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, status: i.status, round: i.round, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, modifiers: i.modifiers || []
         })) } };
       }
     } catch (_) {}

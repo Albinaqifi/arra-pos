@@ -21,7 +21,7 @@ test('upgrade preserves existing order and direct menu requests handle denial an
     INSERT INTO menu_products (id, category_id, name, price, active) VALUES ('p', 'c', 'Old name', 123, 1);
     INSERT INTO order_items (order_id, product_id, name, unit_price, quantity, status) VALUES (1, 'p', 'Old name', 123, 1, 'pending');
     ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order;
-    DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version = 11;`);
+    DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 11;`);
   db.close();
   db = openDatabase(dir);
   const handlers = {}, event = {}; let user = 11;

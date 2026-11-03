@@ -113,8 +113,8 @@ class MenuConfig extends React.Component {
         h('button', { onClick: () => this.save({ action: 'category', id: c.id, name: c.name.trim(), parentId: c.parentId, sortOrder: numeric(c.sortOrder), active: !!c.active }) }, 'Save category'))),
       field('New category', s.newCategory, v => this.setState({ newCategory: v })), ' ', h('button', { onClick: () => this.save({ action: 'category', id: null, name: s.newCategory.trim(), parentId: null, sortOrder: s.categories.length, active: true }) }, 'Add category'),
       h('h2', null, 'Products'), ...s.products.map(p => h('div', { key: p.id, style: { marginBottom: 8 } }, field('Name', p.name, v => update('products', p.id, 'name', v)), ' ', categorySelect(p.categoryId, v => update('products', p.id, 'categoryId', v), s.categories, false), ' ',
-        field('Price', p.price, v => update('products', p.id, 'price', v), 'number'), ' ', field('Order', p.sortOrder, v => update('products', p.id, 'sortOrder', v), 'number'), ' ', active(p.active, v => update('products', p.id, 'active', v)), ' ',
-        h('button', { onClick: () => this.save({ action: 'product', id: p.id, categoryId: p.categoryId, name: p.name.trim(), price: numeric(p.price), sortOrder: numeric(p.sortOrder), active: !!p.active }) }, 'Save product'))),
+        h('label', null, 'Destination ', h('select', { value: p.destination || 'kitchen', onChange: e => update('products', p.id, 'destination', e.target.value) }, h('option', { value: 'kitchen' }, 'Kitchen'), h('option', { value: 'bar' }, 'Bar'))), ' ', field('Price', p.price, v => update('products', p.id, 'price', v), 'number'), ' ', field('Order', p.sortOrder, v => update('products', p.id, 'sortOrder', v), 'number'), ' ', active(p.active, v => update('products', p.id, 'active', v)), ' ',
+        h('button', { onClick: () => this.save({ action: 'product', id: p.id, categoryId: p.categoryId, name: p.name.trim(), price: numeric(p.price), sortOrder: numeric(p.sortOrder), active: !!p.active, destination: p.destination || 'kitchen' }) }, 'Save product'))),
       field('New product', s.newProduct, v => this.setState({ newProduct: v })), ' ', categorySelect(s.categoryId, v => this.setState({ categoryId: v }), s.categories, false), ' ', field('Price', s.price, v => this.setState({ price: v }), 'number'), ' ',
       h('button', { onClick: () => this.save({ action: 'product', id: null, categoryId: s.categoryId, name: s.newProduct.trim(), price: numeric(s.price), sortOrder: s.products.length, active: true }) }, 'Add product'),
       h('h2', null, 'Modifier groups'), h('p', null, 'Choose at most one option per group. Required groups need one choice.'),
@@ -431,7 +431,7 @@ class WaiterDemo extends React.Component {
   replaceDesktopItems(n, tableId, items) {
     n.items = n.items.filter(i => i.tableId !== tableId).concat(items.map(i => ({
       id: i.id, tableId, pid: i.productId, name: i.name, unit: i.unitPrice, qty: i.quantity,
-      mods: (i.modifiers || []).map(m => m.groupName + ': ' + m.optionName + ' (' + (m.adjustment >= 0 ? '+' : '') + m.adjustment + ')').join(' · '), note: i.note, status: 'pending', round: 0, cxQty: 0, cx: []
+      mods: (i.modifiers || []).map(m => m.groupName + ': ' + m.optionName + ' (' + (m.adjustment >= 0 ? '+' : '') + m.adjustment + ')').join(' · '), note: i.note, status: i.status || 'pending', round: i.round || 0, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, cxQty: 0, cx: []
     })));
   }
   async changeDesktopItems(action, value) {
@@ -444,7 +444,7 @@ class WaiterDemo extends React.Component {
       if (!this._mounted) return;
       if (!result.ok) { this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); return false; }
       this.mut(n => this.replaceDesktopItems(n, tableId, result.data.items));
-      return true;
+      return result.data;
     } catch (_) { if (this._mounted) this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); }
     finally { this._itemBusy = false; }
   }
@@ -528,7 +528,21 @@ class WaiterDemo extends React.Component {
 
   // ---------- send / print ----------
   send() {
-    if (window.arra) { this.mut(n => this.toast(n, 'Sending orders is not available yet.', 'warn')); return; }
+    if (window.arra) {
+      if (this._itemBusy) return;
+      const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
+      if (!orderId) return;
+      this._sendRequests = this._sendRequests || {};
+      const token = this._sendRequests[orderId] || (this._sendRequests[orderId] = crypto.randomUUID());
+      return this.changeDesktopItems('send', token).then(data => {
+        if (!data) return;
+        delete this._sendRequests[orderId];
+        const pending = data.items.some(i => i.status === 'pending');
+        if (this._mounted) this.mut(n => this.toast(n, pending
+          ? 'Previous send confirmed. New items are still pending; send again. No physical ticket was printed.'
+          : 'Round saved using simulated printing; no physical ticket was printed.', pending ? 'warn' : 'ok'));
+      });
+    }
     this.mut(n => {
       const tid = n.tableId;
       const pend = n.items.filter(i => i.tableId === tid && i.status === 'pending');
@@ -844,7 +858,7 @@ class WaiterDemo extends React.Component {
             routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
             hasCx: i.cxQty > 0,
             cxText: c ? i.cxQty + ' cancelled · ' + c.reason + ' · ' + c.who + ' ' + hm(c.t) + ' · waiting for owner review' : '',
-            canCancel: qq > 0, cancel: () => this.openCancel(i.id), cancelAria: 'Cancel ' + i.name
+            canCancel: !window.arra && qq > 0, cancel: () => this.openCancel(i.id), cancelAria: 'Cancel ' + i.name
           };
         })
       };
@@ -855,7 +869,7 @@ class WaiterDemo extends React.Component {
     v.sendLabel = pc ? 'Send order · ' + pc : 'Nothing new to send';
     v.sendStyle = 'flex:2; height:72px; border-radius:18px; border:none; display:flex; align-items:center; justify-content:center; gap:10px; font-size:21px; font-weight:800; ' + (pc ? 'background:#16A34A; color:#FFFFFF; box-shadow:0 10px 22px rgba(22,163,74,0.35)' : 'background:#E2E8F0; color:#475569');
     const billable = sent.filter(i => bq(i) > 0);
-    v.billDisabled = !o || billable.length === 0;
+    v.billDisabled = !!window.arra || !o || billable.length === 0;
     v.billStyle = 'flex:1; height:72px; border-radius:18px; border:none; display:flex; align-items:center; justify-content:center; gap:10px; font-size:21px; font-weight:800; ' + (v.billDisabled ? 'background:#E2E8F0; color:#475569' : 'background:#2563EB; color:#FFFFFF; box-shadow:0 10px 22px rgba(37,99,235,0.3)');
     v.moveDisabled = !o;
     v.moveStyle = 'flex:1; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:800; ' + (o ? 'border:2px solid #C4B5FD; background:#F5F3FF; color:#5B21B6' : 'border:2px solid #E2E8F0; background:#F8FAFC; color:#64748B');

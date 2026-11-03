@@ -32,11 +32,11 @@ test('version 9 database upgrades with existing user and grants intact', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-waiter-upgrade-'));
   let db = openDatabase(dir);
   bootstrap(db, 'sample', 'sample password');
-  db.exec("DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; DELETE FROM user_permissions WHERE permission IN ('tables.change', 'menu.change'); ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order; DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; PRAGMA user_version = 9");
+  db.exec("DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; DELETE FROM user_permissions WHERE permission IN ('tables.change', 'menu.change'); ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order; DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 9");
   db.close();
   db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 15);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 16);
   assert.equal(db.prepare('SELECT count(*) AS count FROM user_permissions WHERE user_id = 1').get().count, 8);
   const handlers = {}, trusted = {};
   registerSession({ handle(c, f) { handlers[c] = f; } }, e => e === trusted, db);

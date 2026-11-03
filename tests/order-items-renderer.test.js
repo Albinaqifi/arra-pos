@@ -11,6 +11,7 @@ test('desktop screen loads and saves items, shows failures, and does not send de
     openOrder: async () => ({ ok: true, data: { id: 3, tableId: 1, openedAt: 1 } }),
     orderItems: async (action, order, value) => {
       assert.equal(order, 3);
+      if (action === 'send') return {ok: false};
       if (reject) throw Error('save failed');
       if (fail) return { ok: false };
       if (action === 'note' && release) await new Promise(resolve => { release = resolve; });
@@ -22,7 +23,7 @@ test('desktop screen loads and saves items, shows failures, and does not send de
     }
   };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
-  const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  const context = { crypto: { randomUUID: () => 'request-id' }, React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
   const load = async () => { const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1); return app; };
   let app = await load();
@@ -64,4 +65,29 @@ test('modifier dialog locks during save, closes after success and remains retrya
   resolveSave({ok:false}); await pending; assert.equal(app.state.modal.saving,false); assert.equal(app.state.modal.sel.g,0);
   const retry=app.modAdd(); assert.equal(calls,2); resolveSave({ok:true,data:{items:[{id:1,productId:'p',name:'Dish',unitPrice:130,quantity:1,note:'',modifiers:[]}],total:130}}); await retry;
   assert.equal(app.state.modal,null); assert.equal(app.state.items.length,1);
+});
+
+test('a replay after a lost send response warns that newly added items remain pending', async () => {
+  let rows = [], round = false, first = true, nextId = 1, token = 0; const sends = [];
+  const api = {
+    getMenu: async () => ({ok:true,data:{categories:[{id:'c',name:'Food'}],products:[{id:'p',categoryId:'c',name:'Dish',price:10}]}}),
+    getTables: async () => ({ok:true,data:[{id:1,area:'Inside',orderId:3,openedAt:1}]}),
+    openOrder: async () => ({ok:true,data:{id:3,tableId:1,openedAt:1}}),
+    orderItems: async (action, order, value) => {
+      if (action === 'add') rows.push({id:nextId++,productId:'p',name:'Dish',unitPrice:10,quantity:1,note:'',status:'pending'});
+      if (action === 'send') {
+        sends.push(value);
+        if (!round || value !== sends[0]) { rows = rows.map(i => i.status === 'pending' ? {...i,status:'sent',round:round ? 2 : 1,sentAt:1,sentBy:'waiter',route:'kitchen'} : i); round = true; }
+        if (first) { first = false; return {ok:false}; }
+      }
+      return {ok:true,data:{items:rows.map(x=>({...x})),total:rows.length*10}};
+    }
+  };
+  class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
+  const context={crypto:{randomUUID:()=>`request-${++token}`},React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.openTable(1);
+  await app.addProduct('p'); await app.send(); await app.addProduct('p'); await app.send();
+  assert.equal(sends[0],sends[1]); assert.equal(app.state.items[1].status,'pending'); assert.match(app.state.toast.msg,/still pending; send again/);
+  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(app.state.items[1].status,'sent'); assert.match(app.state.toast.msg,/simulated printing/);
 });

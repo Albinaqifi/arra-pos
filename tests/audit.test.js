@@ -65,7 +65,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
     DROP TRIGGER employee_permission_audit_no_replace;
     DROP TRIGGER employee_account_audit_no_replace;
     DROP TRIGGER employee_credential_audit_no_replace;
-    PRAGMA user_version = 14;`);
+    DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 14;`);
   db.close(); db = openDatabase(dir);
   let handler; const trusted = {};
   registerOrderItems({handle: (_, fn) => handler = fn}, e => e === trusted, db, {currentUserId: () => 1});

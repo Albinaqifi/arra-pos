@@ -5,12 +5,13 @@ const validId = n => Number.isSafeInteger(n) && n > 0;
 
 function registerOrderItems(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, request) => {
-    const keys = { list: ['action', 'orderId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
+    const keys = { list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
       note: ['action', 'orderId', 'itemId', 'note'], increment: ['action', 'orderId', 'itemId'], decrement: ['action', 'orderId', 'itemId'], remove: ['action', 'orderId', 'itemId'] };
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) ||
         Object.getPrototypeOf(request) !== Object.prototype || !Object.hasOwn(keys, request.action) ||
         Reflect.ownKeys(request).length !== keys[request.action].length ||
         !keys[request.action].every(k => Object.hasOwn(request, k)) || !validId(request.orderId) ||
+        (request.action === 'send' && (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId))) ||
         (request.action === 'add' && (typeof request.productId !== 'string' || !request.productId.trim() || (request.optionIds !== undefined && (!Array.isArray(request.optionIds) || request.optionIds.some(x => typeof x !== 'string' || !x.trim()) || new Set(request.optionIds).size !== request.optionIds.length)))) ||
         (['increment', 'decrement', 'remove', 'note'].includes(request.action) && !validId(request.itemId)) ||
         (request.action === 'note' && typeof request.note !== 'string'))
@@ -20,7 +21,26 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
       db.exec('BEGIN IMMEDIATE');
       try {
         if (!db.prepare("SELECT id FROM orders WHERE id = ? AND status = 'open'").get(request.orderId)) throw Error('Invalid order');
-        if (request.action === 'add') {
+        if (request.action === 'send') {
+          const prior = db.prepare('SELECT order_id FROM preparation_rounds WHERE request_id = ?').get(request.requestId);
+          if (prior && prior.order_id !== request.orderId) throw Error('Invalid request');
+          if (!prior) {
+            const pending = db.prepare("SELECT i.id, i.quantity, p.destination FROM order_items i JOIN menu_products p ON p.id = i.product_id WHERE i.order_id = ? AND i.status = 'pending' ORDER BY i.id").all(request.orderId);
+            if (!pending.length) throw Error('Nothing pending');
+            if (pending.length) {
+              const number = db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM preparation_rounds WHERE order_id = ?').get(request.orderId).number;
+              const roundId = db.prepare('INSERT INTO preparation_rounds (order_id, request_id, number, actor_id, sent_at) VALUES (?, ?, ?, ?, ?)').run(request.orderId, request.requestId, number, session.currentUserId(), Date.now()).lastInsertRowid;
+              for (const destination of ['kitchen', 'bar']) {
+                const selected = pending.filter(i => i.destination === destination);
+                if (!selected.length) continue;
+                const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;
+                for (const item of selected) db.prepare('INSERT INTO preparation_ticket_items (ticket_id, item_id, quantity) VALUES (?, ?, ?)').run(ticketId, item.id, item.quantity);
+              }
+              db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(request.orderId);
+              recordAudit(db, session.currentUserId(), 'send', 'preparation_round', roundId, request.orderId, { number, itemIds: pending.map(i => i.id), adapter: 'simulated' });
+            }
+          }
+        } else if (request.action === 'add') {
           const product = db.prepare(`SELECT p.id, p.name, p.price FROM menu_products p
             JOIN menu_categories c ON c.id = p.category_id LEFT JOIN menu_categories parent ON parent.id = c.parent_id WHERE p.id = ? AND p.active = 1 AND c.active = 1 AND (c.parent_id IS NULL OR parent.active = 1)`).get(request.productId);
           if (!product) throw Error('Invalid product');
@@ -58,7 +78,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
             recordAudit(db, session.currentUserId(), request.action === 'note' ? 'note_changed' : removed ? 'remove' : 'quantity_changed', 'order_item', item.id, request.orderId, context);
           }
         }
-        const items = db.prepare('SELECT id, product_id AS productId, name, unit_price AS unitPrice, quantity, note FROM order_items WHERE order_id = ? ORDER BY id').all(request.orderId);
+        const items = db.prepare('SELECT i.id, i.product_id AS productId, i.name, i.unit_price AS unitPrice, i.quantity, i.note, i.status, r.number AS round, r.sent_at AS sentAt, u.username AS sentBy, t.destination AS route FROM order_items i LEFT JOIN preparation_ticket_items ti ON ti.item_id = i.id LEFT JOIN preparation_tickets t ON t.id = ti.ticket_id LEFT JOIN preparation_rounds r ON r.id = t.round_id LEFT JOIN local_users u ON u.id = r.actor_id WHERE i.order_id = ? ORDER BY i.id').all(request.orderId);
         for (const item of items) item.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName, adjustment FROM order_item_modifiers WHERE item_id = ? ORDER BY rowid').all(item.id);
         let total = 0;
         for (const item of items) {
