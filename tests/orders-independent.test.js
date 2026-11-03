@@ -14,10 +14,10 @@ test('version 4 upgrade preserves existing tables and menu data', t => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
   seedTables(db);
-  db.exec("INSERT INTO menu_categories VALUES ('c', 'Sample', 1); INSERT INTO menu_products VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; DROP TABLE user_permissions; DROP TABLE local_users; PRAGMA user_version = 4;");
+  db.exec("INSERT INTO menu_categories VALUES ('c', 'Sample', 1); INSERT INTO menu_products VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; DROP TABLE user_permissions; DROP TABLE local_users; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; PRAGMA user_version = 4;");
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 10);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
   assert.equal(db.prepare('SELECT count(*) AS n FROM dining_tables').get().n, 16);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'p'").get().price, 123);
   let open;

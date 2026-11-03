@@ -32,12 +32,12 @@ test('version 9 database upgrades with existing user and grants intact', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-waiter-upgrade-'));
   let db = openDatabase(dir);
   bootstrap(db, 'sample', 'sample password');
-  db.exec('ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; PRAGMA user_version = 9');
+  db.exec("DELETE FROM user_permissions WHERE permission = 'tables.change'; ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; PRAGMA user_version = 9");
   db.close();
   db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 10);
-  assert.equal(db.prepare('SELECT count(*) AS count FROM user_permissions WHERE user_id = 1').get().count, 4);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 11);
+  assert.equal(db.prepare('SELECT count(*) AS count FROM user_permissions WHERE user_id = 1').get().count, 5);
   const handlers = {}, trusted = {};
   registerSession({ handle(c, f) { handlers[c] = f; } }, e => e === trusted, db);
   assert.equal(handlers['arra:sign-in'](trusted, { username: 'sample', password: 'sample password' }).ok, true);

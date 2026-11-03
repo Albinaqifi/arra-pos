@@ -40,6 +40,6 @@ test('failed version 9 migration rolls back and preserves existing order data', 
   db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
   assert.equal(db.prepare('SELECT opened_at FROM orders WHERE table_id = 1').get().opened_at, 123);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 4);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 5);
   db.close();
 });

@@ -35,7 +35,7 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   assert.match(view.tableMessage, /No tables available/);
   assert.equal(view.sections.length, 0);
   seedTables(db);
-  db.prepare('UPDATE dining_tables SET area = ? WHERE id = ?').run('Garden', 1);
+  db.exec("INSERT INTO dining_areas (name) VALUES ('Garden'); UPDATE dining_tables SET area = 'Garden', area_id = (SELECT id FROM dining_areas WHERE name = 'Garden') WHERE id = 1;");
   seedTables(db);
   db.close();
   db = openDatabase(dir);

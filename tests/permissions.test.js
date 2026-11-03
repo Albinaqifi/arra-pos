@@ -50,11 +50,11 @@ test('version 8 upgrade grants only the first existing account and preserves it 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-permission-upgrade-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password');
-  db.exec("INSERT INTO local_users (username, salt, password_hash) VALUES ('other', x'00', x'00'); DROP TABLE user_permissions; ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; PRAGMA user_version = 8;");
+  db.exec("INSERT INTO local_users (username, salt, password_hash) VALUES ('other', x'00', x'00'); DROP TABLE user_permissions; ALTER TABLE local_users DROP COLUMN pin_hash; ALTER TABLE local_users DROP COLUMN pin_salt; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; PRAGMA user_version = 8;");
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions WHERE user_id = 1').get().n, 4);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions WHERE user_id = 1').get().n, 5);
   assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions WHERE user_id = 2').get().n, 0);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 4);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM user_permissions').get().n, 5);
   db.close();
 });

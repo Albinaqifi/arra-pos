@@ -1,0 +1,43 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { registerTableConfig } = require('../src/desktop/table-config');
+const { registerOrders } = require('../src/desktop/orders');
+const { registerTables } = require('../src/desktop/tables');
+
+test('configuration permissions, validation, persistence and open-order safeguards', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-config-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = openDatabase(dir), current = null, config, open, list;
+  const trusted = {};
+  const register = () => {
+    const ipc = { handle(channel, fn) { if (channel === 'arra:table-config') config = fn; if (channel === 'arra:open-order') open = fn; if (channel === 'arra:tables') list = fn; } };
+    const allowed = e => e === trusted, session = { currentUserId: () => current };
+    registerTableConfig(ipc, allowed, db, session); registerOrders(ipc, allowed, db, session); registerTables(ipc, allowed, db, session);
+  };
+  db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');"); register();
+  const area = { action: 'area', id: null, name: 'Patio', active: true };
+  assert.equal(config(trusted, area).ok, false); current = 2; assert.equal(config(trusted, area).ok, false); current = 1;
+  assert.equal(config({}, area).ok, false); assert.equal(config(trusted, { ...area, extra: 1 }).ok, false); assert.equal(config(trusted, area).ok, true);
+  const areaId = config(trusted, { action: 'list' }).data.areas[0].id;
+  const table = { action: 'table', id: 23, areaId, capacity: 6, active: true, create: true };
+  for (const bad of [0, -1, 1.5, 1001]) assert.equal(config(trusted, { ...table, capacity: bad }).ok, false);
+  assert.equal(config(trusted, table).ok, true); assert.equal(config(trusted, table).ok, false);
+  assert.equal(open(trusted, { tableId: 23 }).ok, true);
+  assert.equal(config(trusted, { ...table, create: false, active: false }).error, 'Table has an open order');
+  assert.equal(config(trusted, { action: 'area', id: areaId, name: 'Patio', active: false }).error, 'Area has an open order');
+  assert.equal(config(trusted, { ...table, create: false, capacity: 8 }).ok, true);
+  assert.equal(config(trusted, { action: 'area', id: areaId, name: 'Garden', active: true }).ok, true);
+  db.close(); db = openDatabase(dir); register();
+  assert.equal(config(trusted, { action: 'list' }).data.tables[0].capacity, 8);
+  assert.equal(list(trusted, {}).data[0].area, 'Garden'); assert.equal(list(trusted, {}).data[0].orderId, 1);
+  db.exec("UPDATE orders SET status = 'completed' WHERE id = 1");
+  assert.equal(config(trusted, { ...table, create: false, active: false }).ok, true);
+  assert.equal(open(trusted, { tableId: 23 }).ok, false); assert.equal(list(trusted, {}).data.length, 0);
+  assert.equal(db.prepare('SELECT table_id FROM orders WHERE id = 1').get().table_id, 23);
+  assert.equal(config(trusted, { action: 'area', id: areaId, name: 'Garden', active: false }).ok, true);
+  db.close();
+});
