@@ -1,3 +1,4 @@
+const { auditConfiguration } = require('./audit');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:table-config';
 const id = x => Number.isSafeInteger(x) && x > 0;
@@ -9,6 +10,7 @@ function registerTableConfig(ipcMain, isAllowedSender, db, session) {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, 'tables.change')) return { ok: false, error: 'Access denied' };
     try {
+      const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         areas: db.prepare('SELECT id, name, active FROM dining_areas ORDER BY id').all(),
         tables: db.prepare("SELECT t.id, t.area_id AS areaId, t.capacity, t.active, EXISTS(SELECT 1 FROM orders o WHERE o.table_id = t.id AND o.status = 'open') AS hasOrder FROM dining_tables t ORDER BY t.id").all()
@@ -30,6 +32,8 @@ function registerTableConfig(ipcMain, isAllowedSender, db, session) {
         return { ok: true };
       }
       return { ok: false, error: 'Invalid request' };
+      };
+      return ['area', 'table'].includes(req.action) ? auditConfiguration(db, session.currentUserId(), req.action, execute) : execute();
     } catch (_) { return { ok: false, error: 'Could not save configuration' }; }
   });
 }

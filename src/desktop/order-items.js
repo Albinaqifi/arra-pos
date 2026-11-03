@@ -1,3 +1,4 @@
+const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:order-items';
 const validId = n => Number.isSafeInteger(n) && n > 0;
@@ -34,16 +35,28 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
           let price = product.price;
           for (const option of selected) { price += option.adjustment; if (!Number.isSafeInteger(price)) throw Error('Invalid price'); }
           if (price < 0) throw Error('Invalid price');
-          const result = db.prepare("INSERT INTO order_items (order_id, product_id, name, unit_price, quantity, status) VALUES (?, ?, ?, ?, 1, 'pending')")
-            .run(request.orderId, product.id, product.name, price);
+          // Removed pending rows must not have their identity reused in history.
+          const lastId = db.prepare("SELECT MAX(id) AS id FROM (SELECT id FROM order_items UNION ALL SELECT CAST(entity_id AS INTEGER) AS id FROM application_audit WHERE entity_type = 'order_item')").get().id || 0;
+          if (!Number.isSafeInteger(lastId + 1)) throw Error('Item IDs exhausted');
+          const result = db.prepare("INSERT INTO order_items (id, order_id, product_id, name, unit_price, quantity, status) VALUES (?, ?, ?, ?, ?, 1, 'pending')")
+            .run(lastId + 1, request.orderId, product.id, product.name, price);
           for (const option of selected) db.prepare('INSERT INTO order_item_modifiers VALUES (?, ?, ?, ?)').run(result.lastInsertRowid, groups.find(g => g.id === option.groupId).name, option.name, option.adjustment);
+          recordAudit(db, session.currentUserId(), 'add', 'order_item', result.lastInsertRowid, request.orderId, { productId: product.id, name: product.name, unitPrice: price, quantity: 1, modifiers: selected.map(o => ({ group: groups.find(g => g.id === o.groupId).name, option: o.name, adjustment: o.adjustment })) });
         } else if (request.action !== 'list') {
-          const item = db.prepare("SELECT id, quantity FROM order_items WHERE id = ? AND order_id = ? AND status = 'pending'").get(request.itemId, request.orderId);
+          const item = db.prepare("SELECT id, product_id AS productId, name, unit_price AS unitPrice, quantity, note FROM order_items WHERE id = ? AND order_id = ? AND status = 'pending'").get(request.itemId, request.orderId);
           if (!item) throw Error('Invalid item');
+          const removed = request.action === 'remove' || (request.action === 'decrement' && item.quantity === 1);
+          // Read snapshots before deletion cascades to modifier rows.
+          const modifiers = removed ? db.prepare('SELECT group_name AS groupName, option_name AS optionName, adjustment FROM order_item_modifiers WHERE item_id = ? ORDER BY rowid').all(item.id) : null;
           if (request.action === 'note') db.prepare('UPDATE order_items SET note = ? WHERE id = ?').run(request.note, item.id);
           else if (request.action === 'remove' || (request.action === 'decrement' && item.quantity === 1))
             db.prepare('DELETE FROM order_items WHERE id = ?').run(item.id);
           else db.prepare('UPDATE order_items SET quantity = ? WHERE id = ?').run(item.quantity + (request.action === 'increment' ? 1 : -1), item.id);
+          if (request.action !== 'note' || item.note !== request.note) {
+            const context = request.action === 'note' ? {} : { productId: item.productId, name: item.name, unitPrice: item.unitPrice, beforeQuantity: item.quantity, afterQuantity: removed ? 0 : item.quantity + (request.action === 'increment' ? 1 : -1) };
+            if (removed) context.modifiers = modifiers;
+            recordAudit(db, session.currentUserId(), request.action === 'note' ? 'note_changed' : removed ? 'remove' : 'quantity_changed', 'order_item', item.id, request.orderId, context);
+          }
         }
         const items = db.prepare('SELECT id, product_id AS productId, name, unit_price AS unitPrice, quantity, note FROM order_items WHERE order_id = ? ORDER BY id').all(request.orderId);
         for (const item of items) item.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName, adjustment FROM order_item_modifiers WHERE item_id = ? ORDER BY rowid').all(item.id);

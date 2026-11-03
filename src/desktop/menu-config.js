@@ -1,3 +1,4 @@
+const { auditConfiguration } = require('./audit');
 const { randomUUID } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:menu-config';
@@ -11,6 +12,7 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, 'menu.change')) return { ok: false, error: 'Access denied' };
     try {
+      const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         categories: db.prepare('SELECT id, name, active, parent_id AS parentId, sort_order AS sortOrder FROM menu_categories ORDER BY sort_order, rowid').all(),
         products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder FROM menu_products ORDER BY sort_order, rowid').all(),
@@ -45,6 +47,8 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
         return { ok: true };
       }
       return { ok: false, error: 'Invalid request' };
+      };
+      return ['category', 'product', 'group', 'option'].includes(req.action) ? auditConfiguration(db, session.currentUserId(), req.action, execute) : execute();
     } catch (_) { return { ok: false, error: 'Could not save menu' }; }
   });
 }
