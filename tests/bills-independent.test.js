@@ -40,11 +40,11 @@ test('version 19 upgrade preserves an open order and corrections for billing', t
   db.exec(`DROP TRIGGER billed_item_insert; DROP TRIGGER billed_item_update; DROP TRIGGER billed_item_delete;
     DROP TRIGGER billed_correction; DROP TRIGGER billed_order_move; DROP TRIGGER bills_no_update;
     DROP TRIGGER bills_no_delete; DROP TRIGGER bill_lines_no_update; DROP TRIGGER bill_lines_no_delete;
-    DROP TABLE bill_lines; DROP TABLE bills; PRAGMA user_version = 19;`);
+    DROP TABLE payments; DROP TABLE bill_lines; DROP TABLE bills; PRAGMA user_version = 19;`);
   db.close();
   db = openDatabase(dir);
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 20);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 21);
     assert.equal(db.prepare('SELECT name FROM order_items WHERE id=1').get().name, 'Old snapshot');
     assert.equal(db.prepare('SELECT quantity FROM sent_item_corrections WHERE request_id=?').get('old-correction').quantity, 1);
     let handle;

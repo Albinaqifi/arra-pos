@@ -33,7 +33,7 @@ test('audit failure rolls back correction', t => {
 test('version 18 upgrade grants correction only to active current administrators', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-corrections-upgrade-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = authorizedDatabase(openDatabase(dir));
-  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users(id,username,salt,password_hash,active) VALUES(2,'current-admin',x'00',x'00',1),(3,'inactive-admin',x'00',x'00',0); INSERT INTO user_permissions VALUES(2,'employees.change'),(3,'employees.change'); DROP TABLE sent_item_corrections; PRAGMA user_version=18;");
+  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users(id,username,salt,password_hash,active) VALUES(2,'current-admin',x'00',x'00',1),(3,'inactive-admin',x'00',x'00',0); INSERT INTO user_permissions VALUES(2,'employees.change'),(3,'employees.change'); DROP TABLE sent_item_corrections; PRAGMA user_version=18;");
   db.close(); db = openDatabase(dir);
   assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission='orders.correct_sent' ORDER BY user_id").all().map(x => x.user_id), [2]);
   db.close();

@@ -28,14 +28,14 @@ test('menu management enforces grants and preserves order snapshots across edits
 test('version 11 upgrade retains menu, snapshots and grants and adds ordering', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-menu-upgrade-')); t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
   let db = openDatabase(dir);
-  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id, username, salt, password_hash) VALUES (1,'admin',x'00',x'00'), (2,'staff',x'00',x'00');
+  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id, username, salt, password_hash) VALUES (1,'admin',x'00',x'00'), (2,'staff',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'menu.view'), (2,'menu.view');
     INSERT INTO menu_categories (id,name,active) VALUES ('c','Category',1);
     INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p','c','Product',42,1);
     ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order;
     DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 11;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 20);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 21);
   assert.deepEqual({...db.prepare('SELECT id,name,active,parent_id,sort_order FROM menu_categories').get()}, {id:'c',name:'Category',active:1,parent_id:null,sort_order:1});
   assert.deepEqual({...db.prepare('SELECT id,name,price,sort_order FROM menu_products').get()}, {id:'p',name:'Product',price:42,sort_order:1});
   assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission = 'menu.change'").all().map(r=>r.user_id),[1]);

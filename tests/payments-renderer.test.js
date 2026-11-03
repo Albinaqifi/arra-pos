@@ -1,0 +1,35 @@
+const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
+test('test payment selection confirms card A or cash account and closes only after success', async () => {
+  const calls = []; let paid = 0;
+  const api = { bill: async () => ({ ok: true, data: { id: 7, total: 100, lines: [] } }), payment: async r => { calls.push(r); return { ok: calls.length > 1, error: 'Retry' }; } };
+  class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
+  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
+  const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
+  const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
+  find(b.render(), 'Cash').props.onClick(); assert.equal(find(b.render(), 'Record full test payment and close table'), null);
+  find(b.render(), 'Account B').props.onClick(); await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(paid, 0); assert.equal(calls[0].account, 'B'); assert.equal(calls[0].method, 'cash');
+  find(b.render(), 'Card (Account A)').props.onClick(); assert.equal(find(b.render(), 'Account B'), null);
+  await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(calls[1].method, 'card'); assert.equal(calls[1].account, 'A'); assert.equal(paid, 1);
+});
+
+test('unknown response locks the selection and retries it before allowing navigation', async () => {
+  const calls = []; let paid = 0;
+  const api = { bill: async () => ({ ok: true, data: { id: 8, total: 100, lines: [] } }), payment: async r => { calls.push(r); return calls.length === 1 ? { ok: false, uncertain: true, error: 'Unknown' } : { ok: true }; } };
+  class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
+  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
+  const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
+  const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
+  find(b.render(), 'Cash').props.onClick(); find(b.render(), 'Account B').props.onClick();
+  await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(find(b.render(), 'Close').props.disabled, true);
+  assert.equal(find(b.render(), 'Card (Account A)').props.disabled, true);
+  assert.equal(find(b.render(), 'Account A').props.disabled, true);
+  await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(JSON.stringify(calls[0]), JSON.stringify(calls[1])); assert.equal(paid, 1);
+});

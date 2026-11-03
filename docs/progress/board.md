@@ -27,7 +27,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-021 | In progress | Review and focused testing passed; PR #30 awaits merge. |
 | S-022 | In progress | Review and testing passed; awaiting PR and merge. |
 | S-023 | In progress | Review and focused testing passed; awaiting PR and merge. |
+| S-024 | In progress | Review and focused testing passed; awaiting PR and merge. |
 
 ## Current
 
-S-023 — Review and generate a bill.
+S-024 — Record one full payment.

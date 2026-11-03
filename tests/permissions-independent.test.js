@@ -35,7 +35,7 @@ test('failed version 9 migration rolls back and preserves existing order data', 
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password'); seedTables(db);
   db.prepare("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open')").run();
-  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 8'); db.close();
+  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 8'); db.close();
   assert.throws(() => openDatabase(dir));
   db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);

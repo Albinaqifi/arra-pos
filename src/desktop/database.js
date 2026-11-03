@@ -183,7 +183,15 @@ const migrations = [
     CREATE TRIGGER bills_no_delete BEFORE DELETE ON bills BEGIN SELECT RAISE(ABORT, 'Bills are immutable'); END;
     CREATE TRIGGER bill_lines_no_update BEFORE UPDATE ON bill_lines BEGIN SELECT RAISE(ABORT, 'Bill lines are immutable'); END;
     CREATE TRIGGER bill_lines_no_delete BEFORE DELETE ON bill_lines BEGIN SELECT RAISE(ABORT, 'Bill lines are immutable'); END;` },
-
+  { version: 21, sql: `CREATE TABLE payments (
+    id INTEGER PRIMARY KEY, bill_id INTEGER NOT NULL UNIQUE REFERENCES bills(id), actor_id INTEGER NOT NULL REFERENCES local_users(id),
+    paid_at INTEGER NOT NULL, amount INTEGER NOT NULL CHECK(amount >= 0), method TEXT NOT NULL CHECK(method IN ('cash','card')),
+    account TEXT NOT NULL CHECK(account IN ('A','B')), CHECK(method != 'card' OR account = 'A')
+  ) STRICT;
+  CREATE TRIGGER payments_full_amount BEFORE INSERT ON payments WHEN NOT EXISTS (SELECT 1 FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=NEW.bill_id AND b.total=NEW.amount AND o.status='open') BEGIN SELECT RAISE(ABORT, 'Invalid payment'); END;
+  CREATE TRIGGER payments_no_update BEFORE UPDATE ON payments BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;
+  CREATE TRIGGER payments_no_delete BEFORE DELETE ON payments BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;
+  CREATE TRIGGER payments_no_replace BEFORE INSERT ON payments WHEN EXISTS (SELECT 1 FROM payments WHERE id=NEW.id OR bill_id=NEW.bill_id) BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;` },
 ];
 
 function migrate(db) {
