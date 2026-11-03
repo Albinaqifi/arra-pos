@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog } = require('electron');
 const path = require('node:path');
 const { openDatabase } = require('./database');
 const { registerApplicationInfo } = require('./application-info');
+const { registerTables } = require('./tables');
 
 let database;
 let mainWindow;
@@ -34,9 +35,11 @@ app.whenReady().then(() => {
     app.quit();
     return;
   }
-  registerApplicationInfo(require('electron').ipcMain, (event) =>
+  const isAllowedSender = (event) =>
     Boolean(mainWindow && event.sender === mainWindow.webContents &&
-      event.senderFrame === mainWindow.webContents.mainFrame));
+      event.senderFrame === mainWindow.webContents.mainFrame);
+  registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
+  registerTables(require('electron').ipcMain, isAllowedSender, database);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

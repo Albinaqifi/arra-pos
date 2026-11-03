@@ -1,6 +1,6 @@
 # Arra POS waiter demo
 
-This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Screen changes reset when the page is refreshed or the app closes; the new local database is a foundation and is not yet connected to the demo screens.
+This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a printer or payment system. Desktop table identities persist locally; demo orders and other screen changes reset when the page is refreshed or the app closes.
 
 ## Desktop window
 
@@ -22,6 +22,14 @@ The installed Electron runtime, React and application files run locally; no inte
 On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
 
 The desktop screen requests a small application-info response through a restricted local bridge and displays its status. The renderer has no direct database or Node access; the browser demo displays its own status. This connection does not persist the demo orders yet.
+
+For the default Windows app-data directory, create the 16 sample tables with the following command in PowerShell, with the desktop app closed:
+
+```powershell
+node src/desktop/seed-tables.js "$env:APPDATA\arra-pos-waiter-demo"
+```
+
+For a different app-data location, pass that directory instead. This setup can be repeated without duplicating tables or overwriting existing table records. A fresh database shows an empty table list until this command is run. The browser demo continues to use its in-memory sample tables.
 
 Run the database and bridge tests with `npm test` on Node.js 22.13 or later.
 

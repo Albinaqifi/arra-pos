@@ -13,4 +13,17 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     }
     return { ok: false, error: 'Application information unavailable' };
   },
+  async getTables() {
+    try {
+      const response = await ipcRenderer.invoke('arra:tables', {});
+      if (response && response.ok === true && Array.isArray(response.data) &&
+          response.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 &&
+            typeof t.area === 'string' && t.area.trim().length > 0)) {
+        return { ok: true, data: response.data.map(t => ({ id: t.id, area: t.area })) };
+      }
+    } catch (_) {
+      // Do not expose internal IPC errors to the screen.
+    }
+    return { ok: false, error: 'Tables unavailable. Restart the app and try again.' };
+  },
 }));
