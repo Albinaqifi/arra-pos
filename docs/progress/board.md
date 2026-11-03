@@ -11,7 +11,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-005 | Done | PR #5 merged. |
 | S-006 | Done | PR #6 merged. |
 | S-007 | In progress | Review and focused tests passed; awaiting PR and merge. |
+| S-008 | In progress | Review and testing passed; awaiting PR and merge. |
 
 ## Current
 
-S-007 is verified locally and awaits PR and merge.
+S-008 is verified locally and awaits PR and merge.
