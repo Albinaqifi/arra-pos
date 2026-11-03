@@ -5,6 +5,7 @@ const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
 const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
+const { registerMenuConfig } = require('./menu-config');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
 const { registerSession } = require('./session');
@@ -49,6 +50,7 @@ app.whenReady().then(() => {
   registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
+  registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session);
   createWindow();

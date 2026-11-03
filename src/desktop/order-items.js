@@ -21,7 +21,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
         if (!db.prepare("SELECT id FROM orders WHERE id = ? AND status = 'open'").get(request.orderId)) throw Error('Invalid order');
         if (request.action === 'add') {
           const product = db.prepare(`SELECT p.id, p.name, p.price FROM menu_products p
-            JOIN menu_categories c ON c.id = p.category_id WHERE p.id = ? AND p.active = 1 AND c.active = 1`).get(request.productId);
+            JOIN menu_categories c ON c.id = p.category_id LEFT JOIN menu_categories parent ON parent.id = c.parent_id WHERE p.id = ? AND p.active = 1 AND c.active = 1 AND (c.parent_id IS NULL OR parent.active = 1)`).get(request.productId);
           if (!product) throw Error('Invalid product');
           db.prepare("INSERT INTO order_items (order_id, product_id, name, unit_price, quantity, status) VALUES (?, ?, ?, ?, 1, 'pending')")
             .run(request.orderId, product.id, product.name, product.price);

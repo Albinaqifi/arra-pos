@@ -106,6 +106,19 @@ const migrations = [
     ALTER TABLE new_user_permissions RENAME TO user_permissions;
     INSERT INTO user_permissions SELECT min(id), 'tables.change' FROM local_users HAVING count(*) > 0;`,
   },
+  {
+    version: 12,
+    sql: `ALTER TABLE menu_categories ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0);
+    UPDATE menu_categories SET sort_order = rowid;
+    ALTER TABLE menu_categories ADD COLUMN parent_id TEXT REFERENCES menu_categories(id);
+    ALTER TABLE menu_products ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0 CHECK(sort_order >= 0);
+    UPDATE menu_products SET sort_order = rowid;
+    CREATE TABLE new_user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL CHECK(permission IN ('tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change')), PRIMARY KEY(user_id, permission)) STRICT;
+    INSERT INTO new_user_permissions SELECT * FROM user_permissions;
+    DROP TABLE user_permissions;
+    ALTER TABLE new_user_permissions RENAME TO user_permissions;
+    INSERT INTO user_permissions SELECT min(id), 'menu.change' FROM local_users HAVING count(*) > 0;`,
+  },
 ];
 
 function migrate(db) {
