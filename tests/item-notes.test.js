@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { openDatabase } = require('../src/desktop/database');
+const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
 const { seedTables } = require('../src/desktop/tables');
 const { seedMenu } = require('../src/desktop/menu');
 const { registerOrders } = require('../src/desktop/orders');
@@ -15,8 +17,8 @@ test('offline table and items recover notes after restart; only pending notes ar
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
   const trusted = {}; let open, items;
   function register() {
-    registerOrders({ handle(_c, fn) { open = fn; } }, e => e === trusted, db);
-    registerOrderItems({ handle(_c, fn) { items = fn; } }, e => e === trusted, db);
+    registerOrders({ handle(_c, fn) { open = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
+    registerOrderItems({ handle(_c, fn) { items = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
   }
   register();
   const order = open(trusted, { tableId: 1 }).data;
@@ -42,7 +44,7 @@ test('version 6 upgrade preserves existing item and initializes its note', t => 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-note-upgrade-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open'); INSERT INTO order_items (order_id, product_id, name, unit_price, quantity, status) VALUES (1, 'qebapa', 'Qebapa', 220, 2, 'pending'); ALTER TABLE order_items DROP COLUMN note; DROP TABLE local_users; PRAGMA user_version = 6;");
+  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open'); INSERT INTO order_items (order_id, product_id, name, unit_price, quantity, status) VALUES (1, 'qebapa', 'Qebapa', 220, 2, 'pending'); ALTER TABLE order_items DROP COLUMN note; DROP TABLE user_permissions; DROP TABLE local_users; PRAGMA user_version = 6;");
   db.close(); db = openDatabase(dir);
   assert.deepEqual({ ...db.prepare('SELECT name, quantity, note FROM order_items').get() }, { name: 'Qebapa', quantity: 2, note: '' });
   db.close();

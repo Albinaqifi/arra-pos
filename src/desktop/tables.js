@@ -1,10 +1,12 @@
+const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:tables';
 
-function registerTables(ipcMain, isAllowedSender, db) {
+function registerTables(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' ||
         Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
         Reflect.ownKeys(request).length !== 0) return { ok: false, error: 'Invalid request' };
+    if (!hasPermissions(db, session, 'tables.view')) return { ok: false, error: 'Access denied' };
     try {
       return { ok: true, data: db.prepare("SELECT t.id, t.area, o.id AS orderId, o.opened_at AS openedAt FROM dining_tables t LEFT JOIN orders o ON o.table_id = t.id AND o.status = 'open' ORDER BY t.id").all() };
     } catch (_) {

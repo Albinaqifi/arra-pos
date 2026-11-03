@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { openDatabase } = require('../src/desktop/database');
+const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
 const { seedTables } = require('../src/desktop/tables');
 const { seedMenu } = require('../src/desktop/menu');
 const { registerOrderItems } = require('../src/desktop/order-items');
@@ -14,7 +16,7 @@ test('pending items persist with snapshots, safe totals, and validated mutations
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
   db.prepare("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open'), (2, 1, 'completed')").run();
   const trusted = {}; let call;
-  const register = () => registerOrderItems({ handle(_c, fn) { call = fn; } }, e => e === trusted, db);
+  const register = () => registerOrderItems({ handle(_c, fn) { call = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
   register();
   const req = (action, extra = {}) => ({ action, orderId: 1, ...extra });
   for (const value of [null, {}, req('list', { extra: 1 }), req('add', { productId: 'missing' }), req('list', { orderId: 2 }), req('list', { orderId: 999 }), req('increment', { itemId: 999 }), req('add', { productId: 7 })])
@@ -46,9 +48,9 @@ test('version 5 upgrade retains an open order and menu', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-item-upgrade-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open'); DROP TABLE order_items; DROP TABLE local_users; PRAGMA user_version = 5;");
+  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open'); DROP TABLE order_items; DROP TABLE user_permissions; DROP TABLE local_users; PRAGMA user_version = 5;");
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 9);
   assert.equal(db.prepare('SELECT opened_at FROM orders WHERE table_id = 1').get().opened_at, 123);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'qebapa'").get().price, 220);
   assert.equal(db.prepare('SELECT count(*) AS n FROM order_items').get().n, 0);

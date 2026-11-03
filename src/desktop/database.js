@@ -74,6 +74,19 @@ const migrations = [
       active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
     ) STRICT;`,
   },
+  {
+    version: 9,
+    sql: `CREATE TABLE user_permissions (
+      user_id INTEGER NOT NULL REFERENCES local_users(id),
+      permission TEXT NOT NULL CHECK (permission IN ('tables.view', 'menu.view', 'orders.view', 'orders.change')),
+      PRIMARY KEY (user_id, permission)
+    ) STRICT;
+    INSERT INTO user_permissions (user_id, permission)
+    SELECT id, permission FROM local_users CROSS JOIN (
+      SELECT 'tables.view' AS permission UNION ALL SELECT 'menu.view'
+      UNION ALL SELECT 'orders.view' UNION ALL SELECT 'orders.change'
+    ) WHERE id = (SELECT min(id) FROM local_users);`,
+  },
 ];
 
 function migrate(db) {

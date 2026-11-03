@@ -1,10 +1,12 @@
+const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:menu';
 
-function registerMenu(ipcMain, isAllowedSender, db) {
+function registerMenu(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' ||
         Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
         Reflect.ownKeys(request).length !== 0) return { ok: false, error: 'Invalid request' };
+    if (!hasPermissions(db, session, 'menu.view')) return { ok: false, error: 'Access denied' };
     try {
       const categories = db.prepare('SELECT id, name FROM menu_categories WHERE active = 1 ORDER BY rowid').all();
       const products = db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, p.price

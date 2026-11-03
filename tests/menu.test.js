@@ -3,7 +3,9 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { openDatabase } = require('../src/desktop/database');
+const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
 const { CHANNEL, registerMenu, seedMenu } = require('../src/desktop/menu');
 
 test('menu seed preserves changes and active menu survives reopen', t => {
@@ -11,7 +13,7 @@ test('menu seed preserves changes and active menu survives reopen', t => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir), handler;
   const trusted = {};
-  const register = () => registerMenu({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, e => e === trusted, db);
+  const register = () => registerMenu({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
   register();
   assert.deepEqual(handler(trusted, {}).data.categories, []);
   seedMenu(db);
@@ -31,5 +33,5 @@ test('menu seed preserves changes and active menu survives reopen', t => {
   assert.deepEqual(handler({}, {}), { ok: false, error: 'Invalid request' });
   for (const bad of [null, [], { extra: 1 }]) assert.deepEqual(handler(trusted, bad), { ok: false, error: 'Invalid request' });
   db.close();
-  assert.deepEqual(handler(trusted, {}), { ok: false, error: 'Menu unavailable' });
+  assert.deepEqual(handler(trusted, {}), { ok: false, error: 'Access denied' });
 });
