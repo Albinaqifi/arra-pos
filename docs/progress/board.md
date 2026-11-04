@@ -29,9 +29,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-023 | Done | PR #32 merged as `0b20266`. |
 | S-024 | Done | PR #33 merged as `a479ffd`. |
 | S-025 | Done | PR #34 merged as `2bde866`. |
-| S-026 | In progress | Post-close transfer rejection independently verified in stacked S-027; PR pending. |
-| S-027 | In progress | Review and testing passed; stacked PR awaits S-026 base PR. |
+| S-026 | In progress | Reviewed and tested; post-close rejection verified in stacked S-027; PR #37 open. |
+| S-027 | In progress | Review and testing passed; stacked PR pending. |
 
 ## Current
 
-S-027 is verified on the S-026 checkpoint; its PR awaits the S-026 base PR. Post-close transfer rejection passed independent testing.
+S-027 is verified on S-026; its stacked PR awaits review. Post-close transfer rejection passed independent testing.
