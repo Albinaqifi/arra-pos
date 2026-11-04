@@ -70,14 +70,14 @@ test('sample recovery snapshots populated old database, authenticates and preser
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-old-sample-')); let copied;
   t.after(()=>{ if(copied) fs.rmSync(copied,{recursive:true,force:true}); fs.rmSync(dir,{recursive:true,force:true}); });
   let db=openDatabase(dir); bootstrap(db,'sample-legacy','sample-legacy-password');
-  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TABLE financial_scopes; PRAGMA user_version=21;"); db.close();
+  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TRIGGER IF EXISTS payment_assign_business_day; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE financial_scopes; PRAGMA user_version=21;"); db.close();
   const source=path.join(dir,'arra.sqlite'), original=fs.readFileSync(source);
   await assert.rejects(recoverSample(source,'sample-legacy','wrong-sample-password'));
   assert.deepEqual(fs.readFileSync(source),original);
   copied=await recoverSample(source,'sample-legacy','sample-legacy-password');
   assert.notEqual(copied,dir); assert.deepEqual(fs.readFileSync(source),original);
   db=openDatabase(copied);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,22);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 23);
   assert.equal(db.prepare('SELECT count(*) n FROM orders').get().n,1);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope,'waiter');
   assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE action='sample_waiter_setup'").get().n,1);

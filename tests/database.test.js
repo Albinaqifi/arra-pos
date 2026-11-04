@@ -15,12 +15,12 @@ function temporaryDirectory(t) {
 test('fresh database migrates and preserves sample data after close and reopen', (t) => {
   const directory = temporaryDirectory(t);
   let db = openDatabase(directory);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 22);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 23);
   db.prepare('INSERT INTO app_metadata (key, value) VALUES (?, ?)').run('sample', 'retained');
   db.close();
   db = openDatabase(directory);
   assert.equal(db.prepare('SELECT value FROM app_metadata WHERE key = ?').get('sample').value, 'retained');
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 22);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 23);
   db.close();
 });
 
@@ -31,7 +31,7 @@ test('upgrades version 1 without losing existing records', (t) => {
     INSERT INTO app_metadata VALUES ('sample', 'existing'); DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version = 1;`);
   db.close();
   db = openDatabase(directory);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 22);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 23);
   assert.deepEqual({ ...db.prepare('SELECT * FROM app_metadata').get() },
     { key: 'sample', value: 'existing', updated_at: null });
   db.close();
