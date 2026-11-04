@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async businessDays(request) {
+    try { return await ipcRenderer.invoke('arra:business-days', request); } catch (_) { return { ok: false }; }
+  },
   async financialVisibility(request) {
     try { return await ipcRenderer.invoke('arra:financial-visibility', request); } catch (_) { return { ok: false }; }
   },

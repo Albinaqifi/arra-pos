@@ -196,6 +196,26 @@ const migrations = [
     user_id INTEGER PRIMARY KEY REFERENCES local_users(id),
     scope TEXT NOT NULL CHECK(scope IN ('A','B','combined','waiter'))
   ) STRICT;` },
+  { version: 23, sql: `CREATE TABLE new_user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL CHECK(permission IN ('tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent', 'business_days.close')), PRIMARY KEY(user_id, permission)) STRICT;
+  INSERT INTO new_user_permissions SELECT * FROM user_permissions;
+  DROP TABLE user_permissions;
+  ALTER TABLE new_user_permissions RENAME TO user_permissions;
+  CREATE TABLE business_days (
+    id INTEGER PRIMARY KEY, opened_at INTEGER NOT NULL, closed_at INTEGER, closed_by INTEGER REFERENCES local_users(id),
+    issues TEXT, CHECK ((closed_at IS NULL AND closed_by IS NULL AND issues IS NULL) OR (closed_at IS NOT NULL AND closed_by IS NOT NULL AND issues IS NOT NULL))
+  ) STRICT;
+  CREATE UNIQUE INDEX one_open_business_day ON business_days((1)) WHERE closed_at IS NULL;
+  INSERT INTO business_days(opened_at) SELECT COALESCE(min(paid_at), unixepoch()*1000) FROM payments;
+  CREATE TABLE payment_business_days (payment_id INTEGER PRIMARY KEY REFERENCES payments(id), business_day_id INTEGER NOT NULL REFERENCES business_days(id)) STRICT;
+  INSERT INTO payment_business_days SELECT id, (SELECT id FROM business_days WHERE closed_at IS NULL) FROM payments;
+  CREATE TRIGGER payment_assign_business_day AFTER INSERT ON payments BEGIN
+    INSERT INTO payment_business_days VALUES (NEW.id, (SELECT id FROM business_days WHERE closed_at IS NULL));
+  END;
+  CREATE TRIGGER payment_business_days_no_update BEFORE UPDATE ON payment_business_days BEGIN SELECT RAISE(ABORT, 'Payment day is immutable'); END;
+  CREATE TRIGGER payment_business_days_no_delete BEFORE DELETE ON payment_business_days BEGIN SELECT RAISE(ABORT, 'Payment day is immutable'); END;
+  CREATE TRIGGER closed_business_days_no_update BEFORE UPDATE ON business_days WHEN OLD.closed_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'Closed day is immutable'); END;
+  CREATE TRIGGER business_days_no_delete BEFORE DELETE ON business_days BEGIN SELECT RAISE(ABORT, 'Business days are retained'); END;` },
+
 ];
 
 function migrate(db) {
