@@ -28,9 +28,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-022 | Done | PR #31 merged as `24b3833`. |
 | S-023 | Done | PR #32 merged as `0b20266`. |
 | S-024 | Done | PR #33 merged as `a479ffd`. |
-
-| S-025 | In progress | Prototype incomplete; full suite failing and scope provisioning unresolved. |
+| S-025 | Done | PR #34 merged as `2bde866`. |
 
 ## Current
 
-S-025 — Protect financial visibility.
+No story in progress.
