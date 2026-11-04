@@ -46,4 +46,3 @@ test('report fails closed if its database becomes unavailable', () => {
     {currentUserId: () => 1, authenticatedUserId: () => 1});
   assert.deepEqual(handler({}, {from: 0, to: 1, account: null}), {ok:false});
 });
-
