@@ -25,7 +25,7 @@ function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
             recordAudit(db, session.currentUserId(), 'print_retry', 'print_attempt', attemptId, job.orderId, { jobId: job.id, result, adapter: 'simulated' });
           }
         }
-        const jobs = db.prepare(`SELECT j.id, r.order_id AS orderId, o.table_id AS tableId, r.number AS round, t.destination, a.result, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN orders o ON o.id=r.order_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) ORDER BY j.id DESC`).all();
+        const jobs = db.prepare(`SELECT j.id, r.order_id AS orderId, r.table_id AS tableId, r.number AS round, t.destination, a.result, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) ORDER BY j.id DESC`).all();
         const printers = db.prepare('SELECT destination, result FROM simulated_printers ORDER BY destination').all();
         db.exec('COMMIT');
         return { ok: true, data: { jobs, printers } };

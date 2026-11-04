@@ -21,7 +21,7 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
     DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 12;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 17);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 18);
   assert.deepEqual({ ...db.prepare('SELECT name,unit_price,quantity FROM order_items').get() }, {name:'Historical',unit_price:200,quantity:2});
   db.exec(`INSERT INTO modifier_groups VALUES ('required','qebapa','Size',1,1),('optional','qebapa','Extra',0,1),('foreign','cola','Ice',0,1),('inactive','qebapa','Old',0,0);
     INSERT INTO modifier_options VALUES ('size','required','Large',30,1),('discount','optional','Discount',-500,1),('foreign-option','foreign','Ice',0,1),('old-option','inactive','Old',0,1),('disabled','required','Disabled',0,0);`);

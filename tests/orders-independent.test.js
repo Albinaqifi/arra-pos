@@ -17,7 +17,7 @@ test('version 4 upgrade preserves existing tables and menu data', t => {
   db.exec("DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO menu_categories (id,name,active) VALUES ('c', 'Sample', 1); INSERT INTO menu_products (id,category_id,name,price,active) VALUES ('p', 'c', 'Sample product', 123, 1); DROP TABLE order_items; DROP TABLE orders; DROP TABLE user_permissions; DROP TABLE local_users; ALTER TABLE dining_tables DROP COLUMN active; ALTER TABLE dining_tables DROP COLUMN capacity; ALTER TABLE dining_tables DROP COLUMN area_id; DROP TABLE dining_areas; ALTER TABLE menu_categories DROP COLUMN parent_id; ALTER TABLE menu_categories DROP COLUMN sort_order; ALTER TABLE menu_products DROP COLUMN sort_order; DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 4;");
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 17);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 18);
   assert.equal(db.prepare('SELECT count(*) AS n FROM dining_tables').get().n, 16);
   assert.equal(db.prepare("SELECT price FROM menu_products WHERE id = 'p'").get().price, 123);
   let open;

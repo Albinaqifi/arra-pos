@@ -58,7 +58,7 @@ test('failed version 15 migration preserves version 14 data and can be retried',
   db.exec('DROP TRIGGER application_audit_no_update');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 17);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 18);
   assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value, 'retained');
   db.close();
 });

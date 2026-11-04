@@ -411,7 +411,7 @@ class WaiterDemo extends React.Component {
     else this.setState({ pin });
   }
   async switchWaiter() {
-    if (this._opening || this._itemBusy || this._selecting) return;
+    if (this._opening || this._itemBusy || this._selecting || this.state.modal?.unresolved) return;
     if (window.arra) {
       try { if (!(await window.arra.clearWaiter()).ok) throw new Error(); }
       catch (_) { this.mut(n => this.toast(n, 'Could not switch waiter.', 'err')); return; }
@@ -421,6 +421,7 @@ class WaiterDemo extends React.Component {
     if (window.arra) await this.loadWaiters();
   }
   goTables() {
+    if (this._itemBusy || this.state.modal?.unresolved) return;
     this.mut(n => {
       if (n.screen === 'order') {
         const p = n.items.filter(i => i.tableId === n.tableId && i.status === 'pending').reduce((a, i) => a + i.qty, 0);
@@ -644,8 +645,56 @@ class WaiterDemo extends React.Component {
   }
 
   // ---------- move ----------
-  confirmMoveTable() {
-    if (window.arra) { this.mut(n => this.toast(n, 'Moving orders is not available yet.', 'warn')); return; }
+  async confirmMoveTable() {
+    if (window.arra) {
+      if (this._itemBusy || this.state.modal?.saving) return;
+      const from = this.state.tableId, to = this.state.modal?.dest, orderId = this.state.orders[from]?.id;
+      if (!orderId || !to || to === from || this.state.orders[to]) return;
+      this._moveRequests = this._moveRequests || {};
+      const key = [orderId, from, to].join(':');
+      const token = this._moveRequests[key] || (this._moveRequests[key] = crypto.randomUUID());
+      this._itemBusy = true;
+      this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
+      try {
+        let result;
+        try { result = await window.arra.moveOrder(orderId, from, to, token); } catch (_) { result = { ok: false }; }
+        if (!this._mounted) return;
+        if (!result.ok) {
+          let tables;
+          try { tables = await window.arra.getTables(); } catch (_) { tables = { ok: false }; }
+          if (!this._mounted) return;
+          if (!tables?.ok || !Array.isArray(tables.data)) {
+            this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = 'Move status is unknown. Retry to check it before leaving.'; });
+            return;
+          }
+          const current = tables.data.find(t => t.orderId === orderId);
+          if (current?.id !== to) {
+            this.mut(n => {
+              const previous = n.orders;
+              n.orders = {};
+              for (const table of tables.data) if (table.orderId !== null)
+                n.orders[table.id] = Object.values(previous).find(o => o.id === table.orderId) || { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [] };
+              if (current?.id === from) {
+                n.modal.saving = false; n.modal.unresolved = false; n.modal.dest = null;
+                n.modal.error = 'Order was not moved. Check the destination and try again.';
+              } else {
+                n.screen = 'tables'; n.tableId = null; n.modal = null; n.items = [];
+                this.toast(n, 'Order location changed. Select a table to continue.', 'warn');
+              }
+            });
+            return;
+          }
+        }
+        delete this._moveRequests[key];
+        this.mut(n => {
+          n.orders[to] = n.orders[from]; delete n.orders[from];
+          n.items.forEach(i => { if (i.tableId === from) i.tableId = to; });
+          n.tableId = to; n.modal = null;
+          this.toast(n, 'Everything moved to Table ' + to + '. Table ' + from + ' is free now.');
+        });
+      } finally { this._itemBusy = false; }
+      return;
+    }
     this.mut(n => {
       const from = n.tableId, to = n.modal.dest;
       if (to == null || to === from || n.orders[to]) return;
@@ -935,7 +984,7 @@ class WaiterDemo extends React.Component {
     v.hasModal = !!md;
     v.isMods = ty === 'mods'; v.isNote = ty === 'note'; v.isCancel = ty === 'cancel';
     v.isMoveTable = ty === 'moveTable'; v.isMoveItems = ty === 'moveItems'; v.isBill = ty === 'bill';
-    v.closeModal = () => { if (!this.state.modal?.saving) this.setState({ modal: null }); };
+    v.closeModal = () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.setState({ modal: null }); };
     v.modalTitle = ''; v.modalSub = '';
     v.modalCardStyle = 'background:#FFFFFF; border-radius:26px; width:100%; max-width:' + (ty === 'bill' || ty === 'moveItems' ? '880px' : '760px') + '; max-height:calc(100vh - 40px); overflow:auto; padding:26px; box-sizing:border-box; display:flex; flex-direction:column; gap:20px; box-shadow:0 30px 80px rgba(15,23,42,0.35)';
     v.modGroups = []; v.noteChips = []; v.cxReasons = []; v.mtTables = []; v.miItems = []; v.miTables = []; v.billLines = [];
@@ -1010,17 +1059,17 @@ class WaiterDemo extends React.Component {
 
     if (ty === 'moveTable') {
       v.modalTitle = 'Move the whole table';
-      v.modalSub = 'Everything on Table ' + tid + ' moves to the table you pick. Table ' + tid + ' becomes free. Only free tables can be picked, so no order gets overwritten.';
+      v.modalSub = md.error || ('Everything on Table ' + tid + ' moves to the table you pick. Table ' + tid + ' becomes free. Only free tables can be picked, so no order gets overwritten.');
       v.mtTables = s.sections.flatMap(sec => sec.ids).filter(id => id !== tid).map(id => {
         const tk = !!s.orders[id]; const on = md.dest === id;
         return {
           num: String(id), sub: tk ? 'Taken' : 'Free', disabled: tk,
           aria: 'Table ' + id + (tk ? ', taken, not available' : ', free'),
           style: 'min-height:84px; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; ' + (tk ? 'background:#F1F5F9; color:#64748B; border:2px dashed #CBD5E1' : (on ? 'background:#7C3AED; color:#FFFFFF; border:2px solid #7C3AED' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1')),
-          pick: () => this.mut(n => { n.modal.dest = id; })
+          pick: () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.mut(n => { n.modal.dest = id; n.modal.error = ''; }); }
         };
       });
-      v.mtDisabled = md.dest == null;
+      v.mtDisabled = md.dest == null || !!md.saving;
       v.mtLabel = md.dest != null ? 'Move everything to Table ' + md.dest : 'Pick a free table';
       v.mtStyle = bigBtn(md.dest != null, '#7C3AED', '#FFFFFF');
       v.mtConfirm = () => this.confirmMoveTable();
@@ -1047,7 +1096,7 @@ class WaiterDemo extends React.Component {
           num: String(id), sub: tk ? 'Taken · adds on' : 'Free',
           aria: 'Table ' + id + (tk ? ', taken, items will be added to its order' : ', free'),
           style: 'min-height:76px; border-radius:14px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; ' + (on ? 'background:#7C3AED; color:#FFFFFF; border:2px solid #7C3AED' : (tk ? 'background:#FFEDD5; color:#7C2D12; border:2px solid #FDBA74' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1')),
-          pick: () => this.mut(n => { n.modal.dest = id; })
+          pick: () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.mut(n => { n.modal.dest = id; n.modal.error = ''; }); }
         };
       });
       const ok = k > 0 && md.dest != null;
