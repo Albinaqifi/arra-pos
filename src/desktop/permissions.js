@@ -4,6 +4,7 @@ function hasPermissions(db, session, ...permissions) {
     const id = session?.currentUserId();
     if (id == null) return false;
     const authenticated = session.authenticatedUserId();
+    if (db.prepare('SELECT 1 FROM transfer_managers WHERE user_id IN (?, ?)').get(id, authenticated)) return false;
     const lookup = db.prepare('SELECT scope FROM financial_scopes WHERE user_id = ?');
     const authScope = lookup.get(authenticated)?.scope;
     const selectedScope = lookup.get(id)?.scope;

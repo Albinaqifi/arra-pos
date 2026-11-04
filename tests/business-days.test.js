@@ -47,7 +47,7 @@ test('migration assigns existing payments and new payments to the current manual
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,2,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'a'),(2,2,1,2,20,'b');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,1,10,'cash','B');
-    DROP TRIGGER payment_assign_business_day; DROP TABLE payment_business_days; DROP TABLE business_days; PRAGMA user_version=22;`);
+    DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days; PRAGMA user_version=22;`);
   db.close(); db=openDatabase(dir);
   const old=db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=1').get().business_day_id;
   db.exec("UPDATE business_days SET closed_at=3,closed_by=1,issues='{}'; INSERT INTO business_days(opened_at) VALUES(3); INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(2,2,1,4,20,'card','A');");
@@ -88,7 +88,7 @@ test('controlled sample upgrade preserves v22 history and grants only the authen
   db.exec(`INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'saved');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
-    DROP TRIGGER payment_assign_business_day; DROP TABLE payment_business_days; DROP TABLE business_days;
+    DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
     DELETE FROM user_permissions WHERE permission='business_days.close'; PRAGMA user_version=22;`);
   db.close(); db=null;
   const source=path.join(dir,'arra.sqlite');
@@ -117,9 +117,9 @@ test('sample close-grant upgrade accepts a normally migrated v23 copy and reject
   db.exec(`INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'saved');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
-    DROP TRIGGER payment_assign_business_day; DROP TABLE payment_business_days; DROP TABLE business_days;
+    DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
     DELETE FROM user_permissions WHERE permission='business_days.close'; PRAGMA user_version=22;`);
-  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,23);
+  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,24);
   const assigned=db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=1').get().business_day_id;
   db.close(); db=null; fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');
   upgraded=await upgradeSampleBusinessDays(path.join(dir,'arra.sqlite'),'sample-combined',passwords[3]);

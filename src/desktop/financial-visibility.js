@@ -16,18 +16,18 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
       if (!['A', 'B', 'combined'].includes(scope)) return { ok: false };
       if (req.account && scope !== 'combined' && req.account !== scope) return { ok: false };
       const account = req.account || (scope === 'combined' ? null : scope);
-      const where = account === null ? "p.account IN ('A','B')" : 'p.account = ?';
+      const where = account === null ? "COALESCE(c.account, p.account) IN ('A','B')" : 'COALESCE(c.account, p.account) = ?';
       const args = account === null ? [] : [account];
       if (req.action === 'search') {
-        const records = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, p.account FROM payments p WHERE ${where} ORDER BY p.id DESC`).all(...args);
+        const records = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, COALESCE(c.account, p.account) AS account FROM payments p LEFT JOIN (SELECT payment_id, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE ${where} ORDER BY p.id DESC`).all(...args);
         return { ok: true, data: records };
       }
       if (req.action === 'aggregate') {
-        const totals = db.prepare(`SELECT count(*) AS count, COALESCE(sum(p.amount),0) AS total FROM payments p WHERE ${where}`).get(...args);
+        const totals = db.prepare(`SELECT count(*) AS count, COALESCE(sum(p.amount),0) AS total FROM payments p LEFT JOIN (SELECT payment_id, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE ${where}`).get(...args);
         if (!Number.isSafeInteger(totals.count) || !Number.isSafeInteger(totals.total)) return { ok: false };
         return { ok: true, data: totals };
       }
-      const payment = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, p.account FROM payments p WHERE ${where} AND p.id=?`).get(...args, req.paymentId);
+      const payment = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, COALESCE(c.account, p.account) AS account FROM payments p LEFT JOIN (SELECT payment_id, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE ${where} AND p.id=?`).get(...args, req.paymentId);
       if (!payment) return { ok: false };
       const lines = db.prepare('SELECT name, unit_price AS unitPrice, quantity, modifiers FROM bill_lines WHERE bill_id=? ORDER BY id').all(payment.billId).map(line => ({ ...line, modifiers: JSON.parse(line.modifiers) }));
       return { ok: true, data: { payment, lines } };

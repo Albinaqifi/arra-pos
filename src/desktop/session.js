@@ -46,7 +46,7 @@ function createSession(db) {
     listWaiters() {
       if (!restaurantActive()) return { ok: false, error: 'Access denied' };
       try {
-        return { ok: true, data: db.prepare('SELECT id, username AS name, pin_hash IS NOT NULL AS hasPin FROM local_users WHERE active = 1 ORDER BY username').all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1 })) };
+        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Transfer Manager' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
       } catch (_) { return { ok: false, error: 'Waiters unavailable' }; }
     },
     selectWaiter(request) {
@@ -58,6 +58,9 @@ function createSession(db) {
       try {
         const row = db.prepare('SELECT active, pin_salt, pin_hash FROM local_users WHERE id = ?').get(request.id);
         if (!row || row.active !== 1) return fail();
+        const selectedTransfer = Boolean(db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(request.id));
+        if (db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(restaurantId)) return fail();
+        if (selectedTransfer && (!row.pin_hash || !row.pin_salt)) return fail();
         if (row.pin_hash !== null || row.pin_salt !== null) {
           if (!row.pin_hash || !row.pin_salt || !/^\d{4}$/.test(request.pin)) return fail();
           const candidate = hashPassword(request.pin, row.pin_salt), expected = Buffer.from(row.pin_hash);

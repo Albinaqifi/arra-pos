@@ -1,3 +1,22 @@
+class TransferCorrection extends React.Component {
+  constructor(props) { super(props); this.state = { records: null, table: null, reason: '', error: '', busy: false }; }
+  componentDidMount() { this.load(); }
+  async load() { const r = await window.arra.transferCorrection({action:'list'}); this.setState(r.ok ? {records:r.data.payments, tables:r.data.tables, error:''} : {records:null,error:'Eligible payments unavailable.'}); }
+  async correct(id) {
+    if (this.state.busy || !window.confirm('Correct this cash payment from Account B to Account A?')) return;
+    this.setState({busy:true});
+    const r = await window.arra.transferCorrection({action:'correct',paymentId:id,reason:this.state.reason});
+    if (r.ok) { this.setState({reason:'',error:''}); await this.load(); }
+    else { await this.load(); this.setState({error:'Correction was not confirmed. Refresh the list before trying again.'}); }
+    this.setState({busy:false});
+  }
+  render() {
+    const h=React.createElement, rows=this.state.records, table=this.state.table;
+    return h('main',{style:{padding:24,overflow:'auto',height:'100vh'}},h('button',{onClick:this.props.onBack},'Switch user'),h('h1',null,'Transfer Manager'),h('p',null,'Eligible cash payments in the open business period.'),this.state.error && h('p',{role:'alert'},this.state.error),
+      rows && table === null ? h(React.Fragment,null,h('h2',null,'Tables'),this.state.tables.map(t=>h('button',{key:t.id,onClick:()=>this.setState({table:t.id})},'Table '+t.id+' · '+t.area+(t.active ? '' : ' · inactive'))),!this.state.tables.length && h('p',null,'No tables.')) : null,
+      rows && table !== null ? h(React.Fragment,null,h('button',{onClick:()=>this.setState({table:null})},'All tables'),h('h2',null,'Table '+table),h('label',null,'Reason (optional)',h('input',{value:this.state.reason,maxLength:500,onChange:e=>this.setState({reason:e.target.value})})),!rows.some(x=>x.tableId===table) && h('p',null,'No eligible payments for this table.'),rows.filter(x=>x.tableId===table).map(p=>h('div',{key:p.id},'Payment #'+p.id+' · '+p.amount+' · '+new Date(p.paidAt).toLocaleString()+' ',h('button',{disabled:this.state.busy,onClick:()=>this.correct(p.id)},'Correct B to A')))) : null,h('button',{onClick:()=>this.load()},'Refresh'));
+  }
+}
 class BusinessDays extends React.Component {
   constructor(props) { super(props); this.state = { data: null, error: '', busy: false }; }
   componentDidMount() { this.load(); }
@@ -510,7 +529,7 @@ class WaiterDemo extends React.Component {
     try {
       const result = await window.arra.getWaiters();
       if (!result.ok) throw new Error();
-      this._menu = { ...this._menu, waiters: result.data.map(w => ({ id: w.id, name: w.name, pin: w.hasPin, color: '#1D4ED8' })) };
+      this._menu = { ...this._menu, waiters: result.data.map(w => ({ id: w.id, name: w.name, pin: w.hasPin, isTransfer: w.isTransfer, color: '#1D4ED8' })) };
       this.setState({ waiterMessage: result.data.length ? '' : 'No active waiters available.' });
     } catch (_) { this._menu = { ...this._menu, waiters: [] }; this.setState({ waiterMessage: 'Waiters unavailable. Sign out and try again.' }); }
   }
@@ -520,13 +539,13 @@ class WaiterDemo extends React.Component {
     try {
       if (window.arra && !(await window.arra.selectWaiter(w.id, pin)).ok) throw new Error();
       if (window.arra) this.clearDesktopData();
-      this.setState({ waiter: w, pin: '', screen: 'tables' });
-      if (window.arra) this.loadDesktopData();
+      this.setState({ waiter: w, pin: '', screen: w.isTransfer ? 'transferCorrection' : 'tables' });
+      if (window.arra && !w.isTransfer) this.loadDesktopData();
     } catch (_) { this.mut(n => { n.pin = ''; this.toast(n, 'Waiter selection failed.', 'err'); }); }
     finally { this._selecting = false; }
   }
   pickWaiter(w) {
-    const ww = { id: w.id, name: w.name, color: w.color };
+    const ww = { id: w.id, name: w.name, color: w.color, isTransfer: w.isTransfer };
     if (w.pin) this.setState({ pinFor: ww, pin: '', screen: 'pin' });
     else this.chooseWaiter(ww, '');
   }
@@ -1336,6 +1355,7 @@ class WaiterDemo extends React.Component {
     return v;
   }
   render() {
+    if (this.state.screen === 'transferCorrection') return React.createElement(TransferCorrection, { onBack: () => this.switchWaiter() });
     if (this.state.screen === 'financialVisibility') return React.createElement(FinancialVisibility, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });
     if (this.state.screen === 'orderHistory') return React.createElement(OrderHistory, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });
     if (this.state.screen === 'employeeConfig') return React.createElement(EmployeeConfig, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });

@@ -5,7 +5,7 @@ if (process.argv.length !== 3 || !process.stdin.isTTY || !process.stdout.isTTY) 
   console.error('Run interactively: node src/desktop/upgrade-sample-business-days.js <absolute-path-to-sample-arra.sqlite>');
   process.exit(1);
 }
-console.log('Version 22 or 23 sample data only. This copies the database, grants business-day closing only to the authenticated combined sample account, and leaves the original unchanged.');
+console.log('Version 22, 23 or 24 sample data only. This copies the database, grants business-day closing only to the authenticated combined sample account, and leaves the original unchanged.');
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 rl.question('Combined sample username: ', username => {
   rl.close(); process.stdout.write('Combined sample password: ');
