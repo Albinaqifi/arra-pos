@@ -54,9 +54,12 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   },
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
-        !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send'].includes(action)) return { ok: false };
+        !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send', 'correct'].includes(action)) return { ok: false };
     const request = { action, orderId };
-    if (action === 'send') {
+    if (action === 'correct') {
+      if (!value || !Number.isSafeInteger(value.itemId) || !Number.isSafeInteger(value.quantity) || typeof value.reason !== 'string' || typeof value.requestId !== 'string') return { ok: false };
+      Object.assign(request, { itemId: value.itemId, quantity: value.quantity, reason: value.reason, requestId: value.requestId });
+    } else if (action === 'send') {
       if (typeof value !== 'string') return { ok: false };
       request.requestId = value;
     } else if (action === 'add') {
@@ -79,9 +82,10 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
             typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
             Number.isSafeInteger(i.quantity) && i.quantity > 0 && typeof i.note === 'string')) {
         return { ok: true, data: { total: data.total, items: data.items.map(i => ({
-          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, status: i.status, round: i.round, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, modifiers: i.modifiers || []
+          id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, status: i.status, round: i.round, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, modifiers: i.modifiers || [], correctedQuantity: i.correctedQuantity || 0, corrections: i.corrections || []
         })) } };
       }
+      if (action === 'correct' && response?.ok === false) return { ok: false, rejected: true };
     } catch (_) {}
     return { ok: false, error: 'Could not update order items' };
   },

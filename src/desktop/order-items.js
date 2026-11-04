@@ -5,23 +5,37 @@ const validId = n => Number.isSafeInteger(n) && n > 0;
 
 function registerOrderItems(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, request) => {
-    const keys = { list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
+    const keys = { correct: ['action', 'orderId', 'itemId', 'quantity', 'reason', 'requestId'], list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
       note: ['action', 'orderId', 'itemId', 'note'], increment: ['action', 'orderId', 'itemId'], decrement: ['action', 'orderId', 'itemId'], remove: ['action', 'orderId', 'itemId'] };
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) ||
         Object.getPrototypeOf(request) !== Object.prototype || !Object.hasOwn(keys, request.action) ||
         Reflect.ownKeys(request).length !== keys[request.action].length ||
         !keys[request.action].every(k => Object.hasOwn(request, k)) || !validId(request.orderId) ||
-        (request.action === 'send' && (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId))) ||
+        (['send', 'correct'].includes(request.action) && (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId))) ||
         (request.action === 'add' && (typeof request.productId !== 'string' || !request.productId.trim() || (request.optionIds !== undefined && (!Array.isArray(request.optionIds) || request.optionIds.some(x => typeof x !== 'string' || !x.trim()) || new Set(request.optionIds).size !== request.optionIds.length)))) ||
         (['increment', 'decrement', 'remove', 'note'].includes(request.action) && !validId(request.itemId)) ||
-        (request.action === 'note' && typeof request.note !== 'string'))
+        (request.action === 'note' && typeof request.note !== 'string') ||
+        (request.action === 'correct' && (!validId(request.itemId) || !validId(request.quantity) || typeof request.reason !== 'string' || !request.reason.trim() || request.reason.length > 500)))
       return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, error: 'Access denied' };
+    if (request.action === 'correct' && !hasPermissions(db, session, 'orders.correct_sent')) return { ok: false, error: 'Access denied' };
     try {
       db.exec('BEGIN IMMEDIATE');
       try {
         if (!db.prepare("SELECT id FROM orders WHERE id = ? AND status = 'open'").get(request.orderId)) throw Error('Invalid order');
-        if (request.action === 'send') {
+        if (request.action === 'correct') {
+          const prior = db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId);
+          if (prior) {
+            if (prior.order_id !== request.orderId || prior.item_id !== request.itemId || prior.quantity !== request.quantity || prior.reason !== request.reason.trim() || prior.actor_id !== session.currentUserId()) throw Error('Invalid retry');
+          } else {
+            const item = db.prepare("SELECT quantity FROM order_items WHERE id = ? AND order_id = ? AND status = 'sent'").get(request.itemId, request.orderId);
+            const corrected = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS quantity FROM sent_item_corrections WHERE item_id = ?').get(request.itemId).quantity;
+            if (!item || request.quantity > item.quantity - corrected) throw Error('Invalid correction');
+            const now = Date.now(), reason = request.reason.trim();
+            const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
+            recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason });
+          }
+        } else if (request.action === 'send') {
           const prior = db.prepare('SELECT order_id FROM preparation_rounds WHERE request_id = ?').get(request.requestId);
           if (prior && prior.order_id !== request.orderId) throw Error('Invalid request');
           if (!prior) {
@@ -82,10 +96,14 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
           }
         }
         const items = db.prepare('SELECT i.id, i.product_id AS productId, i.name, i.unit_price AS unitPrice, i.quantity, i.note, i.status, r.number AS round, r.sent_at AS sentAt, u.username AS sentBy, t.destination AS route FROM order_items i LEFT JOIN preparation_ticket_items ti ON ti.item_id = i.id LEFT JOIN preparation_tickets t ON t.id = ti.ticket_id LEFT JOIN preparation_rounds r ON r.id = t.round_id LEFT JOIN local_users u ON u.id = r.actor_id WHERE i.order_id = ? ORDER BY i.id').all(request.orderId);
-        for (const item of items) item.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName, adjustment FROM order_item_modifiers WHERE item_id = ? ORDER BY rowid').all(item.id);
+        for (const item of items) {
+          item.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName, adjustment FROM order_item_modifiers WHERE item_id = ? ORDER BY rowid').all(item.id);
+          item.corrections = db.prepare('SELECT c.quantity, c.reason, c.occurred_at AS occurredAt, u.username AS actor FROM sent_item_corrections c JOIN local_users u ON u.id=c.actor_id WHERE c.item_id=? ORDER BY c.id').all(item.id);
+          item.correctedQuantity = item.corrections.reduce((n, c) => n + c.quantity, 0);
+        }
         let total = 0;
         for (const item of items) {
-          const line = item.unitPrice * item.quantity;
+          const line = item.unitPrice * (item.quantity - item.correctedQuantity);
           if (!Number.isSafeInteger(line) || !Number.isSafeInteger(total + line)) throw Error('Total too large');
           total += line;
         }

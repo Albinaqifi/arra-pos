@@ -12,6 +12,16 @@ test('a later simulated success retains the earlier uncertain-output warning', (
   assert.match(JSON.stringify(panel.render()), /earlier attempt was uncertain; duplicate output is possible/);
 });
 
+test('correction summary distinguishes the total from the latest event', () => {
+  class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
+  const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  const app = new context.Demo(); app.state.tableId = 1; app.state.screen = 'order';
+  app.replaceDesktopItems(app.state, 1, [{ id: 1, productId: 'p', name: 'Dish', unitPrice: 10, quantity: 4, note: '', status: 'sent', round: 1, sentAt: 1, sentBy: 'Waiter', route: 'kitchen', correctedQuantity: 3, corrections: [{ quantity: 2, reason: 'First', actor: 'One', occurredAt: 2 }, { quantity: 1, reason: 'Second', actor: 'Two', occurredAt: 3 }] }]);
+  const text = app.renderVals().rounds[0].items[0].cxText;
+  assert.match(text, /3 cancelled total · latest: 1 · Second · Two/);
+});
+
 test('desktop screen loads and saves items, shows failures, and does not send demo orders', async () => {
   let rows = [], fail = false, reject = false, release;
   const api = {

@@ -30,8 +30,8 @@ function registerMoveItems(ipcMain, isAllowedSender, db, session) {
         }
         // Reject a merge that would make the destination total unrepresentable.
         let total = 0;
-        const amount = db.prepare('SELECT unit_price, quantity FROM order_items WHERE id=?');
-        const destinationItems = dest ? db.prepare('SELECT unit_price, quantity FROM order_items WHERE order_id=?').all(dest.id) : [];
+        const amount = db.prepare('SELECT unit_price, quantity - COALESCE((SELECT SUM(quantity) FROM sent_item_corrections WHERE item_id=order_items.id),0) AS quantity FROM order_items WHERE id=?');
+        const destinationItems = dest ? db.prepare('SELECT unit_price, quantity - COALESCE((SELECT SUM(quantity) FROM sent_item_corrections WHERE item_id=order_items.id),0) AS quantity FROM order_items WHERE order_id=?').all(dest.id) : [];
         for (const item of [...destinationItems, ...ids.map(id => amount.get(id))]) {
           const line = item.unit_price * item.quantity;
           if (!Number.isSafeInteger(line) || !Number.isSafeInteger(total + line)) {

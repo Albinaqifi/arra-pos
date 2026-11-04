@@ -48,7 +48,7 @@ test('failed version 15 migration preserves version 14 data and can be retried',
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-audit-migration-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
-  db.exec("INSERT INTO app_metadata(key,value) VALUES('sample','retained'); DROP TABLE application_audit; DROP TRIGGER employee_permission_audit_no_replace; DROP TRIGGER employee_account_audit_no_replace; DROP TRIGGER employee_credential_audit_no_replace; CREATE TRIGGER application_audit_no_update AFTER INSERT ON app_metadata BEGIN SELECT 1; END; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; PRAGMA user_version = 14;");
+  db.exec("INSERT INTO app_metadata(key,value) VALUES('sample','retained'); DROP TABLE application_audit; DROP TRIGGER employee_permission_audit_no_replace; DROP TRIGGER employee_account_audit_no_replace; DROP TRIGGER employee_credential_audit_no_replace; CREATE TRIGGER application_audit_no_update AFTER INSERT ON app_metadata BEGIN SELECT 1; END; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 14;");
   db.close();
   assert.throws(() => openDatabase(dir));
   db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
@@ -58,7 +58,7 @@ test('failed version 15 migration preserves version 14 data and can be retried',
   db.exec('DROP TRIGGER application_audit_no_update');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 18);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 19);
   assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value, 'retained');
   db.close();
 });

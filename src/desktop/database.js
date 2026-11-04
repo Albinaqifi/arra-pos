@@ -162,6 +162,16 @@ const migrations = [
     CREATE TRIGGER print_attempts_no_delete BEFORE DELETE ON print_attempts BEGIN SELECT RAISE(ABORT, 'Attempts are append-only'); END;` },
   { version: 18, sql: `ALTER TABLE preparation_rounds ADD COLUMN table_id INTEGER REFERENCES dining_tables(id);
     UPDATE preparation_rounds SET table_id = (SELECT table_id FROM orders WHERE id = preparation_rounds.order_id);` },
+  { version: 19, sql: `CREATE TABLE new_user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL CHECK(permission IN ('tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent')), PRIMARY KEY(user_id, permission)) STRICT;
+    INSERT INTO new_user_permissions SELECT * FROM user_permissions;
+    DROP TABLE user_permissions;
+    ALTER TABLE new_user_permissions RENAME TO user_permissions;
+    INSERT INTO user_permissions SELECT u.id, 'orders.correct_sent' FROM local_users u
+      WHERE u.active = 1 AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.permission = 'employees.change');
+    CREATE TABLE sent_item_corrections (id INTEGER PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, item_id INTEGER NOT NULL REFERENCES order_items(id), order_id INTEGER NOT NULL REFERENCES orders(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), quantity INTEGER NOT NULL CHECK(quantity > 0), reason TEXT NOT NULL CHECK(length(trim(reason)) > 0), occurred_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER sent_item_corrections_no_update BEFORE UPDATE ON sent_item_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
+    CREATE TRIGGER sent_item_corrections_no_delete BEFORE DELETE ON sent_item_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
+    CREATE TRIGGER sent_item_corrections_no_replace BEFORE INSERT ON sent_item_corrections WHEN EXISTS (SELECT 1 FROM sent_item_corrections WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;` },
 ];
 
 function migrate(db) {

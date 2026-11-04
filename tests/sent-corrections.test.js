@@ -1,0 +1,40 @@
+const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const { openDatabase } = require('../src/desktop/database'), { authorizedDatabase } = require('./support/authorized-database');
+const { seedTables } = require('../src/desktop/tables'), { seedMenu } = require('../src/desktop/menu'), { registerOrderItems } = require('../src/desktop/order-items');
+test('authorized corrections preserve sent history, totals and retry identity', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-corrections-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO user_permissions VALUES(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open');");
+  let call, actor = 1, authenticated = 1; const event = {};
+  const register = () => registerOrderItems({ handle: (_, f) => call = f }, e => e === event, db, { currentUserId: () => actor, authenticatedUserId: () => authenticated }); register();
+  const invoke = r => call(event, r), list = () => invoke({ action: 'list', orderId: 1 }).data;
+  invoke({ action: 'add', orderId: 1, productId: 'qebapa' }); const id = list().items[0].id;
+  invoke({ action: 'increment', orderId: 1, itemId: id });
+  const req = { action: 'correct', orderId: 1, itemId: id, quantity: 1, reason: 'Mistake', requestId: 'one' };
+  assert.equal(invoke(req).ok, false); invoke({ action: 'send', orderId: 1, requestId: 'send' });
+  for (const action of ['remove', 'increment', 'decrement', 'note']) assert.equal(invoke({ action, orderId: 1, itemId: id, ...(action === 'note' ? { note: 'x' } : {}) }).ok, false);
+  for (const bad of [{ quantity: 0 }, { quantity: 3 }, { reason: '  ' }, { itemId: 999 }, { requestId: '!' }, { extra: true }]) assert.equal(invoke({ ...req, ...bad }).ok, false);
+  assert.equal(call({}, req).ok, false); actor = null; assert.equal(invoke(req).ok, false); actor = 1; authenticated = 2; assert.equal(invoke(req).ok, false); authenticated = 1;
+  db.exec("DELETE FROM user_permissions WHERE permission='orders.correct_sent'"); assert.equal(invoke(req).ok, false); db.exec("INSERT INTO user_permissions VALUES(1,'orders.correct_sent')");
+  const original = list(); assert.equal(invoke(req).ok, true); assert.equal(invoke(req).ok, true); assert.equal(invoke({ ...req, quantity: 2 }).ok, false);
+  assert.equal(list().total, original.items[0].unitPrice); assert.equal(list().items[0].correctedQuantity, 1);
+  assert.equal(invoke({ ...req, quantity: 2, requestId: 'too-many' }).ok, false);
+  const correction = db.prepare('SELECT * FROM sent_item_corrections').get(); assert.equal(correction.actor_id, 1); assert.equal(correction.quantity, 1); assert.ok(correction.occurred_at > 0);
+  assert.throws(() => db.exec('UPDATE sent_item_corrections SET quantity=2')); assert.throws(() => db.exec('DELETE FROM sent_item_corrections'));
+  assert.equal(db.prepare('SELECT quantity FROM preparation_ticket_items').get().quantity, 2); assert.equal(db.prepare('SELECT quantity FROM order_items').get().quantity, 2);
+  db.close(); db = openDatabase(dir); register(); assert.equal(list().items[0].correctedQuantity, 1); assert.equal(invoke({ ...req, requestId: 'two' }).ok, true); assert.equal(list().total, 0); db.close();
+});
+test('audit failure rolls back correction', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-corrections-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO user_permissions VALUES(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent'); CREATE TRIGGER fail_correction BEFORE INSERT ON application_audit WHEN NEW.action='correct_sent' BEGIN SELECT RAISE(ABORT,'failure'); END");
+  let call; registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1}); const req={action:'correct',orderId:1,itemId:1,quantity:1,reason:'Mistake',requestId:'retry'};
+  assert.equal(call({},req).ok,false); assert.equal(db.prepare('SELECT count(*) n FROM sent_item_corrections').get().n,0); db.exec('DROP TRIGGER fail_correction'); assert.equal(call({},req).ok,true); db.close();
+});
+test('version 18 upgrade grants correction only to active current administrators', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-corrections-upgrade-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = authorizedDatabase(openDatabase(dir));
+  db.exec("INSERT INTO local_users(id,username,salt,password_hash,active) VALUES(2,'current-admin',x'00',x'00',1),(3,'inactive-admin',x'00',x'00',0); INSERT INTO user_permissions VALUES(2,'employees.change'),(3,'employees.change'); DROP TABLE sent_item_corrections; PRAGMA user_version=18;");
+  db.close(); db = openDatabase(dir);
+  assert.deepEqual(db.prepare("SELECT user_id FROM user_permissions WHERE permission='orders.correct_sent' ORDER BY user_id").all().map(x => x.user_id), [2]);
+  db.close();
+});
