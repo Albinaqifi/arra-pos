@@ -13,7 +13,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-upgrade-independent-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
-  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; CREATE TABLE dining_tables (id INTEGER PRIMARY KEY, area TEXT NOT NULL) STRICT;
+  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; CREATE TABLE dining_tables (id INTEGER PRIMARY KEY, area TEXT NOT NULL) STRICT;
     CREATE TABLE orders (id INTEGER PRIMARY KEY, table_id INTEGER NOT NULL REFERENCES dining_tables(id), opened_at INTEGER NOT NULL, status TEXT NOT NULL) STRICT;
     CREATE TABLE order_items (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL REFERENCES orders(id), product_id TEXT NOT NULL, name TEXT NOT NULL, unit_price INTEGER NOT NULL, quantity INTEGER NOT NULL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '') STRICT;
     CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open';
@@ -28,7 +28,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 10;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 20);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 21);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);
