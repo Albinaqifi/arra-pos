@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async bill(request) {
+    try { return await ipcRenderer.invoke('arra:bill', request); } catch (_) { return { ok: false, error: 'Bill unavailable' }; }
+  },
   async orderHistory(orderId) {
     if (orderId !== null && (!Number.isSafeInteger(orderId) || orderId <= 0)) return { ok: false };
     try { return await ipcRenderer.invoke('arra:order-history', { orderId }); } catch (_) { return { ok: false }; }

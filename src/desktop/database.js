@@ -172,6 +172,18 @@ const migrations = [
     CREATE TRIGGER sent_item_corrections_no_update BEFORE UPDATE ON sent_item_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
     CREATE TRIGGER sent_item_corrections_no_delete BEFORE DELETE ON sent_item_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;
     CREATE TRIGGER sent_item_corrections_no_replace BEFORE INSERT ON sent_item_corrections WHEN EXISTS (SELECT 1 FROM sent_item_corrections WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT, 'Corrections are append-only'); END;` },
+  { version: 20, sql: `CREATE TABLE bills (id INTEGER PRIMARY KEY, order_id INTEGER NOT NULL UNIQUE REFERENCES orders(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), generated_at INTEGER NOT NULL, total INTEGER NOT NULL CHECK(total >= 0), fingerprint TEXT NOT NULL) STRICT;
+    CREATE TABLE bill_lines (id INTEGER PRIMARY KEY, bill_id INTEGER NOT NULL REFERENCES bills(id), item_id INTEGER NOT NULL REFERENCES order_items(id), name TEXT NOT NULL, unit_price INTEGER NOT NULL, quantity INTEGER NOT NULL CHECK(quantity > 0), modifiers TEXT NOT NULL, UNIQUE(bill_id, item_id)) STRICT;
+    CREATE TRIGGER billed_item_insert BEFORE INSERT ON order_items WHEN EXISTS (SELECT 1 FROM bills WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT, 'Order billed'); END;
+    CREATE TRIGGER billed_item_update BEFORE UPDATE ON order_items WHEN EXISTS (SELECT 1 FROM bills WHERE order_id IN (OLD.order_id, NEW.order_id)) BEGIN SELECT RAISE(ABORT, 'Order billed'); END;
+    CREATE TRIGGER billed_item_delete BEFORE DELETE ON order_items WHEN EXISTS (SELECT 1 FROM bills WHERE order_id=OLD.order_id) BEGIN SELECT RAISE(ABORT, 'Order billed'); END;
+    CREATE TRIGGER billed_correction BEFORE INSERT ON sent_item_corrections WHEN EXISTS (SELECT 1 FROM bills WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT, 'Order billed'); END;
+    CREATE TRIGGER billed_order_move BEFORE UPDATE OF table_id ON orders WHEN EXISTS (SELECT 1 FROM bills WHERE order_id=OLD.id) BEGIN SELECT RAISE(ABORT, 'Order billed'); END;
+    CREATE TRIGGER bills_no_update BEFORE UPDATE ON bills BEGIN SELECT RAISE(ABORT, 'Bills are immutable'); END;
+    CREATE TRIGGER bills_no_delete BEFORE DELETE ON bills BEGIN SELECT RAISE(ABORT, 'Bills are immutable'); END;
+    CREATE TRIGGER bill_lines_no_update BEFORE UPDATE ON bill_lines BEGIN SELECT RAISE(ABORT, 'Bill lines are immutable'); END;
+    CREATE TRIGGER bill_lines_no_delete BEFORE DELETE ON bill_lines BEGIN SELECT RAISE(ABORT, 'Bill lines are immutable'); END;` },
+
 ];
 
 function migrate(db) {

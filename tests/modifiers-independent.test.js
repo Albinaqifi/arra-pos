@@ -12,7 +12,7 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir);
   seedMenu(db);
-  db.exec(`DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
+  db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DELETE FROM user_permissions WHERE permission IN ('employees.view','employees.change'); DROP TABLE application_audit; DROP TABLE employee_permission_audit; DROP TABLE employee_credential_audit; DROP TABLE employee_account_audit; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'orders.view'),(1,'orders.change');
     INSERT INTO dining_areas (id,name) VALUES (1,'Inside');
     INSERT INTO dining_tables (id,area,area_id) VALUES (1,'Inside',1);
@@ -21,7 +21,7 @@ test('version 12 upgrade preserves an existing order and rejects invalid choices
     DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 12;`);
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 19);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 20);
   assert.deepEqual({ ...db.prepare('SELECT name,unit_price,quantity FROM order_items').get() }, {name:'Historical',unit_price:200,quantity:2});
   db.exec(`INSERT INTO modifier_groups VALUES ('required','qebapa','Size',1,1),('optional','qebapa','Extra',0,1),('foreign','cola','Ice',0,1),('inactive','qebapa','Old',0,0);
     INSERT INTO modifier_options VALUES ('size','required','Large',30,1),('discount','optional','Discount',-500,1),('foreign-option','foreign','Ice',0,1),('old-option','inactive','Old',0,1),('disabled','required','Disabled',0,0);`);
@@ -49,7 +49,7 @@ test('version 13 migration failure rolls back schema and preserves version 12 da
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-mod-migration-'));
   t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
   let db = openDatabase(dir);
-  db.exec("INSERT INTO app_metadata (key,value) VALUES ('sample','retained'); DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; CREATE TABLE modifier_options (conflict TEXT); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 12;");
+  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO app_metadata (key,value) VALUES ('sample','retained'); DROP TABLE order_item_modifiers; DROP TABLE modifier_options; DROP TABLE modifier_groups; CREATE TABLE modifier_options (conflict TEXT); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version = 12;");
   db.close();
   assert.throws(() => openDatabase(dir));
   const {DatabaseSync} = require('node:sqlite');
