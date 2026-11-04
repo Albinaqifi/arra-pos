@@ -8,6 +8,7 @@ const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
 const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
+const { registerOperationalReports } = require('./operational-reports');
 const { registerTransferCorrection } = require('./transfer-correction');
 const { registerBusinessDays } = require('./business-days');
 const { registerFinancialVisibility } = require('./financial-visibility');
@@ -67,6 +68,7 @@ app.whenReady().then(() => {
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session);
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
+  registerOperationalReports(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveItems(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
