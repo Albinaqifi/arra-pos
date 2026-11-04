@@ -74,3 +74,9 @@ node server.js --port 3001
 Then open http://localhost:3001. The desktop app does not use this server or port.
 
 The React application is in `src/App.js`. React is included locally in `vendor`. The original design export is retained in `Main.dc.html`.
+
+### Financial visibility sample setup
+
+For an isolated sample database with separately authenticated waiter, A, B, and combined identities, run `node src/desktop/create-sample-accounts.js` in an interactive terminal. Choose four distinct sample passwords; entry is hidden. The command creates a new directory in the temporary folder, prints its path and a launch command, and never opens or modifies an existing database. Use only sample information. The waiter can operate shared orders; owners can see only their assigned paid financial records. Because shared operational records are not yet classified, owner accounts cannot browse them. Sign in as an identity and select the same name for its financial access.
+
+Upgraded accounts receive no financial scope automatically and cannot access protected operations. To recover existing sample data, use Node.js 23.8 or later and run `node src/desktop/recover-sample.js "<absolute-path-to-arra.sqlite>"` with the app closed and enter an existing sample username and password. The command takes a database-safe snapshot into a new temporary directory, migrates only that copy, and assigns only the authenticated account a waiter scope; it refuses databases containing owner scopes. The original is not modified. Use the printed launch command to open the copy. The normal development bootstrap creates a waiter-scoped account only in an empty database. This sample setup does not decide Q-01 or provide a production account recovery or cross-owner grant mechanism. Keep the existing database intact.

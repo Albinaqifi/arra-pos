@@ -20,6 +20,11 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, req) => {
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Object.getPrototypeOf(req) !== Object.prototype || Reflect.ownKeys(req).length !== 1 || !Object.hasOwn(req, 'orderId') || !(req.orderId === null || (Number.isSafeInteger(req.orderId) && req.orderId > 0))) return { ok: false };
     if (!hasPermissions(db, session, 'employees.view')) return { ok: false };
+    // Moved-item timelines can cross orders and payment accounts. Keep them
+    // unavailable to owners until a complete shared-history policy exists.
+    try {
+      if (db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope !== 'waiter') return { ok: false };
+    } catch (_) { return { ok: false }; }
     try {
       if (req.orderId === null) return { ok: true, data: { orders: db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders ORDER BY id DESC').all() } };
       const order = db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders WHERE id=?').get(req.orderId);

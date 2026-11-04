@@ -13,6 +13,7 @@ test('selection enforces active identities, optional PIN and selected grants at 
   const wrongPin = String((Number(pin) + 1) % 10000).padStart(4, '0');
   const salt = randomBytes(16), hash = scryptSync(pin, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
   db.prepare('INSERT INTO local_users (username, salt, password_hash, pin_salt, pin_hash) VALUES (?, ?, ?, ?, ?)').run('sample waiter', randomBytes(16), randomBytes(32), salt, hash);
+  db.prepare("INSERT INTO financial_scopes VALUES (2, 'waiter')").run();
   db.prepare("INSERT INTO local_users (username, salt, password_hash, active) VALUES ('inactive', x'00', x'00', 0)").run();
   const handlers = {}, trusted = {}; const ipc = { handle(c, f) { handlers[c] = f; } };
   const session = registerSession(ipc, e => e === trusted, db); registerTables(ipc, e => e === trusted, db, session);

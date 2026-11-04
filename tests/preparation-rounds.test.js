@@ -9,7 +9,7 @@ test('rounds route pending items once, preserve snapshots and reject edits', t =
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-round-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
  let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
  db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'),(2,1,'open'); UPDATE menu_products SET destination='bar' WHERE id='cola'");
- let call; const event={}; const register=()=>registerOrderItems({handle:(_,fn)=>call=fn},e=>e===event,db,{currentUserId:()=>1}); register();
+ let call; const event={}; const register=()=>registerOrderItems({handle:(_,fn)=>call=fn},e=>e===event,db,{currentUserId: () => 1, authenticatedUserId: () => 1}); register();
  const req=(action,extra={})=>call(event,{action,orderId:1,...extra});
  const a=req('add',{productId:'qebapa'}).data.items[0]; req('note',{itemId:a.id,note:'Less salt'}); req('add',{productId:'cola'});
  assert.equal(req('send',{requestId:'first'}).ok,true);
@@ -28,7 +28,7 @@ test('rounds route pending items once, preserve snapshots and reject edits', t =
 });
 test('send failure rolls back round, ticket and item state', t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-round-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
- const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')"); let call; registerOrderItems({handle:(_,fn)=>call=fn},()=>true,db,{currentUserId:()=>1});
+ const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')"); let call; registerOrderItems({handle:(_,fn)=>call=fn},()=>true,db,{currentUserId: () => 1, authenticatedUserId: () => 1});
  call({}, {action:'add',orderId:1,productId:'qebapa'}); db.exec("CREATE TRIGGER fail_send BEFORE INSERT ON application_audit WHEN NEW.action = 'send' BEGIN SELECT RAISE(ABORT,'failure'); END");
  assert.equal(call({}, {action:'send',orderId:1,requestId:'retry'}).ok,false); assert.equal(db.prepare('SELECT count(*) n FROM preparation_rounds').get().n,0); assert.equal(db.prepare('SELECT status FROM order_items').get().status,'pending');
  db.exec('DROP TRIGGER fail_send'); assert.equal(call({}, {action:'send',orderId:1,requestId:'retry'}).ok,true); db.close();

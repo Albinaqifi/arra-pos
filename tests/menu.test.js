@@ -13,7 +13,7 @@ test('menu seed preserves changes and active menu survives reopen', t => {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = openDatabase(dir), handler;
   const trusted = {};
-  const register = () => registerMenu({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
+  const register = () => registerMenu({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, e => e === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   register();
   assert.deepEqual(handler(trusted, {}).data.categories, []);
   seedMenu(db);

@@ -11,7 +11,7 @@ function setup(t) {
   const db = authorizedDatabase(openDatabase(dir)); seedTables(db);
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'); INSERT INTO bills (id,order_id,actor_id,generated_at,total,fingerprint) VALUES (1,1,1,1,1250,'one'),(2,2,1,1,500,'two'),(3,3,1,1,0,'three');");
   const trusted = {}; let call;
-  registerPayments({ handle(_channel, fn) { call = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
+  registerPayments({ handle(_channel, fn) { call = fn; } }, e => e === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   return { db, call: request => call(trusted, request), untrusted: request => call({}, request) };
 }
@@ -51,9 +51,9 @@ test('transaction failure rolls payment, order closure, and audit back together'
 test('version 20 upgrades without changing existing bills and orders', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-payment-upgrade-'));
   let db = authorizedDatabase(openDatabase(dir)); seedTables(db);
-  db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'); INSERT INTO bills (id,order_id,actor_id,generated_at,total,fingerprint) VALUES (1,1,1,1,123,'saved'); DROP TABLE payments; PRAGMA user_version=20;");
+  db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'); INSERT INTO bills (id,order_id,actor_id,generated_at,total,fingerprint) VALUES (1,1,1,1,123,'saved'); DROP TABLE payments; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version=20;");
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 21);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 22);
   assert.equal(db.prepare('SELECT total FROM bills WHERE id=1').get().total, 123);
   assert.equal(db.prepare('SELECT status FROM orders WHERE id=1').get().status, 'open');
   assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 0);

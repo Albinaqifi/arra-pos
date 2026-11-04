@@ -12,6 +12,7 @@ function bootstrap(db, username, password) {
   try {
     if (db.prepare('SELECT count(*) AS count FROM local_users').get().count !== 0) throw new Error('An account already exists');
     const user = db.prepare('INSERT INTO local_users (username, salt, password_hash) VALUES (?, ?, ?)').run(username, salt, hash);
+    db.prepare("INSERT INTO financial_scopes(user_id, scope) VALUES (?, 'waiter')").run(user.lastInsertRowid);
     const grant = db.prepare('INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)');
     for (const permission of ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent']) grant.run(user.lastInsertRowid, permission);
     db.exec('COMMIT');

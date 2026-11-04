@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog } = require('electron');
 const path = require('node:path');
+const { dataDirectory } = require('./sample-data-directory');
 const { openDatabase } = require('./database');
 const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
@@ -7,6 +8,7 @@ const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
 const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
+const { registerFinancialVisibility } = require('./financial-visibility');
 const { registerMoveOrder } = require('./move-order');
 const { registerMoveItems } = require('./move-items');
 const { registerMenuConfig } = require('./menu-config');
@@ -42,7 +44,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   try {
-    database = openDatabase(app.getPath('userData'));
+    database = openDatabase(dataDirectory(process.argv, app.getPath('userData')));
   } catch (error) {
     dialog.showErrorBox('Database could not be opened',
       'Arra POS could not initialize its local database. Check that the application data folder is writable and that this app is not older than the database. Your existing data has not been deleted. Close the app and seek support if the problem continues.');
@@ -60,6 +62,7 @@ app.whenReady().then(() => {
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session);
+  registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveItems(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);

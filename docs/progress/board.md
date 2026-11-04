@@ -22,13 +22,15 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-016 | Done | Review and focused testing passed; PR #22 merged. |
 | S-017 | Done | Review and focused testing passed; PR #24 merged. |
 | S-018 | Done | Review and focused testing passed; PR #26 merged. |
-| S-019 | In progress | Verified; PR #28 awaits merge. |
-| S-020 | In progress | Review and focused testing passed; awaiting PR and merge. |
-| S-021 | In progress | Review and focused testing passed; PR #30 awaits merge. |
-| S-022 | In progress | Review and testing passed; awaiting PR and merge. |
-| S-023 | In progress | Review and focused testing passed; awaiting PR and merge. |
-| S-024 | In progress | Review and focused testing passed; awaiting PR and merge. |
+| S-019 | Done | PR #28 merged as `a4f0e19`. |
+| S-020 | Done | PR #29 merged as `b74ef47`. |
+| S-021 | Done | PR #30 merged as `93b2d7a`. |
+| S-022 | Done | PR #31 merged as `24b3833`. |
+| S-023 | Done | PR #32 merged as `0b20266`. |
+| S-024 | Done | PR #33 merged as `a479ffd`. |
+
+| S-025 | In progress | Prototype incomplete; full suite failing and scope provisioning unresolved. |
 
 ## Current
 
-S-024 — Record one full payment.
+S-025 — Protect financial visibility.

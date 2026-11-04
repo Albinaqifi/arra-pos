@@ -17,7 +17,7 @@ test('order item boundaries and failed total changes preserve both orders', t =>
   seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (id, table_id, opened_at, status) VALUES (1, 1, 1, 'open'), (2, 2, 1, 'open')");
   let invoke;
-  registerOrderItems({ handle(_channel, handler) { invoke = handler; } }, () => true, db, { currentUserId: () => 1 });
+  registerOrderItems({ handle(_channel, handler) { invoke = handler; } }, () => true, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   const call = request => invoke({}, request);
   const add = (orderId, productId) => call({ action: 'add', orderId, productId });
   const list = orderId => call({ action: 'list', orderId }).data;

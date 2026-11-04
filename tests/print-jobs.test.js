@@ -8,7 +8,7 @@ const { registerOrderItems } = require('../src/desktop/order-items'); const { re
 test('simulated failure and uncertainty persist, retries refer to one job and never add items', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-print-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
-  let orders, jobs; const event = {}, session = { currentUserId: () => 1 };
+  let orders, jobs; const event = {}, session = { currentUserId: () => 1, authenticatedUserId: () => 1 };
   const register = () => { registerOrderItems({ handle: (_, fn) => orders = fn }, e => e === event, db, session); registerPrintJobs({ handle: (_, fn) => jobs = fn }, e => e === event, db, session); }; register();
   const call = r => jobs(event, r);
   assert.equal(call({ action: 'simulate', destination: 'kitchen', result: 'failed' }).ok, true);
@@ -31,7 +31,7 @@ test('simulated failure and uncertainty persist, retries refer to one job and ne
 test('version 16 tickets migrate without claiming confirmed output', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-print-upgrade-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
-  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO preparation_rounds (order_id,request_id,number,actor_id,sent_at) VALUES (1,'old',1,1,10); INSERT INTO preparation_tickets (round_id,destination,adapter) VALUES (1,'kitchen','simulated'); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; ALTER TABLE preparation_rounds DROP COLUMN table_id; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version=16;");
+  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO preparation_rounds (order_id,request_id,number,actor_id,sent_at) VALUES (1,'old',1,1,10); INSERT INTO preparation_tickets (round_id,destination,adapter) VALUES (1,'kitchen','simulated'); DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; ALTER TABLE preparation_rounds DROP COLUMN table_id; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version=16;");
   db.close(); db = openDatabase(dir);
   assert.deepEqual({ ...db.prepare('SELECT j.ticket_id, a.result, a.actor_id FROM print_jobs j JOIN print_attempts a ON a.job_id=j.id').get() }, { ticket_id: 1, result: 'uncertain', actor_id: null });
   assert.equal(db.prepare('SELECT count(*) n FROM preparation_tickets').get().n, 1); db.close();
@@ -41,7 +41,7 @@ test('direct requests require grants and retry rolls back if audit recording fai
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-print-access-'));
   const db = authorizedDatabase(openDatabase(dir)); t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); }); seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
-  const event = {}; let orders, jobs, actor = 1; const session = { currentUserId: () => actor };
+  const event = {}; let orders, jobs, actor = 1; const session = { currentUserId: () => actor, authenticatedUserId: () => actor };
   registerOrderItems({ handle: (_, fn) => orders = fn }, e => e === event, db, session);
   registerPrintJobs({ handle: (_, fn) => jobs = fn }, e => e === event, db, session);
   const call = request => jobs(event, request);
@@ -71,7 +71,7 @@ test('print jobs retain their send-time table through moves and retries', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-print-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
-  let items,jobs,move; const session={currentUserId:()=>1}, ipc=fn=>({handle:(_,f)=>fn(f)});
+  let items,jobs,move; const session={currentUserId: () => 1, authenticatedUserId: () => 1}, ipc=fn=>({handle:(_,f)=>fn(f)});
   registerOrderItems(ipc(f=>items=f),()=>true,db,session); registerPrintJobs(ipc(f=>jobs=f),()=>true,db,session); registerMoveOrder(ipc(f=>move=f),()=>true,db,session);
   jobs({}, {action:'simulate',destination:'kitchen',result:'failed'}); items({}, {action:'add',orderId:1,productId:'qebapa'}); items({}, {action:'send',orderId:1,requestId:'before'});
   const before=jobs({}, {action:'list'}).data.jobs[0]; assert.equal(before.tableId,1);
@@ -86,21 +86,21 @@ test('print jobs retain their send-time table through moves and retries', t => {
 test('version 17 jobs retain table and history after migration', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-upgrade-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open')");
-  let items; registerOrderItems({handle:(_,f)=>items=f},()=>true,db,{currentUserId:()=>1});
+  let items; registerOrderItems({handle:(_,f)=>items=f},()=>true,db,{currentUserId: () => 1, authenticatedUserId: () => 1});
   items({}, {action:'add',orderId:1,productId:'qebapa'}); items({}, {action:'send',orderId:1,requestId:'legacy'});
-  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; ALTER TABLE preparation_rounds DROP COLUMN table_id; DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version=17'); db.close();
-  db=openDatabase(dir); assert.equal(db.prepare('SELECT table_id FROM preparation_rounds').get().table_id,1);
+  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; ALTER TABLE preparation_rounds DROP COLUMN table_id; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version=17'); db.close();
+  db=openDatabase(dir); db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users"); assert.equal(db.prepare('SELECT table_id FROM preparation_rounds').get().table_id,1);
   db.exec('UPDATE orders SET table_id=2 WHERE id=1');
-  let jobs; registerPrintJobs({handle:(_,f)=>jobs=f},()=>true,db,{currentUserId:()=>1});
+  let jobs; registerPrintJobs({handle:(_,f)=>jobs=f},()=>true,db,{currentUserId: () => 1, authenticatedUserId: () => 1});
   assert.equal(jobs({}, {action:'list'}).data.jobs[0].tableId,1); assert.equal(db.prepare('SELECT count(*) n FROM print_attempts').get().n,1); db.close();
 });
 
 test('failed version 18 migration leaves version 17 data intact', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-upgrade-fail-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   let db=authorizedDatabase(openDatabase(dir)); seedTables(db);
-  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO app_metadata(key,value) VALUES ('sample','kept'); DROP TABLE IF EXISTS sent_item_corrections; PRAGMA user_version=17"); db.close();
+  db.exec("DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); INSERT INTO app_metadata(key,value) VALUES ('sample','kept'); DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version=17"); db.close();
   assert.throws(()=>openDatabase(dir));
   const { DatabaseSync }=require('node:sqlite'); db=new DatabaseSync(path.join(dir,'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version,17); assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value,'kept'); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);
-  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,21); db.close();
+  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,22); db.close();
 });

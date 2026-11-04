@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async financialVisibility(request) {
+    try { return await ipcRenderer.invoke('arra:financial-visibility', request); } catch (_) { return { ok: false }; }
+  },
   async payment(request) {
     try { return await ipcRenderer.invoke('arra:payment', request); } catch (_) { return { ok: false, uncertain: true, error: 'Payment result unknown. Retry the same selection.' }; }
   },
