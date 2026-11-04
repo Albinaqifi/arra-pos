@@ -30,7 +30,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-024 | Done | PR #33 merged as `a479ffd`. |
 | S-025 | Done | PR #34 merged as `2bde866`. |
 | S-026 | In progress | Reviewed and tested; post-close rejection verified in stacked S-027; PR #37 open. |
-| S-027 | In progress | Review and testing passed; stacked PR pending. |
+| S-027 | In progress | Review and testing passed; stacked PR #38 open. |
 
 ## Current
 
