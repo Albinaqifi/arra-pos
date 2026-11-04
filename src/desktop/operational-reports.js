@@ -12,10 +12,11 @@ function registerOperationalReports(ipcMain, isAllowedSender, db, session) {
       const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope;
       if (!['A', 'B', 'combined'].includes(scope) || (req.account && scope !== 'combined' && req.account !== scope)) return { ok: false };
       const account = req.account || (scope === 'combined' ? null : scope);
-      const where = account ? 'p.account=?' : "p.account IN ('A','B')";
+      const where = account ? 'COALESCE(c.account,p.account)=?' : "COALESCE(c.account,p.account) IN ('A','B')";
       const args = account ? [req.from, req.to, account] : [req.from, req.to];
       const payments = db.prepare(`SELECT p.id, p.bill_id AS billId, o.table_id AS tableId, p.actor_id AS actorId, u.username AS actor
-        FROM payments p JOIN bills b ON b.id=p.bill_id JOIN orders o ON o.id=b.order_id JOIN local_users u ON u.id=p.actor_id
+        FROM payments p LEFT JOIN (SELECT payment_id, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id
+        JOIN bills b ON b.id=p.bill_id JOIN orders o ON o.id=b.order_id JOIN local_users u ON u.id=p.actor_id
         WHERE p.paid_at>=? AND p.paid_at<? AND ${where} ORDER BY p.paid_at, p.id`).all(...args);
       const lineQuery = db.prepare('SELECT i.product_id AS productId, l.name, l.quantity, l.unit_price AS unitPrice FROM bill_lines l JOIN order_items i ON i.id=l.item_id WHERE l.bill_id=? ORDER BY l.id');
       const products = new Map(), tables = new Map(), waiters = new Map();

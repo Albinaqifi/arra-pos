@@ -25,31 +25,91 @@ class OperationalReports extends React.Component {
         h('h2', null, 'Waiters'), list(d.waiters, r => r.actor + ' · payments recorded ' + r.count)));
   }
 }
-class FinancialVisibility extends React.Component {
-  constructor(props) { super(props); this.state = { records: [], totals: null, detail: null, error: '' }; }
+class TransferCorrection extends React.Component {
+  constructor(props) { super(props); this.state = { records: null, table: null, reason: '', error: '', busy: false }; }
+  componentDidMount() { this.load(); }
+  async load() { const r = await window.arra.transferCorrection({action:'list'}); this.setState(r.ok ? {records:r.data.payments, tables:r.data.tables, error:''} : {records:null,error:'Eligible payments unavailable.'}); }
+  async correct(id) {
+    if (this.state.busy || !window.confirm('Correct this cash payment from Account B to Account A?')) return;
+    this.setState({busy:true});
+    const r = await window.arra.transferCorrection({action:'correct',paymentId:id,reason:this.state.reason});
+    if (r.ok) { this.setState({reason:'',error:''}); await this.load(); }
+    else { await this.load(); this.setState({error:'Correction was not confirmed. Refresh the list before trying again.'}); }
+    this.setState({busy:false});
+  }
+  render() {
+    const h=React.createElement, rows=this.state.records, table=this.state.table;
+    return h('main',{style:{padding:24,overflow:'auto',height:'100vh'}},h('button',{onClick:this.props.onBack},'Switch user'),h('h1',null,'Transfer Manager'),h('p',null,'Eligible cash payments in the open business period.'),this.state.error && h('p',{role:'alert'},this.state.error),
+      rows && table === null ? h(React.Fragment,null,h('h2',null,'Tables'),this.state.tables.map(t=>h('button',{key:t.id,onClick:()=>this.setState({table:t.id})},'Table '+t.id+' · '+t.area+(t.active ? '' : ' · inactive'))),!this.state.tables.length && h('p',null,'No tables.')) : null,
+      rows && table !== null ? h(React.Fragment,null,h('button',{onClick:()=>this.setState({table:null})},'All tables'),h('h2',null,'Table '+table),h('label',null,'Reason (optional)',h('input',{value:this.state.reason,maxLength:500,onChange:e=>this.setState({reason:e.target.value})})),!rows.some(x=>x.tableId===table) && h('p',null,'No eligible payments for this table.'),rows.filter(x=>x.tableId===table).map(p=>h('div',{key:p.id},'Payment #'+p.id+' · '+p.amount+' · '+new Date(p.paidAt).toLocaleString()+' ',h('button',{disabled:this.state.busy,onClick:()=>this.correct(p.id)},'Correct B to A')))) : null,h('button',{onClick:()=>this.load()},'Refresh'));
+  }
+}
+class BusinessDays extends React.Component {
+  constructor(props) { super(props); this.state = { data: null, error: '', busy: false }; }
   componentDidMount() { this.load(); }
   async load() {
-    const [records, totals] = await Promise.all([
+    const r = await window.arra.businessDays({ action: 'list' });
+    this.setState(r.ok ? { data: r.data, error: '' } : { data: null, error: 'Business days unavailable.' });
+  }
+  async close(id) {
+    if (this.state.busy || !window.confirm('Close this business day? Outstanding orders and print issues remain open.')) return;
+    this.setState({ busy: true });
+    const r = await window.arra.businessDays({ action: 'close', dayId: id });
+    if (r.ok) await this.load();
+    else this.setState({ error: 'Could not close this day. Refresh and try again.' });
+    this.setState({ busy: false });
+  }
+  render() {
+    const h = React.createElement, data = this.state.data;
+    const describe = x => h('div', null,
+      h('p', null, 'Open orders: ' + (x.orders.map(o => '#' + o.id + ' (table ' + o.tableId + ')').join(', ') || 'none')),
+      h('p', null, 'Unsuccessful or uncertain print jobs: ' + (x.printJobs.map(j => '#' + j.id + ' (' + j.result + ')').join(', ') || 'none')));
+    return h('section', null, h('h2', null, 'Business days'), this.state.error && h('p', { role: 'alert' }, this.state.error),
+      !data ? h('button', { onClick: () => this.load() }, 'Load business days') : h(React.Fragment, null,
+        h('p', null, 'Manual periods for sample data; day boundaries are provisional.'),
+        h('h3', null, 'Outstanding now'), describe(data.issues),
+        data.days.map(day => h('div', { key: day.id }, h('h3', null, 'Period #' + day.id + (day.closedAt === null ? ' · open' : ' · closed')),
+          h('p', null, 'Opened: ' + new Date(day.openedAt).toLocaleString() + (day.closedAt === null ? '' : ' · Closed: ' + new Date(day.closedAt).toLocaleString() + ' · Actor #' + day.closedBy)),
+          day.closedAt === null ? h('button', { disabled: this.state.busy, onClick: () => this.close(day.id) }, 'Close business day') : describe(day.issues))),
+        h('button', { onClick: () => this.load() }, 'Refresh')));
+  }
+}
+class FinancialVisibility extends React.Component {
+  constructor(props) { super(props); this.state = { records: [], unpaid: null, totals: null, detail: null, error: '' }; }
+  componentDidMount() { this.load(); }
+  async load() {
+    const [records, totals, unpaid] = await Promise.all([
       window.arra.financialVisibility({ action: 'search', account: null }),
-      window.arra.financialVisibility({ action: 'aggregate', account: null })
+      window.arra.financialVisibility({ action: 'aggregate', account: null }),
+      window.arra.financialVisibility({ action: 'unpaid' })
     ]);
-    if (!records.ok || !totals.ok) return this.setState({ records: [], totals: null, detail: null, error: 'Financial information unavailable.' });
-    this.setState({ records: records.data, totals: totals.data, detail: null, error: '' });
+    if (!records.ok || !totals.ok || !unpaid.ok) return this.setState({ records: [], unpaid: null, totals: null, detail: null, error: 'Financial information unavailable.' });
+    this.setState({ records: records.data, unpaid: unpaid.ok ? unpaid.data : null, totals: totals.data, detail: null, error: '' });
   }
   async detail(paymentId) {
     const r = await window.arra.financialVisibility({ action: 'detail', paymentId });
     this.setState(r.ok ? { detail: r.data, error: '' } : { detail: null, error: 'Payment unavailable.' });
   }
+  async unpaidDetail(billId) {
+    const r = await window.arra.financialVisibility({ action: 'unpaidDetail', billId });
+    this.setState(r.ok ? { detail: r.data, error: '' } : { detail: null, error: 'Bill unavailable.' });
+  }
   render() {
     const h = React.createElement, d = this.state.detail;
     return h('main', { style: { padding: 24, height: '100vh', overflow: 'auto' } },
       h('button', { onClick: this.props.onBack }, 'Back to tables'), h('h1', null, 'Financial information'),
-      h('p', null, 'Sample payments only.'), this.state.error && h('p', { role: 'alert' }, this.state.error),
+      h('p', null, 'Sample payments only.'), h(BusinessDays), this.state.error && h('p', { role: 'alert' }, this.state.error),
       this.state.totals && h('p', null, 'Payments: ' + this.state.totals.count + ' · Total: ' + this.state.totals.total),
-      d ? h('div', null, h('button', { onClick: () => this.load() }, 'All payments'), h('h2', null, 'Payment #' + d.payment.id),
-        h('p', null, d.payment.account + ' · ' + d.payment.method + ' · ' + d.payment.amount),
+      d ? h('div', null, h('button', { onClick: () => this.load() }, 'All history'),
+        h('h2', null, 'Bill #' + d.bill.id + (d.payment ? ' · Payment #' + d.payment.id : ' · Unpaid')),
+        h('p', null, 'Order #' + d.bill.orderId + ' · Table ' + d.bill.tableId + ' · Opened ' + new Date(d.bill.openedAt).toLocaleString()),
+        h('p', null, 'Bill generated by actor #' + d.bill.actorId + ' · ' + new Date(d.bill.generatedAt).toLocaleString() + ' · Total ' + d.bill.total),
+        d.payment && h('p', null, 'Payment by actor #' + d.payment.actorId + ' · ' + new Date(d.payment.paidAt).toLocaleString() + ' · ' + d.payment.method + ' · ' + d.payment.amount + ' · Original account ' + d.payment.originalAccount + ' · Effective account ' + d.payment.account),
+        d.payment && (d.corrections.length ? d.corrections.map(c => h('p', { key: c.id }, 'Correction #' + c.id + ' · ' + c.fromAccount + ' to ' + c.toAccount + ' · Actor #' + c.actorId + ' · ' + new Date(c.occurredAt).toLocaleString() + ' · Reason: ' + (c.reason || 'none'))) : h('p', null, 'No account corrections.')),
         h('ul', null, d.lines.map((line, i) => h('li', { key: i }, line.quantity + ' × ' + line.name + ' · ' + line.unitPrice)))) :
-        this.state.records.length ? h('ul', null, this.state.records.map(p => h('li', { key: p.id }, h('button', { onClick: () => this.detail(p.id) }, '#' + p.id + ' · ' + p.account + ' · ' + p.amount)))) : !this.state.error && h('p', null, 'No payments.'));
+        h(React.Fragment, null,
+          this.state.records.length ? h('ul', null, this.state.records.map(p => h('li', { key: p.id }, h('button', { onClick: () => this.detail(p.id) }, '#' + p.id + ' · ' + p.account + ' · ' + p.amount)))) : !this.state.error && h('p', null, 'No payments.'),
+          this.state.unpaid && h('section', null, h('h2', null, 'Unpaid bills (unclassified)'), this.state.unpaid.length ? h('ul', null, this.state.unpaid.map(b => h('li', { key: b.id }, h('button', { onClick: () => this.unpaidDetail(b.id) }, 'Bill #' + b.id + ' · Order #' + b.orderId + ' · ' + b.total)))) : h('p', null, 'No unpaid bills.'))));
   }
 }
 class DesktopBill extends React.Component {
@@ -507,7 +567,7 @@ class WaiterDemo extends React.Component {
     try {
       const result = await window.arra.getWaiters();
       if (!result.ok) throw new Error();
-      this._menu = { ...this._menu, waiters: result.data.map(w => ({ id: w.id, name: w.name, pin: w.hasPin, color: '#1D4ED8' })) };
+      this._menu = { ...this._menu, waiters: result.data.map(w => ({ id: w.id, name: w.name, pin: w.hasPin, isTransfer: w.isTransfer, color: '#1D4ED8' })) };
       this.setState({ waiterMessage: result.data.length ? '' : 'No active waiters available.' });
     } catch (_) { this._menu = { ...this._menu, waiters: [] }; this.setState({ waiterMessage: 'Waiters unavailable. Sign out and try again.' }); }
   }
@@ -517,13 +577,13 @@ class WaiterDemo extends React.Component {
     try {
       if (window.arra && !(await window.arra.selectWaiter(w.id, pin)).ok) throw new Error();
       if (window.arra) this.clearDesktopData();
-      this.setState({ waiter: w, pin: '', screen: 'tables' });
-      if (window.arra) this.loadDesktopData();
+      this.setState({ waiter: w, pin: '', screen: w.isTransfer ? 'transferCorrection' : 'tables' });
+      if (window.arra && !w.isTransfer) this.loadDesktopData();
     } catch (_) { this.mut(n => { n.pin = ''; this.toast(n, 'Waiter selection failed.', 'err'); }); }
     finally { this._selecting = false; }
   }
   pickWaiter(w) {
-    const ww = { id: w.id, name: w.name, color: w.color };
+    const ww = { id: w.id, name: w.name, color: w.color, isTransfer: w.isTransfer };
     if (w.pin) this.setState({ pinFor: ww, pin: '', screen: 'pin' });
     else this.chooseWaiter(ww, '');
   }
@@ -1334,6 +1394,7 @@ class WaiterDemo extends React.Component {
   }
   render() {
     if (this.state.screen === 'operationalReports') return React.createElement(OperationalReports, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });
+    if (this.state.screen === 'transferCorrection') return React.createElement(TransferCorrection, { onBack: () => this.switchWaiter() });
     if (this.state.screen === 'financialVisibility') return React.createElement(FinancialVisibility, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });
     if (this.state.screen === 'orderHistory') return React.createElement(OrderHistory, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });
     if (this.state.screen === 'employeeConfig') return React.createElement(EmployeeConfig, { onBack: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); } });

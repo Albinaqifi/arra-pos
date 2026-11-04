@@ -14,7 +14,7 @@ function createSampleAccounts(db, passwords) {
     identities.forEach(([name, role], i) => {
       const salt = randomBytes(16); const id = insert.run(name, salt, hashPassword(passwords[i], salt)).lastInsertRowid;
       scope.run(id, role);
-      for (const permission of role === 'waiter' ? operational : ['employees.view']) grant.run(id, permission);
+      for (const permission of role === 'waiter' ? operational : role === 'combined' ? ['employees.view', 'business_days.close'] : ['employees.view']) grant.run(id, permission);
     });
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }

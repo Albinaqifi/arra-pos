@@ -32,6 +32,19 @@ test('paid bill reports enforce account scope, dates, authorization and snapshot
   assert.deepEqual(call({from:101,to:200,account:null}).data, {products:[],tables:[],waiters:[]});
   assert.equal(call({...range,account:'A'}).data.products.length,2);
   assert.deepEqual(call(range).data.products, [{productId:'p',name:'Other',quantity:4,value:400},{productId:'p2',name:'Old',quantity:1,value:0}]);
+  db.exec(`INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(2,1,250,'sample correction');`);
+  current=auth=1;
+  assert.deepEqual(call(range).data.products, [{productId:'p',name:'Other',quantity:4,value:400},{productId:'p2',name:'Old',quantity:1,value:0}]);
+  assert.deepEqual(call(range).data.tables, [{tableId:1,count:1},{tableId:2,count:1}]);
+  assert.deepEqual(call(range).data.waiters, [{actor:'sample-1',count:1},{actor:'sample-2',count:1}]);
+  current=auth=2;
+  assert.deepEqual(call(range).data, {products:[],tables:[],waiters:[]});
+  assert.equal(call({...range,account:'A'}).ok,false);
+  current=auth=3;
+  assert.deepEqual(call({...range,account:'B'}).data, {products:[],tables:[],waiters:[]});
+  assert.deepEqual(call({...range,account:'A'}).data, call(range).data);
+  assert.equal(call(range).data.products[0].value,400);
+  assert.equal(call(range).data.tables.reduce((sum, row) => sum + row.count, 0), 2);
   for (const req of [null, [], {}, {...range,extra:1}, {...range,from:-1}, {...range,to:100}, {...range,account:'C'}, {...range,from:1.5}]) assert.equal(call(req).ok,false);
   assert.equal(handler({allowed:false},range).ok,false);
   for (const id of [4,5]) { current=auth=id; assert.equal(call(range).ok,false); }
