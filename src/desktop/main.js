@@ -10,6 +10,7 @@ const { registerMoveItems } = require('./move-items');
 const { registerMenuConfig } = require('./menu-config');
 const { registerMenu } = require('./menu');
 const { registerOrderItems } = require('./order-items');
+const { registerOrderHistory } = require('./order-history');
 const { registerPrintJobs } = require('./print-jobs');
 const { registerSession } = require('./session');
 const { registerEmployeeConfig } = require('./employee-config');
@@ -60,6 +61,7 @@ app.whenReady().then(() => {
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session);
+  registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
   createWindow();
   app.on('activate', () => {
