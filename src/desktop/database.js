@@ -216,6 +216,12 @@ const migrations = [
   CREATE TRIGGER closed_business_days_no_update BEFORE UPDATE ON business_days WHEN OLD.closed_at IS NOT NULL BEGIN SELECT RAISE(ABORT, 'Closed day is immutable'); END;
   CREATE TRIGGER business_days_no_delete BEFORE DELETE ON business_days BEGIN SELECT RAISE(ABORT, 'Business days are retained'); END;` },
 
+  { version: 24, sql: `CREATE TABLE transfer_managers (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;
+  CREATE TABLE payment_account_corrections (id INTEGER PRIMARY KEY, payment_id INTEGER NOT NULL UNIQUE REFERENCES payments(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), occurred_at INTEGER NOT NULL, reason TEXT NOT NULL) STRICT;
+  CREATE TRIGGER payment_correction_validate BEFORE INSERT ON payment_account_corrections WHEN NOT EXISTS (SELECT 1 FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id JOIN business_days d ON d.id=pd.business_day_id WHERE p.id=NEW.payment_id AND p.method='cash' AND p.account='B' AND d.closed_at IS NULL) BEGIN SELECT RAISE(ABORT, 'Payment is not eligible'); END;
+  CREATE TRIGGER payment_corrections_no_update BEFORE UPDATE ON payment_account_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;
+  CREATE TRIGGER payment_corrections_no_delete BEFORE DELETE ON payment_account_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;
+  CREATE TRIGGER payment_corrections_no_replace BEFORE INSERT ON payment_account_corrections WHEN EXISTS (SELECT 1 FROM payment_account_corrections WHERE id=NEW.id OR payment_id=NEW.payment_id) BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;` },
 ];
 
 function migrate(db) {
