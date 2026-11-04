@@ -9,6 +9,11 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
         !((req.action === 'search' && fields(req, ['action', 'account']) && [null, 'A', 'B'].includes(req.account)) ||
           (req.action === 'detail' && fields(req, ['action', 'paymentId']) && Number.isSafeInteger(req.paymentId) && req.paymentId > 0) ||
           (req.action === 'aggregate' && fields(req, ['action', 'account']) && [null, 'A', 'B'].includes(req.account)) ||
+          (req.action === 'reportDays' && fields(req, ['action'])) ||
+          (req.action === 'report' && fields(req, ['action', 'from', 'to', 'dayId', 'account', 'method']) &&
+            [null, 'A', 'B'].includes(req.account) && [null, 'cash', 'card'].includes(req.method) &&
+            ((req.dayId === null && Number.isSafeInteger(req.from) && req.from >= 0 && Number.isSafeInteger(req.to) && req.to > req.from) ||
+             (Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.from === null && req.to === null))) ||
           (req.action === 'unpaid' && fields(req, ['action'])) ||
           (req.action === 'unpaidDetail' && fields(req, ['action', 'billId']) && Number.isSafeInteger(req.billId) && req.billId > 0))) return { ok: false };
     try {
@@ -17,6 +22,32 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
       const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope;
       if (!['A', 'B', 'combined'].includes(scope)) return { ok: false };
       if (req.account && scope !== 'combined' && req.account !== scope) return { ok: false };
+      if (req.action === 'reportDays') return { ok: true, data: db.prepare('SELECT id, opened_at AS openedAt, closed_at AS closedAt FROM business_days ORDER BY id DESC').all() };
+      if (req.action === 'report') {
+        if (req.dayId !== null && !db.prepare('SELECT id FROM business_days WHERE id=?').get(req.dayId)) return { ok: false };
+        const account = req.account || (scope === 'combined' ? null : scope);
+        const where = [req.dayId === null ? 'p.paid_at>=? AND p.paid_at<?' : 'pd.business_day_id=?', account ? "COALESCE(c.account,p.account)=?" : "COALESCE(c.account,p.account) IN ('A','B')"];
+        const args = req.dayId === null ? [req.from, req.to] : [req.dayId];
+        if (account) args.push(account);
+        if (req.method) { where.push('p.method=?'); args.push(req.method); }
+        const records = db.prepare(`SELECT p.id, p.bill_id AS billId, pd.business_day_id AS dayId, p.paid_at AS paidAt,
+          p.amount, p.method, COALESCE(c.account,p.account) AS account, c.id AS correctionId,
+          c.occurred_at AS correctedAt, c.actor_id AS correctionActorId, c.reason AS correctionReason
+          FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id
+          LEFT JOIN (SELECT *, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id
+          WHERE ${where.join(' AND ')} ORDER BY p.paid_at, p.id`).all(...args);
+        const groups = new Map(), corrections = [];
+        for (const row of records) {
+          if (!Number.isSafeInteger(row.amount) || row.amount < 0) throw Error('Invalid amount');
+          const key = row.account + ':' + row.method;
+          const group = groups.get(key) || { account: row.account, method: row.method, count: 0, total: 0 };
+          group.count++; group.total += row.amount;
+          if (!Number.isSafeInteger(group.count) || !Number.isSafeInteger(group.total)) throw Error('Report total too large');
+          groups.set(key, group);
+          if (row.correctionId !== null) corrections.push({ id:row.correctionId, paymentId:row.id, amount:row.amount, occurredAt:row.correctedAt, actorId:row.correctionActorId, reason:row.correctionReason });
+        }
+        return { ok:true, data:{ groups:[...groups.values()], records:records.map(({ correctionId, correctedAt, correctionActorId, correctionReason, ...row }) => row), corrections } };
+      }
       if (req.action === 'unpaid' || req.action === 'unpaidDetail') {
         if (scope !== 'combined') return req.action === 'unpaid' ? { ok: true, data: null } : { ok: false };
         const sql = `SELECT b.id, b.order_id AS orderId, o.table_id AS tableId, o.opened_at AS openedAt,
