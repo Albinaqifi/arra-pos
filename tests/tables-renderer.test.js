@@ -15,7 +15,7 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   let db = openDatabase(dir);
   const trusted = {};
   let handler;
-  const register = () => registerTables({ handle(_channel, fn) { handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1 });
+  const register = () => registerTables({ handle(_channel, fn) { handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   register();
   let api;
   let invoke = (_channel, request) => Promise.resolve(handler(trusted, JSON.parse(JSON.stringify(request))));
@@ -51,4 +51,25 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   assert.equal(view.sections.length, 0);
   invoke = () => Promise.resolve({ ok: true, data: [{ id: -1, area: 'bad' }] });
   assert.equal((await api.getTables()).ok, false);
+});
+
+test('desktop renderer clears prior financial state across sign-out and denies stale table results', async () => {
+  let resolveOld;
+  const oldTables = new Promise(resolve => { resolveOld = resolve; });
+  let owner = false;
+  const api = { signOut:async()=>({ok:true}), selectWaiter:async()=>({ok:true}), getMenu:async()=>({ok:false}), getTables:()=>owner ? Promise.resolve({ok:false}) : oldTables };
+  class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
+  const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  const app = new context.Demo(); app.componentDidMount();
+  app.setState({screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
+  app.loadDesktopData(); await app.signOut();
+  assert.equal(app.state.screen,'login'); assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0); assert.equal(app.state.tableId,null);
+  owner=true; await app.chooseWaiter({id:2,name:'owner'},''); await new Promise(setImmediate);
+  assert.equal(app.state.tableLoad,'error'); assert.equal(app.state.sections.length,0); assert.equal(app.state.items.length,0);
+  resolveOld({ok:true,data:[{id:1,area:'previous',orderId:4,openedAt:1}]}); await new Promise(setImmediate);
+  assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0);
+  app.setState({sections:[{label:'stale',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',qty:1,unit:100}]});
+  app.loadDesktopData(); await new Promise(setImmediate);
+  assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0);
 });

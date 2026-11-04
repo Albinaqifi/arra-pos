@@ -14,6 +14,9 @@ function usableAdministrator(db) {
   return db.prepare("SELECT 1 FROM local_users u WHERE u.active = 1 AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.permission = 'employees.view') AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.permission = 'employees.change') LIMIT 1").get();
 }
 function canManageTarget(db, actor, target) {
+  const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id = ?');
+  const actorScope = scope.get(actor)?.scope, targetScope = scope.get(target)?.scope;
+  if (!actorScope || !targetScope || (actor !== target && (actorScope !== 'waiter' || targetScope !== 'waiter'))) return false;
   const held = new Set(db.prepare('SELECT permission FROM user_permissions WHERE user_id = ?').all(actor).map(r => r.permission));
   return db.prepare('SELECT permission FROM user_permissions WHERE user_id = ?').all(target).every(r => PERMISSIONS.includes(r.permission) && held.has(r.permission));
 }
@@ -33,10 +36,12 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         return { ok: true, data: { users, grants, audit, credentialAudit, accountAudit, permissions: PERMISSIONS } };
       }
       if (req.action === 'create' && keys(req, ['action', 'username', 'password', 'pin']) && validUsername(req.username) && validPassword(req.password) && validPin(req.pin)) {
+        if (db.prepare('SELECT scope FROM financial_scopes WHERE user_id = ?').get(actor)?.scope !== 'waiter') return { ok: false, error: 'Access denied' };
         const [salt, hash] = credential(req.password); const [pinSalt, pinHash] = req.pin ? credential(req.pin) : [null, null];
         db.exec('BEGIN IMMEDIATE');
         try {
           const created = db.prepare('INSERT INTO local_users(username, salt, password_hash, pin_salt, pin_hash) VALUES (?, ?, ?, ?, ?)').run(req.username, salt, hash, pinSalt, pinHash);
+          db.prepare("INSERT INTO financial_scopes(user_id, scope) VALUES (?, 'waiter')").run(created.lastInsertRowid);
           recordAudit(db, actor, 'create', 'employee', created.lastInsertRowid, null, {});
           db.exec('COMMIT');
         } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -74,6 +79,7 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         db.exec('BEGIN IMMEDIATE');
         try {
           if (!db.prepare('SELECT 1 FROM local_users WHERE id = ?').get(req.id)) throw new Error('Missing account');
+          if (!canManageTarget(db, actor, req.id)) throw new Error('Target has restricted scope');
           const old = db.prepare('SELECT permission FROM user_permissions WHERE user_id = ?').all(req.id).map(r => r.permission);
           const actorGrants = db.prepare('SELECT permission FROM user_permissions WHERE user_id = ?').all(actor).map(r => r.permission);
           const changed = PERMISSIONS.filter(p => old.includes(p) !== req.permissions.includes(p));

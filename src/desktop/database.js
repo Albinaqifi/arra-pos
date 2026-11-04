@@ -192,6 +192,10 @@ const migrations = [
   CREATE TRIGGER payments_no_update BEFORE UPDATE ON payments BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;
   CREATE TRIGGER payments_no_delete BEFORE DELETE ON payments BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;
   CREATE TRIGGER payments_no_replace BEFORE INSERT ON payments WHEN EXISTS (SELECT 1 FROM payments WHERE id=NEW.id OR bill_id=NEW.bill_id) BEGIN SELECT RAISE(ABORT, 'Payments are immutable'); END;` },
+  { version: 22, sql: `CREATE TABLE financial_scopes (
+    user_id INTEGER PRIMARY KEY REFERENCES local_users(id),
+    scope TEXT NOT NULL CHECK(scope IN ('A','B','combined','waiter'))
+  ) STRICT;` },
 ];
 
 function migrate(db) {

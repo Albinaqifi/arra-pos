@@ -15,8 +15,8 @@ test('opening is persistent, idempotent, validated and reflected in table state'
   let db = openDatabase(dir); seedTables(db);
   const trusted = {}; let open, list;
   const register = () => {
-    registerOrders({ handle(_c, fn) { open = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
-    registerTables({ handle(_c, fn) { list = fn; } }, e => e === trusted, db, { currentUserId: () => 1 });
+    registerOrders({ handle(_c, fn) { open = fn; } }, e => e === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
+    registerTables({ handle(_c, fn) { list = fn; } }, e => e === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   };
   register();
   for (const request of [null, [], {}, { tableId: 0 }, { tableId: 1, extra: 1 }, { tableId: '1' }])

@@ -14,7 +14,7 @@ test('empty list, repeatable sample setup, and identities survive reopen', t => 
   let db = openDatabase(dir);
   let handler;
   const trusted = {};
-  const register = () => registerTables({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1 });
+  const register = () => registerTables({ handle(channel, fn) { assert.equal(channel, CHANNEL); handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   register();
   assert.deepEqual(handler(trusted, {}), { ok: true, data: [] });
   seedTables(db);

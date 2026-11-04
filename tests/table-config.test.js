@@ -18,7 +18,7 @@ test('configuration permissions, validation, persistence and open-order safeguar
     const allowed = e => e === trusted, session = { currentUserId: () => current, authenticatedUserId: () => current };
     registerTableConfig(ipc, allowed, db, session); registerOrders(ipc, allowed, db, session); registerTables(ipc, allowed, db, session);
   };
-  db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');"); register();
+  db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'admin', x'00', x'00'), (2, 'waiter', x'00', x'00'); INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users; INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');"); register();
   const area = { action: 'area', id: null, name: 'Patio', active: true };
   assert.equal(config(trusted, area).ok, false); current = 2; assert.equal(config(trusted, area).ok, false); current = 1;
   assert.equal(config({}, area).ok, false); assert.equal(config(trusted, { ...area, extra: 1 }).ok, false); assert.equal(config(trusted, area).ok, true);

@@ -1,0 +1,37 @@
+const { hasPermissions } = require('./permissions');
+const CHANNEL = 'arra:financial-visibility';
+const plain = x => x && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
+const fields = (x, names) => Reflect.ownKeys(x).length === names.length && names.every(n => Object.hasOwn(x, n));
+
+function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
+  ipcMain.handle(CHANNEL, (event, req) => {
+    if (!isAllowedSender(event) || !plain(req) ||
+        !((req.action === 'search' && fields(req, ['action', 'account']) && [null, 'A', 'B'].includes(req.account)) ||
+          (req.action === 'detail' && fields(req, ['action', 'paymentId']) && Number.isSafeInteger(req.paymentId) && req.paymentId > 0) ||
+          (req.action === 'aggregate' && fields(req, ['action', 'account']) && [null, 'A', 'B'].includes(req.account)))) return { ok: false };
+    try {
+      const id = session.currentUserId();
+      if (!id || session.authenticatedUserId() !== id || !hasPermissions(db, session, 'employees.view')) return { ok: false };
+      const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope;
+      if (!['A', 'B', 'combined'].includes(scope)) return { ok: false };
+      if (req.account && scope !== 'combined' && req.account !== scope) return { ok: false };
+      const account = req.account || (scope === 'combined' ? null : scope);
+      const where = account === null ? "p.account IN ('A','B')" : 'p.account = ?';
+      const args = account === null ? [] : [account];
+      if (req.action === 'search') {
+        const records = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, p.account FROM payments p WHERE ${where} ORDER BY p.id DESC`).all(...args);
+        return { ok: true, data: records };
+      }
+      if (req.action === 'aggregate') {
+        const totals = db.prepare(`SELECT count(*) AS count, COALESCE(sum(p.amount),0) AS total FROM payments p WHERE ${where}`).get(...args);
+        if (!Number.isSafeInteger(totals.count) || !Number.isSafeInteger(totals.total)) return { ok: false };
+        return { ok: true, data: totals };
+      }
+      const payment = db.prepare(`SELECT p.id, p.bill_id AS billId, p.paid_at AS paidAt, p.amount, p.method, p.account FROM payments p WHERE ${where} AND p.id=?`).get(...args, req.paymentId);
+      if (!payment) return { ok: false };
+      const lines = db.prepare('SELECT name, unit_price AS unitPrice, quantity, modifiers FROM bill_lines WHERE bill_id=? ORDER BY id').all(payment.billId).map(line => ({ ...line, modifiers: JSON.parse(line.modifiers) }));
+      return { ok: true, data: { payment, lines } };
+    } catch (_) { return { ok: false }; }
+  });
+}
+module.exports = { CHANNEL, registerFinancialVisibility };

@@ -19,7 +19,7 @@ function setup(t) {
   seedTables(db);
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'); INSERT INTO bills (id,order_id,actor_id,generated_at,total,fingerprint) VALUES (1,1,1,1,735,'snapshot');");
   let call;
-  registerPayments({ handle(_channel, fn) { call = fn; } }, () => true, db, { currentUserId: () => 1 });
+  registerPayments({ handle(_channel, fn) { call = fn; } }, () => true, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   return { dir, db, call: request => call({}, request) };
 }
@@ -48,7 +48,7 @@ test('simultaneous separate connections and subsequent retries cannot duplicate 
     const { openDatabase } = require(workerData.database);
     const { registerPayments } = require(workerData.payments);
     const db = openDatabase(workerData.dir);
-    let call; registerPayments({handle(_c, fn) {call = fn;}}, () => true, db, {currentUserId: () => 1});
+    let call; registerPayments({handle(_c, fn) {call = fn;}}, () => true, db, {currentUserId: () => 1, authenticatedUserId: () => 1});
     parentPort.postMessage('ready');
     Atomics.wait(new Int32Array(workerData.shared), 0, 0);
     const result = call({}, {billId: 1, method: 'card', account: 'A'});
@@ -82,7 +82,7 @@ test('failed simulated preparation printing does not prevent payment or erase hi
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open')");
-  const session = { currentUserId: () => 1 }, handlers = {};
+  const session = { currentUserId: () => 1, authenticatedUserId: () => 1 }, handlers = {};
   const ipc = { handle(channel, callback) { handlers[channel] = callback; } };
   for (const register of [registerOrderItems, registerPrintJobs, registerBills, registerPayments]) register(ipc, () => true, db, session);
   const orders = request => handlers['arra:order-items']({}, request);

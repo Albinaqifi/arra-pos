@@ -14,9 +14,9 @@ test('move preserves order and preparation history, rejects conflicts and is ret
   db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'),(3,2,'open'); UPDATE dining_tables SET active=0 WHERE id=4");
   let move, items, tables; const event = {}; let actor = 1;
   const register = () => {
-    registerMoveOrder({handle:(_,fn)=>move=fn}, e=>e===event, db, {currentUserId:()=>actor});
-    registerOrderItems({handle:(_,fn)=>items=fn}, e=>e===event, db, {currentUserId:()=>actor});
-    registerTables({handle:(_,fn)=>tables=fn}, e=>e===event, db, {currentUserId:()=>actor});
+    registerMoveOrder({handle:(_,fn)=>move=fn}, e=>e===event, db, {currentUserId: () => actor, authenticatedUserId: () => actor});
+    registerOrderItems({handle:(_,fn)=>items=fn}, e=>e===event, db, {currentUserId: () => actor, authenticatedUserId: () => actor});
+    registerTables({handle:(_,fn)=>tables=fn}, e=>e===event, db, {currentUserId: () => actor, authenticatedUserId: () => actor});
   }; register();
   items(event,{action:'add',orderId:1,productId:'qebapa'}); items(event,{action:'send',orderId:1,requestId:'send-1'});
   const before = items(event,{action:'list',orderId:1}).data;
@@ -39,7 +39,7 @@ test('move preserves order and preparation history, rejects conflicts and is ret
 test('failed audit rolls back the move and permits retry', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const db=authorizedDatabase(openDatabase(dir)); seedTables(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); CREATE TRIGGER fail_move BEFORE INSERT ON application_audit WHEN NEW.action='move' BEGIN SELECT RAISE(ABORT,'failure'); END");
-  let move; registerMoveOrder({handle:(_,fn)=>move=fn},()=>true,db,{currentUserId:()=>1});
+  let move; registerMoveOrder({handle:(_,fn)=>move=fn},()=>true,db,{currentUserId: () => 1, authenticatedUserId: () => 1});
   const req={orderId:1,sourceId:1,destinationId:2,requestId:'retry'};
   assert.equal(move({},req).ok,false); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);
   db.exec('DROP TRIGGER fail_move'); assert.equal(move({},req).ok,true); db.close();
