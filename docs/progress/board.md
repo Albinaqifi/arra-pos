@@ -29,7 +29,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-023 | Done | PR #32 merged as `0b20266`. |
 | S-024 | Done | PR #33 merged as `a479ffd`. |
 | S-025 | Done | PR #34 merged as `2bde866`. |
+| S-031 | In progress | Review and testing passed; awaiting PR and merge. |
 
 ## Current
 
-No story in progress.
+S-031 is in progress.
+
