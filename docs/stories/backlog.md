@@ -118,7 +118,7 @@ Status: proposed backlog, 2026-11-03. Each story is intended for one development
 **Outcome:** Reports, recoverability and real integrations are verified before live use. Provider and legal investigation can occur independently of earlier development.
 
 ### S-030 — Sales and payment reports
-**As an authorized admin**, I can review sales by period, account and method. **Depends on:** S-028 and S-029. **Acceptance:** filter by business day/date and allowed financial scope; show sales, corrections and refunds separately; corrected payments count once; results reconcile with underlying records and enforce scope on direct requests. Define final accounting terms before relying on figures (Q-15).
+**As an authorized admin**, I can review sales by period, account and method. **Depends on:** S-028. **Acceptance:** filter by business day/date and allowed financial scope; show sales and corrections separately; corrected payments count once; results reconcile with underlying records and enforce scope on direct requests. The owner directed proceeding without refunds; refund recording and reporting are out of scope. Define final accounting terms before relying on figures (Q-15).
 
 ### S-031 — Product, table and waiter reports
 **As an authorized admin**, I can inspect operational activity and product performance. **Depends on:** S-022 and S-024. **Acceptance:** display product quantity/value, table usage and waiter activity over a selected period from structured records; respect permissions and financial scope; definitions for multi-waiter/moved tables are labeled as provisional until resolved.

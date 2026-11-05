@@ -1,0 +1,46 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { registerFinancialVisibility } = require('../src/desktop/financial-visibility');
+
+test('business day and payment date select independently and failures stay closed', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-report-independent-'));
+  const db = openDatabase(dir);
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  db.exec(`INSERT INTO local_users(id, username, salt, password_hash) VALUES(1, 'sample', x'01', x'01');
+    INSERT INTO user_permissions VALUES(1, 'employees.view');
+    INSERT INTO financial_scopes VALUES(1, 'combined');
+    INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'a'),(2,2,1,1,200,'b');
+    INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,200,100,'cash','B');
+    INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(1,1,250,'sample');`);
+  const day1 = db.prepare('SELECT id FROM business_days WHERE closed_at IS NULL').get().id;
+  db.prepare("UPDATE business_days SET closed_at=300, closed_by=1, issues='[]' WHERE id=?").run(day1);
+  const day2 = Number(db.prepare('INSERT INTO business_days(opened_at) VALUES(300)').run().lastInsertRowid);
+  db.exec("INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(2,1,200,200,'card','A')");
+  let handler, user = 1;
+  registerFinancialVisibility({ handle: (_, fn) => handler = fn }, event => event.allowed, db,
+    { currentUserId: () => user, authenticatedUserId: () => user });
+  const call = req => handler({ allowed: true }, req);
+  const report = { action: 'report', from: null, to: null, dayId: day1, account: null, method: null };
+  const first = call(report).data;
+  assert.deepEqual(first.records.map(r => r.amount), [100]);
+  assert.deepEqual(first.groups.map(g => [g.account, g.method, g.total]), [['A', 'cash', 100]]);
+  assert.deepEqual(first.corrections.map(c => c.paymentId), [first.records[0].id]);
+  assert.deepEqual(call({ ...report, dayId: day2 }).data.records.map(r => r.amount), [200]);
+  assert.equal(call({ ...report, dayId: day2, method: 'cash' }).data.records.length, 0);
+  assert.deepEqual(call({ ...report, dayId: null, from: 200, to: 201 }).data.records.map(r => r.amount), [100, 200]);
+  assert.equal(call({ ...report, dayId: null, from: 201, to: 300 }).data.records.length, 0);
+  assert.deepEqual(call({ action: 'reportDays' }).data.map(d => d.id), [day2, day1]);
+  user = null;
+  assert.equal(call({ action: 'reportDays' }).ok, false);
+  assert.equal(call(report).ok, false);
+  user = 1;
+  db.exec('DROP TABLE financial_scopes');
+  assert.equal(call(report).ok, false);
+  assert.equal(call({ action: 'reportDays' }).ok, false);
+});
