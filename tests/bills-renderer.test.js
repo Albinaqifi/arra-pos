@@ -5,8 +5,8 @@ test('desktop bill review displays amounts and modifiers, decline leaves no bill
   const api = { bill: async request => { calls.push(request); return { ok: true, data: request.action === 'review' ? preview : { ...preview, id: 7 } }; } };
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
-  const context = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Bill = DesktopBill;', context);
+  const context = { React, ArraComponents: {}, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  vm.runInNewContext(require('./support/waiter-views')() + '\n' + fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Bill = DesktopBill;', context);
   const find = (n, predicate) => { if (!n || typeof n !== 'object') return null; if (predicate(n)) return n; for (const child of n.children || []) for (const c of Array.isArray(child) ? child : [child]) { const found = find(c, predicate); if (found) return found; } return null; };
   const button = (tree, text) => find(tree, n => n.type === 'button' && n.children.includes(text));
   const app = new context.Demo(); app.setState({ screen: 'order', tableId: 1, orders: { 1: { id: 5, openedAt: 1, rounds: 1, log: [] } } });
