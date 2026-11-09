@@ -1,3 +1,5 @@
+import { accessNotice, labeledInput } from './shared.js';
+
 export class TableConfig extends React.Component {
   constructor(props) { super(props); this.state = { areas: [], tables: [], error: '', area: '', table: '', areaId: '', capacity: '4', access: null }; }
   componentDidMount() { this.load(); }
@@ -11,8 +13,8 @@ export class TableConfig extends React.Component {
   }
   render() {
     const h = React.createElement, s = this.state;
-    if (s.access !== true) return h('main', null, h('button', {onClick:this.props.onBack}, 'Back to administration'), h('h1', null, 'Areas and tables'), s.access === null ? h('p', {role:'status'}, 'Loading areas and tables…') : h('p', {role:'alert'}, s.error, ' Check your access or sign in and select your own name.'));
-    const input = (label, value, change, type = 'text') => h('label', null, label, ' ', h('input', { type, value, onChange: e => change(e.target.value) }));
+    if (s.access !== true) return accessNotice({ title: 'Areas and tables', loading: s.access === null && 'Loading areas and tables…', error: s.error, guidance: ' Check your access or sign in and select your own name.', onBack: this.props.onBack });
+    const input = labeledInput;
     const areaSelect = (value, change) => h('label', null, 'Area ', h('select', { value, onChange: e => change(Number(e.target.value)) }, h('option', { value: '' }, 'Choose'), ...s.areas.filter(a => a.active || a.id === Number(value)).map(a => h('option', { key: a.id, value: a.id }, a.name))));
     return h('main', { style: { padding: 24, overflow: 'auto', fontFamily: 'system-ui' } },
       h('button', { onClick: this.props.onBack }, 'Back to administration'), h('h1', null, 'Areas and tables'),

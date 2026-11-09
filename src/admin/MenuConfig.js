@@ -1,3 +1,5 @@
+import { accessNotice, labeledInput } from './shared.js';
+
 export class MenuConfig extends React.Component {
   constructor(props) { super(props); this.state = { categories: [], products: [], groups: [], options: [], error: '', newCategory: '', newProduct: '', categoryId: '', price: '0', groupName: '', groupProduct: '', optionName: '', optionGroup: '', adjustment: '0', access: null }; }
   componentDidMount() { this.load(); }
@@ -5,10 +7,10 @@ export class MenuConfig extends React.Component {
   async save(request) { const r = await window.arra.menuConfig(request); if (r.ok) await this.load(); else this.setState({ error: r.error }); }
   render() {
     const h = React.createElement, s = this.state;
-    if (s.access !== true) return h('main', null, h('button', {onClick:this.props.onBack}, 'Back to administration'), h('h1', null, 'Menu management'), s.access === null ? h('p', {role:'status'}, 'Loading menu…') : h('p', {role:'alert'}, s.error, ' Check your access or sign in and select your own name.'));
+    if (s.access !== true) return accessNotice({ title: 'Menu management', loading: s.access === null && 'Loading menu…', error: s.error, guidance: ' Check your access or sign in and select your own name.', onBack: this.props.onBack });
     const numeric = value => String(value).trim() === '' ? NaN : Number(value);
     const update = (list, id, field, value) => this.setState({ [list]: s[list].map(x => x.id === id ? { ...x, [field]: value } : x) });
-    const field = (label, value, change, type = 'text') => h('label', null, label, ' ', h('input', { type, value, onChange: e => change(e.target.value) }));
+    const field = labeledInput;
     const active = (checked, change) => h('label', null, h('input', { type: 'checkbox', checked: !!checked, onChange: e => change(e.target.checked) }), ' Active');
     const categorySelect = (value, change, choices, none) => h('label', null, none ? 'Parent ' : 'Category ', h('select', { value: value || '', onChange: e => change(e.target.value || null) }, h('option', { value: '' }, none ? 'None' : 'Choose'), ...choices.map(c => h('option', { key: c.id, value: c.id }, c.name))));
     return h('main', { style: { padding: 24, overflow: 'auto', fontFamily: 'system-ui' } }, h('button', { onClick: this.props.onBack }, 'Back to administration'), h('h1', null, 'Menu management'),
