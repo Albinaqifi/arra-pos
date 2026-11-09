@@ -11,6 +11,7 @@ Install Node.js 22.12 or later and run the following once while connected to the
 ```sh
 npm ci
 npx install-electron --no
+npm run build
 ```
 
 After installation, launch the desktop app with:
@@ -19,7 +20,7 @@ After installation, launch the desktop app with:
 npm run desktop
 ```
 
-The installed Electron runtime, React and application files run locally; no internet connection or remote login is required to start or use the demo. Close the desktop window to exit. This is a development setup, not an installer for restaurant use.
+Run `npm run build` again after changing frontend source. The build writes local assets to `dist`; include the complete `dist` directory when packaging. Electron loads `dist/index.html` via file URLs and needs no development server. The installed Electron runtime, React and application files run locally; no internet connection or remote login is required to start or use the demo. Close the desktop window to exit. This is a development setup, not an installer for restaurant use.
 
 On startup, the desktop app creates and migrates `arra.sqlite` in Electron's writable `userData` directory. On Windows this is normally `%APPDATA%\arra-pos-waiter-demo\arra.sqlite` (the exact location depends on the operating system and user). It is separate from the application source. Keep this file when updating the app. If initialization fails, the app displays an error and exits without deleting the database. The browser demo does not open this database. Do not use real sales or sensitive data in this development build.
 
@@ -57,7 +58,7 @@ Run the database and bridge tests with `npm test` on Node.js 22.13 or later.
 
 ## Browser demo
 
-The original browser demo remains available with:
+After `npm run build`, the original browser demo remains available with:
 
 ```sh
 npm start
@@ -73,7 +74,7 @@ node server.js --port 3001
 
 Then open http://localhost:3001. The desktop app does not use this server or port.
 
-The React application is in `src/App.js`. React is included locally in `vendor`. The original design export is retained in `Main.dc.html`.
+The React application is in `src/App.js` and `src/AdminShell.jsx`. The build compiles JSX with esbuild and copies locally vendored React into `dist`. The original design export is retained in `Main.dc.html`.
 
 ### Financial visibility sample setup
 

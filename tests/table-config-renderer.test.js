@@ -13,6 +13,7 @@ test('manage tables navigation opens configuration and returns to refreshed grid
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
+  vm.runInNewContext(require('esbuild').buildSync({ entryPoints: [require.resolve('../src/AdminShell.jsx')], bundle: true, format: 'iife', globalName: 'ArraComponents', write: false }).outputFiles[0].text, context);
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Config = TableConfig;', context);
   const app = new context.Demo(); app.componentDidMount(); app.setState({ screen: 'tables' });
   const find = (node, predicate) => {

@@ -42,7 +42,7 @@ function createWindow() {
   window.on('closed', () => { if (mainWindow === window) { mainWindow = undefined; if (session) session.signOut(); } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
-  window.loadFile(path.join(__dirname, '../../index.html'));
+  window.loadFile(path.join(__dirname, '../../dist/index.html'));
 }
 
 app.whenReady().then(() => {

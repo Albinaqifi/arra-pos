@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "desktop": "electron .",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "build": "node build.js"
   },
   "main": "src/desktop/main.js",
   "devDependencies": {
-    "electron": "45.2.1"
+    "electron": "45.2.1",
+    "esbuild": "0.28.2"
   }
 }
