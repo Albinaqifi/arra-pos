@@ -46,23 +46,25 @@ test('configuration screens retain loading, denied and back controls', async () 
   }
 });
 
-test('shared labeled inputs keep their label, type, value and change behavior', async () => {
+test('configuration editors keep accessible labels, values and change behavior', async () => {
   const components = setup({
     tableConfig: async () => ({ ok: true, data: { areas: [], tables: [] } }),
     menuConfig: async () => ({ ok: true, data: { categories: [], products: [], groups: [], options: [] } }),
   });
-  for (const [component, label, stateKey, type] of [
-    ['TableConfig', 'New table number', 'table', 'number'],
-    ['MenuConfig', 'New category', 'newCategory', 'text'],
+  const table = new components.TableConfig({});
+  await table.load(); table.editTable(null);
+  const menu = new components.MenuConfig({});
+  await menu.load(); menu.edit('category', null);
+  for (const [page, label, stateKey, type] of [
+    [table, 'Table number', 'id', 'number'],
+    [menu, 'Name', 'name', 'text'],
   ]) {
-    const page = new components[component]({});
-    await page.load();
-    const field = find(page.render(), n => n.type === 'label' && n.children[0] === label);
+    const field = find(page.render(), n => n.type === 'label' && find(n, c => c.type === 'span' && c.children[0] === label));
     const input = find(field, n => n.type === 'input');
     assert.equal(input.props.type, type);
     assert.equal(input.props.value, '');
     input.props.onChange({ target: { value: '12' } });
-    assert.equal(page.state[stateKey], '12');
-    assert.equal(find(find(page.render(), n => n.type === 'label' && n.children[0] === label), n => n.type === 'input').props.value, '12');
+    assert.equal(page.state.editor[stateKey], '12');
+    assert.equal(find(find(page.render(), n => n.type === 'label' && find(n, c => c.type === 'span' && c.children[0] === label)), n => n.type === 'input').props.value, '12');
   }
 });
