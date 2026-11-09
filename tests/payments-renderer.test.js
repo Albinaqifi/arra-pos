@@ -5,7 +5,7 @@ test('test payment selection confirms card A or cash account and closes only aft
   class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/DesktopBill.js'), 'utf8') + '\n' + fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
   const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
   const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
   find(b.render(), 'Cash').props.onClick(); assert.equal(find(b.render(), 'Record full test payment and close table'), null);
@@ -22,14 +22,37 @@ test('unknown response locks the selection and retries it before allowing naviga
   class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/DesktopBill.js'), 'utf8') + '\n' + fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
   const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
   const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
   find(b.render(), 'Cash').props.onClick(); find(b.render(), 'Account B').props.onClick();
   await find(b.render(), 'Record full test payment and close table').props.onClick();
   assert.equal(find(b.render(), 'Close').props.disabled, true);
+  assert.ok(JSON.stringify(b.render()).includes('Retry the same selection to recover the result; do not repeat the separate terminal payment.'));
   assert.equal(find(b.render(), 'Card (Account A)').props.disabled, true);
   assert.equal(find(b.render(), 'Account A').props.disabled, true);
   await find(b.render(), 'Record full test payment and close table').props.onClick();
   assert.equal(JSON.stringify(calls[0]), JSON.stringify(calls[1])); assert.equal(paid, 1);
+});
+
+test('a later definite failure does not discard an earlier uncertain payment selection', async () => {
+  const calls = []; let paid = 0;
+  const responses = [{ ok: false, uncertain: true, error: 'Unknown' }, { ok: false, error: 'Unavailable' }, { ok: true }];
+  const api = { bill: async () => ({ ok: true, data: { id: 9, total: 100, lines: [] } }), payment: async r => { calls.push(r); return responses.shift(); } };
+  class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
+  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
+  const context = { React, window: { arra: api } };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/DesktopBill.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
+  const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
+  find(b.render(), 'Card (Account A)').props.onClick();
+  await b.pay(); await b.pay();
+  assert.equal(paid, 0);
+  assert.equal(find(b.render(), 'Close').props.disabled, true);
+  assert.equal(find(b.render(), 'Cash').props.disabled, true);
+  assert.ok(JSON.stringify(b.render()).includes('Retry the same selection to recover the result'));
+  await b.pay();
+  assert.equal(paid, 1);
+  assert.ok(calls.every(r => JSON.stringify(r) === JSON.stringify(calls[0])));
+  assert.equal(calls[0].method, 'card'); assert.equal(calls[0].account, 'A');
 });

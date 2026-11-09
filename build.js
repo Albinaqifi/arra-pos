@@ -20,6 +20,8 @@ for (const [source, destination] of [
   ['src/waiter/Order.js', 'waiter-order.js'],
   ['src/waiter/MoveTable.js', 'waiter-move-table.js'],
   ['src/waiter/MoveItems.js', 'waiter-move-items.js'],
+  ['src/waiter/Bill.js', 'waiter-bill.js'],
+  ['src/waiter/DesktopBill.js', 'waiter-desktop-bill.js'],
   ['src/styles.css', 'styles.css'],
   ['src/desktop-status.js', 'desktop-status.js'],
   ['vendor/react.js', 'react.js'],

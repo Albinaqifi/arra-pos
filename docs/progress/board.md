@@ -40,6 +40,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-044 | Done | PR #43 merged as `5c361df`; final independent review and offline Electron smoke passed. |
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
+| S-047 | In progress | Independent review and focused testing passed; PR pending. |
 
 ## Current
 
