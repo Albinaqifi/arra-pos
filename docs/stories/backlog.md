@@ -232,6 +232,13 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 ### S-052 — Verify local backup and restore
 **Goal:** Complete the feasible Windows interactive backup and isolated GUI restore exercise using sample data, without requiring removable storage. **Depends on:** existing S-032 backup implementation. **Acceptance:** a database-safe backup is created while the sample app is operating; restore into a clean isolated local location preserves known sample orders and users; failure is visible and the source remains untouched; document actual results and unresolved limitations. **Checks/review:** focused backup tests, interactive Windows procedure and independent review of any fixes. **Risk:** a local copy does not protect against loss of the PC; temporary plaintext and passphrase handling need care. This story does not satisfy S-032's separate protected copy or separate-device recovery requirement; complete those when storage is available and before live use.
 
+### S-053 — Retire moving selected items
+**Goal:** Let waiters move a whole order to another table without offering a separate action to move selected items. **Depends on:** S-019 and S-020. The owner requested this retirement for S-053.
+
+**Acceptance:** the waiter interface and retained demo do not offer selected-item moves; new selected-item moves cannot be initiated through the desktop application service or bridge, including direct requests; whole-order moves continue to work with their existing destination, authorization, retry and history safeguards. Existing orders and historical item-move audit and activity records remain intact and readable; preserve historical migrations. Remove obsolete active UI and service code where safe, retaining any code needed to interpret historical records.
+
+**Checks/review:** verify the waiter flow and whole-order moves, direct item-move requests, and an existing item-move history fixture; review data preservation and retry behavior. **Risk:** existing whole-order moves require a free destination, so this does not merge orders at occupied tables.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
