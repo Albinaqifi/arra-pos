@@ -29,7 +29,7 @@ Frontend stories can proceed while S-032's separate-device test and S-033's prov
 
 The owner needs to decide the waiter PIN policy, account recovery authority, who may change financial access (Q-01), business-day and reporting conventions, backup storage and recovery arrangements, and whether to retain the browser demo. Provider identity, equipment, supported interfaces, fiscal obligations and permitted outage procedures need provider and local professional input. Choose ordinary reversible implementation details without escalating them.
 
-S-037 has been reported complete by the owner, but the board and handoff currently record outstanding desktop verification. Before using it as a dependency or changing its status, reconcile the actual PR/merge and verification evidence; do not invent a result or rerun completed work without reason. This plan does not change that status.
+S-037 remains blocked with outstanding desktop verification, as recorded in the board and handoff. The owner authorized S-041–S-043 to proceed using the existing shell and will finish S-037 later. Do not represent S-037 as verified or Done without reconciling its actual evidence and completing its workflow.
 
 ## First story
 
