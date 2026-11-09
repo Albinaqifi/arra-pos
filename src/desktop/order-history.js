@@ -26,8 +26,8 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
       if (db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope !== 'waiter') return { ok: false };
     } catch (_) { return { ok: false }; }
     try {
-      if (req.orderId === null) return { ok: true, data: { orders: db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders ORDER BY id DESC').all() } };
-      const order = db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders WHERE id=?').get(req.orderId);
+      if (req.orderId === null) return { ok: true, data: { orders: db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders ORDER BY id DESC").all() } };
+      const order = db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders WHERE id=?").get(req.orderId);
       if (!order) return { ok: false };
       const items = db.prepare('SELECT i.id, i.name, i.quantity, i.status, COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id), 0) AS correctedQuantity FROM order_items i WHERE i.order_id=? ORDER BY i.id').all(req.orderId);
       const rows = db.prepare(`SELECT a.id, a.action, a.entity_type, a.entity_id, a.order_id, a.occurred_at, a.context, u.username AS actor FROM application_audit a JOIN local_users u ON u.id=a.actor_id

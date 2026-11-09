@@ -1,9 +1,10 @@
+const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
-    orders: db.prepare("SELECT id, table_id AS tableId FROM orders WHERE status='open' ORDER BY id").all(),
+    orders: db.prepare(`SELECT o.id, o.table_id AS tableId FROM orders o WHERE o.status='open' AND o.retired_empty = 0 AND NOT (${untouchedOrder('o')}) ORDER BY o.id`).all(),
     printJobs: db.prepare(`SELECT j.id, COALESCE(a.result, 'unattempted') AS result FROM print_jobs j
       LEFT JOIN print_attempts a ON a.id=(SELECT id FROM print_attempts WHERE job_id=j.id ORDER BY id DESC LIMIT 1)
       WHERE a.result IS NULL OR a.result != 'success' ORDER BY j.id`).all()

@@ -1,3 +1,4 @@
+const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:move-order';
@@ -18,14 +19,18 @@ function registerMoveOrder(ipcMain, isAllowedSender, db, session) {
         if (prior) {
           const context = JSON.parse(prior.context);
           const matches = prior.order_id === request.orderId && context.sourceId === request.sourceId && context.destinationId === request.destinationId &&
-            !!db.prepare("SELECT 1 FROM orders WHERE id = ? AND table_id = ? AND status = 'open'").get(request.orderId, request.destinationId);
+            !!db.prepare("SELECT 1 FROM orders WHERE id = ? AND table_id = ? AND status = 'open' AND retired_empty = 0").get(request.orderId, request.destinationId);
           db.exec('COMMIT');
           return matches ? { ok: true } : { ok: false, error: 'Invalid request' };
         }
-        const order = db.prepare("SELECT id FROM orders WHERE id = ? AND table_id = ? AND status = 'open'").get(request.orderId, request.sourceId);
+        const order = db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
+          WHERE o.id = ? AND o.table_id = ? AND o.status = 'open' AND o.retired_empty = 0 AND t.active = 1 AND COALESCE(a.active, 1) = 1`).get(request.orderId, request.sourceId);
+        // Retain the empty order and its audit when a move uses its table.
+        db.prepare(`UPDATE orders SET retired_empty = 1 WHERE table_id = ? AND status = 'open' AND retired_empty = 0
+          AND ${untouchedOrder('orders')}`).run(request.destinationId);
         const destination = db.prepare(`SELECT t.id FROM dining_tables t LEFT JOIN dining_areas a ON a.id = t.area_id
           WHERE t.id = ? AND t.active = 1 AND COALESCE(a.active, 1) = 1
-          AND NOT EXISTS (SELECT 1 FROM orders WHERE table_id = t.id AND status = 'open')`).get(request.destinationId);
+          AND NOT EXISTS (SELECT 1 FROM orders WHERE table_id = t.id AND status = 'open' AND retired_empty = 0)`).get(request.destinationId);
         if (!order || !destination) { db.exec('ROLLBACK'); return { ok: false, error: 'Order or destination unavailable' }; }
         db.prepare('UPDATE orders SET table_id = ? WHERE id = ?').run(request.destinationId, request.orderId);
         recordAudit(db, session.currentUserId(), 'move', 'order', request.orderId, request.orderId,

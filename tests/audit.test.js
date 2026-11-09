@@ -57,7 +57,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
   db.exec(`DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'orders.view'),(1,'orders.change');
-    INSERT INTO orders VALUES (1,1,100,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES (1,1,100,'open');
     INSERT INTO order_items (id,order_id,product_id,name,unit_price,quantity,status,note)
       VALUES (7,1,'qebapa','Old item',250,2,'pending','private note'), (8,1,'qebapa','Other item',230,1,'pending','');
     INSERT INTO order_item_modifiers VALUES (7,'Size','Large',30), (7,'Extra','Sauce',10), (8,'Size','Small',10);
@@ -65,7 +65,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
     DROP TRIGGER employee_permission_audit_no_replace;
     DROP TRIGGER employee_account_audit_no_replace;
     DROP TRIGGER employee_credential_audit_no_replace;
-    DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version = 14;`);
+    DROP TABLE print_attempts; DROP TABLE print_jobs; DROP TABLE simulated_printers; DROP TABLE preparation_ticket_items; DROP TABLE preparation_tickets; DROP TABLE preparation_rounds; ALTER TABLE menu_products DROP COLUMN destination; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); PRAGMA user_version = 14;`);
   db.close(); db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");

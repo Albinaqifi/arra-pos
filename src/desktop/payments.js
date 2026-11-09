@@ -17,10 +17,10 @@ function registerPayments(ipcMain, isAllowedSender, db, session) {
           if (existing.method !== request.method || existing.account !== request.account) throw Error('Bill already paid with a different selection');
           db.exec('COMMIT'); return { ok: true, data: { id: existing.id } };
         }
-        const bill = db.prepare("SELECT b.order_id AS orderId, b.total FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=? AND o.status='open'").get(request.billId);
+        const bill = db.prepare("SELECT b.order_id AS orderId, b.total FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=? AND o.status='open' AND o.retired_empty = 0").get(request.billId);
         if (!bill) throw Error('Bill unavailable');
         const id = db.prepare('INSERT INTO payments (bill_id, actor_id, paid_at, amount, method, account) VALUES (?, ?, ?, ?, ?, ?)').run(request.billId, session.currentUserId(), Date.now(), bill.total, request.method, request.account).lastInsertRowid;
-        db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open'").run(bill.orderId);
+        db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty = 0").run(bill.orderId);
         recordAudit(db, session.currentUserId(), 'record', 'payment', id, bill.orderId, {});
         db.exec('COMMIT'); return { ok: true, data: { id } };
       } catch (error) { db.exec('ROLLBACK'); throw error; }

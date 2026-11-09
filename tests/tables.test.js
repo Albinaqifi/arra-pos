@@ -21,8 +21,8 @@ test('empty list, repeatable sample setup, and identities survive reopen', t => 
   seedTables(db);
   const first = handler(trusted, {}).data.map(row => ({ ...row }));
   assert.equal(first.length, 16);
-  assert.deepEqual(first[0], { id: 1, area: 'Inside', orderId: null, openedAt: null });
-  assert.deepEqual(first[15], { id: 16, area: 'Terrace', orderId: null, openedAt: null });
+  assert.deepEqual(first[0], { id: 1, area: 'Inside', orderId: null, openedAt: null, untouched: 0 });
+  assert.deepEqual(first[15], { id: 16, area: 'Terrace', orderId: null, openedAt: null, untouched: 0 });
   db.close();
   db = openDatabase(dir);
   register();

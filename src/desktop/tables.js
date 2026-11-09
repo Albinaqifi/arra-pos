@@ -1,3 +1,4 @@
+const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:tables';
 
@@ -8,7 +9,7 @@ function registerTables(ipcMain, isAllowedSender, db, session) {
         Reflect.ownKeys(request).length !== 0) return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, 'tables.view')) return { ok: false, error: 'Access denied' };
     try {
-      return { ok: true, data: db.prepare("SELECT t.id, COALESCE(a.name, t.area) AS area, o.id AS orderId, o.opened_at AS openedAt FROM dining_tables t LEFT JOIN dining_areas a ON a.id = t.area_id LEFT JOIN orders o ON o.table_id = t.id AND o.status = 'open' WHERE t.active = 1 AND COALESCE(a.active, 1) = 1 ORDER BY t.id").all() };
+      return { ok: true, data: db.prepare(`SELECT t.id, COALESCE(a.name, t.area) AS area, o.id AS orderId, o.opened_at AS openedAt, CASE WHEN o.id IS NOT NULL AND ${untouchedOrder('o')} THEN 1 ELSE 0 END AS untouched FROM dining_tables t LEFT JOIN dining_areas a ON a.id = t.area_id LEFT JOIN orders o ON o.table_id = t.id AND o.status = 'open' AND o.retired_empty = 0 WHERE t.active = 1 AND COALESCE(a.active, 1) = 1 ORDER BY t.id`).all() };
     } catch (_) {
       return { ok: false, error: 'Tables unavailable' };
     }

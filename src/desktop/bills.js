@@ -4,7 +4,7 @@ const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:bill';
 
 function snapshot(db, orderId) {
-  const order = db.prepare("SELECT id, table_id AS tableId FROM orders WHERE id=? AND status='open'").get(orderId);
+  const order = db.prepare("SELECT id, table_id AS tableId FROM orders WHERE id=? AND status='open' AND retired_empty = 0").get(orderId);
   if (!order) throw Error('Order unavailable');
   if (db.prepare("SELECT 1 FROM order_items WHERE order_id=? AND status='pending'").get(orderId)) throw Error('Send or remove new items before billing');
   const items = db.prepare(`SELECT i.id, i.name, i.unit_price AS unitPrice, i.quantity,
