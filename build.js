@@ -15,6 +15,7 @@ esbuild.buildSync({
 });
 for (const [source, destination] of [
   ['index.html', 'index.html'],
+  ['demo.html', 'demo.html'],
   ['src/App.js', 'App.js'],
   ['src/waiter/Tables.js', 'waiter-tables.js'],
   ['src/waiter/Order.js', 'waiter-order.js'],
