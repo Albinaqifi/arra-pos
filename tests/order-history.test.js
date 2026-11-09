@@ -30,3 +30,11 @@ test('history restricts direct access and projects operational events without fi
   assert.equal(handlers['arra:order-history']({}, {orderId:1}).ok,false); actor=null; assert.equal(history({orderId:1}).ok,false); actor=1; auth=2; assert.equal(history({orderId:1}).ok,false); auth=1;
   db.exec("DELETE FROM user_permissions WHERE user_id=1 AND permission='employees.view'"); assert.equal(history({orderId:1}).ok,false);
 });
+test('history reports original, corrected and remaining quantities after moves', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-history-quantity-')); const db=authorizedDatabase(openDatabase(dir)); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true})}); seedTables(db); seedMenu(db);
+ db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open');");
+ const handlers={}, ipc={handle:(n,f)=>handlers[n]=f}, event={}, session={currentUserId:()=>1,authenticatedUserId:()=>1}; for (const register of [registerOrderItems,registerMoveItems,registerOrderHistory]) register(ipc,e=>e===event,db,session);
+ const item=r=>handlers['arra:order-items'](event,r), history=id=>handlers['arra:order-history'](event,{orderId:id}); item({action:'add',orderId:1,productId:'qebapa'}); item({action:'increment',orderId:1,itemId:1}); item({action:'send',orderId:1,requestId:'send'}); assert.equal(item({action:'correct',orderId:1,itemId:1,quantity:1,reason:'Sample',requestId:'first'}).ok,true);
+ assert.deepEqual({...history(1).data.items[0]}, {id:1,name:'Qebapa',quantity:2,status:'sent',correctedQuantity:1}); assert.equal(handlers['arra:move-items'](event,{orderId:1,sourceId:1,destinationId:2,destinationOrderId:null,itemIds:[1],requestId:'move'}).ok,true); assert.equal(history(1).data.items.length,0); assert.equal(history(2).data.items[0].correctedQuantity,1);
+ assert.equal(item({action:'correct',orderId:2,itemId:1,quantity:1,reason:'Sample',requestId:'second'}).ok,true); assert.equal(history(2).data.items[0].correctedQuantity,2);
+});

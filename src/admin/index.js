@@ -7,3 +7,5 @@ export { OrderHistory } from './OrderHistory.js';
 export { EmployeeConfig } from './EmployeeConfig.js';
 export { TableConfig } from './TableConfig.js';
 export { MenuConfig } from './MenuConfig.js';
+
+export { SentItemCorrection, installCorrectionFocus } from '../waiter/SentItemCorrection.js';
