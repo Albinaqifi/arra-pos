@@ -38,7 +38,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
 | S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
 | S-038 | Done | Review and sample desktop verification passed; PR #56 merged as `561efa6`. |
-| S-039 | In progress | Owner authorized proceeding while S-037 desktop verification remains outstanding. |
+| S-039 | Done | Independent review, focused tests and owner-reported desktop checks passed; PR #58 merged as `44e8044`. |
 | S-044 | Done | PR #43 merged as `5c361df`; final independent review and offline Electron smoke passed. |
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
