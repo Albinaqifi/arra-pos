@@ -37,7 +37,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-032 | Blocked | Interactive Windows backup and documented GUI recovery remain unverified. |
 | S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
 | S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
-| S-044 | Done | PR #43 merged; independent final review and focused testing passed. |
+| S-044 | Done | PR #43 merged as `5c361df`; final independent review and offline Electron smoke passed. |
 | S-045 | In progress | Independent review and focused testing passed; awaiting PR and merge. |
 
 ## Current
