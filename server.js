@@ -1,7 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = __dirname;
+const root = path.join(__dirname, 'dist');
 const portArg = process.argv.slice(2);
 if (portArg.length !== 0 && (portArg.length !== 2 || portArg[0] !== '--port' || !/^\d+$/.test(portArg[1]) || Number(portArg[1]) < 1 || Number(portArg[1]) > 65535)) {
   console.error('Usage: node server.js --port <1-65535>');

@@ -37,7 +37,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-032 | Blocked | Interactive Windows backup and documented GUI recovery remain unverified. |
 | S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
 | S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
+| S-044 | In progress | JSX and local build foundation. |
 
 ## Current
 
-S-032 is blocked pending interactive recovery verification. S-037 is blocked pending desktop verification.
+S-044 is in progress. S-032 is blocked pending interactive recovery verification. S-037 is blocked pending desktop verification.

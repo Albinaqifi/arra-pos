@@ -1,30 +1,3 @@
-const ADMIN_AREAS = [
-  { id: 'tableConfig', label: 'Areas and tables', description: 'Configure your dining areas and tables.' },
-  { id: 'menuConfig', label: 'Menu', description: 'Manage categories, products and choices.' },
-  { id: 'employeeConfig', label: 'Employees', description: 'Manage staff accounts and permissions.' },
-  { id: 'orderHistory', label: 'Order history', description: 'Review orders and operational activity.' },
-  { id: 'financialVisibility', label: 'Financial information', description: 'Review available payments and business days.' },
-  { id: 'operationalReports', label: 'Operational reports', description: 'Explore product, table and waiter activity.' }
-];
-
-function AdminShell({ screen, user, navigate, back, switchUser, children }) {
-  const h = React.createElement;
-  return h('div', {className:'admin-shell'},
-    h('header', {className:'admin-header'},
-      h('div', {className:'admin-brand'}, h('span', {className:'admin-brand-mark', 'aria-hidden':true}, 'A'), h('span', null, 'Arra ', h('small', null, 'Administration'))),
-      h('div', {className:'admin-identity'}, h('span', null, 'Using PC: ', h('strong', null, user || 'Unknown')), h('button', {className:'admin-button admin-button-light', onClick:switchUser}, 'Switch user'))),
-    h('div', {className:'admin-layout'},
-      h('aside', {className:'admin-sidebar'}, h('button', {className:'admin-return', onClick:back}, '← Back to tables'),
-        h('nav', {'aria-label':'Administration'}, h('p', {className:'admin-nav-label'}, 'WORKSPACE'),
-          h('button', {className:'admin-nav-item', 'aria-current':screen === 'admin' ? 'page' : undefined, onClick:()=>navigate('admin')}, 'Overview'),
-          ADMIN_AREAS.map(a => h('button', {key:a.id, className:'admin-nav-item', 'aria-current':screen === a.id ? 'page' : undefined, onClick:()=>navigate(a.id)}, a.label)))),
-      h('div', {className:'admin-content'}, screen === 'admin' ?
-        h('main', {className:'admin-overview'}, h('p', {className:'admin-eyebrow'}, 'ARRA POS / ADMINISTRATION'), h('h1', null, 'Administration'),
-          h('p', {className:'admin-intro'}, 'Choose an area to manage your restaurant or review its activity.'),
-          h('p', {className:'admin-access-note'}, 'Access depends on your signed-in account and selected identity. An area may be unavailable if you do not have permission.'),
-          h('div', {className:'admin-cards'}, ADMIN_AREAS.map(a => h('button', {key:a.id, className:'admin-card', onClick:()=>navigate(a.id)}, h('span', {className:'admin-card-icon', 'aria-hidden':true}, '↗'), h('strong', null, a.label), h('span', null, a.description), h('span', {className:'admin-card-link'}, 'Open area →'))))) : children)));
-}
-
 class OperationalReports extends React.Component {
   constructor(props) { super(props); this.state = { from:'', to:'', data:null, error:'', busy:false }; }
   async load(e) {
@@ -1462,7 +1435,7 @@ class WaiterDemo extends React.Component {
     if (this.state.screen === 'transferCorrection') return React.createElement(TransferCorrection, { onBack: () => this.switchWaiter() });
     const adminScreens = { operationalReports: OperationalReports, financialVisibility: FinancialVisibility, orderHistory: OrderHistory, employeeConfig: EmployeeConfig, menuConfig: MenuConfig, tableConfig: TableConfig };
     const AdminPage = adminScreens[this.state.screen];
-    if (this.state.screen === 'admin' || AdminPage) return React.createElement(AdminShell, {
+    if (this.state.screen === 'admin' || AdminPage) return React.createElement(ArraComponents.AdminShell, {
       screen: this.state.screen, user: this.state.waiter?.name,
       navigate: screen => this.setState({ screen }),
       back: () => { this.setState({ screen: 'tables' }); this.loadDesktopData(); },
