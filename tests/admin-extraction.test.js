@@ -36,7 +36,7 @@ test('switching immediately removes administration while a prior protected respo
   const React = {Component, Fragment:'fragment', createElement(type,props,...children){return {type,props:props||{},children};}};
   const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(),ctx);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
+  vm.runInNewContext(require('./support/waiter-views')() + fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
   const app=new ctx.Demo(); app.setState({screen:'tableConfig',adminAccess:true,waiter:{name:'Admin'}});
   const pageElement=app.render().children[0], page=new pageElement.type(pageElement.props);
   const pending=page.load(), switching=app.switchWaiter();
@@ -54,7 +54,7 @@ test('switch blocks selection and sign-out until clear and waiter loading finish
     class Component {constructor(props){this.props=props} setState(u){Object.assign(this.state,typeof u==='function'?u(this.state):u)}}
     const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children}}};
     const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
-    vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
+    vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(require('./support/waiter-views')() + fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
     const app=new ctx.Demo(); app.setState({screen:'admin',adminAccess:true,waiter:{name:'Admin'}});
     const pending=app.switchWaiter();
     app.pickWaiter({id:2,name:'Waiter',pin:true}); await app.chooseWaiter({id:2},''); await app.signOut();
@@ -73,7 +73,7 @@ test('employee mutation rechecks access and removes revoked or invalidated sessi
     class Component {constructor(props){this.props=props} setState(u){Object.assign(this.state,typeof u==='function'?u(this.state):u)}}
     const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children}}};
     const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
-    vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
+    vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(require('./support/waiter-views')() + fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',ctx);
     const app=new ctx.Demo(); app.componentDidMount(); app.setState({screen:'employeeConfig',adminAccess:true,waiter:{id:1,name:'Admin'}});
     const element=app.render().children[0], page=new element.type(element.props); await page.save({action:'permissions'});
     assert.equal(app.state.adminAccess,false); assert.equal(app.state.screen,result.signedIn?'tables':'login');
