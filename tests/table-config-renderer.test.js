@@ -23,13 +23,17 @@ test('manage tables navigation opens configuration and returns to refreshed grid
     }
     return null;
   };
-  const button = find(app.render(), node => node.type === 'button' && node.children.includes('Manage areas and tables'));
+  const button = find(app.render(), node => node.type === 'button' && node.children.includes('Administration →'));
   assert.ok(button); button.props.onClick();
-  const configElement = app.render(); assert.equal(configElement.type, context.Config);
+  let shell = app.render(); const overview = shell.type(shell.props);
+  find(overview, node => node.type === 'button' && JSON.stringify(node.children).includes('Areas and tables')).props.onClick();
+  shell = app.render(); const configElement = shell.children[0]; assert.equal(configElement.type, context.Config);
   const config = new configElement.type(configElement.props); config.componentDidMount();
   await new Promise(resolve => setImmediate(resolve)); assert.equal(configLoads, 1);
   assert.ok(find(config.render(), node => node.type === 'h1' && node.children.includes('Areas and tables')));
   configElement.props.onBack(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.state.screen, 'admin');
+  shell = app.render(); shell.props.back(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.state.screen, 'tables'); assert.equal(loads, 1);
-  assert.ok(find(app.render(), node => node.type === 'button' && node.children.includes('Manage areas and tables')));
+  assert.ok(find(app.render(), node => node.type === 'button' && node.children.includes('Administration →')));
 });

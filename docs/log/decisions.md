@@ -61,3 +61,9 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** Card terminal operates separately; investigate North Macedonian fiscal/provider requirements before real integration and live operation. Printer details do not block the foundation.
 - **Why:** Reflect the documented workflow without inventing provider or legal requirements.
 - **Revisit if:** Verified provider requirements or business needs change.
+
+## D-011 — No refund workflow
+- **Origin:** Owner direction, 2026-11-09.
+- **What:** The product will not provide a refund workflow; retire S-029. This supersedes earlier refund planning.
+- **Why:** The owner confirmed that there will be no refunds.
+- **Revisit if:** The owner changes this direction or verified fiscal obligations require further consideration. The legal treatment of reversals remains to be verified under Q-07.

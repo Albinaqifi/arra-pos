@@ -1,0 +1,23 @@
+1: pije 2: ushqim
+
+Salat, starters/antipasti, pica/pasta, ushqime kryesore, desert, menu per femije. - pak ma atmdhoja
+
+pijet:
+jo alhoholike, alkoholike
+
+
+print order -> redirect to kamarieret.
+
+move items only ta hekim
+
+time limit per cdo porosi.
+
+side bas - 'extra' tab (sos...)
+
+border ne menu items
+
+cmimi t hicet pi ntavolin - emri i kamarierit, numri, kohezgjatja.
+
+taken tables can be opened only by waiter who took it.
+
+print bill - bohet pages - redirect te kamarieret

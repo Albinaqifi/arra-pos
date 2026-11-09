@@ -32,8 +32,11 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-026 | Done | PR #37 merged as `6e6fd63`. |
 | S-027 | Done | PR #38 merged as `facea2f`. |
 | S-028 | Done | PR #39 merged as `f6db7ec`. |
-| S-031 | In progress | PR #36 open; integrating current main. |
+| S-031 | Done | PR #36 merged as `55e6f50`. |
+| S-032 | Blocked | Interactive Windows backup and documented GUI recovery remain unverified. |
+| S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
+| S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
 
 ## Current
 
-S-031 is in progress; PR #36 awaits review.
+S-032 is blocked pending interactive recovery verification. S-037 is blocked pending desktop verification.
