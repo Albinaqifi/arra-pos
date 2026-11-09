@@ -37,7 +37,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-032 | In progress | Local recovery worked; separate protected copy and other-machine test deferred until storage is available. |
 | S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
 | S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
-| S-038 | In progress | Owner authorized proceeding while S-037 desktop verification remains outstanding. |
+| S-038 | Done | Review and sample desktop verification passed; PR #56 merged as `561efa6`. |
 | S-044 | Done | PR #43 merged as `5c361df`; final independent review and offline Electron smoke passed. |
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
@@ -48,4 +48,4 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 ## Current
 
-The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner will test a separate protected copy on another machine later as part of S-032; this need not hold up unrelated development, but remains a prerequisite for S-036 and live use. S-037 is blocked pending desktop verification; the owner authorized S-038 to proceed without waiting for it.
+The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner will test a separate protected copy on another machine later as part of S-032; this need not hold up unrelated development, but remains a prerequisite for S-036 and live use. S-037 is blocked pending desktop verification.
