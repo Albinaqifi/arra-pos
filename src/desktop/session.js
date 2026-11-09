@@ -1,4 +1,5 @@
 const { randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
+const { hasPermissions } = require('./permissions');
 const OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const failure = () => ({ ok: false, error: 'Sign in failed' });
 const validUsername = value => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 128;
@@ -87,9 +88,22 @@ function createSession(db) {
 }
 function registerSession(ipcMain, isAllowedSender, db) {
   const session = createSession(db);
+  const adminAccess = () => {
+    const current = session.currentUserId(), authenticated = session.authenticatedUserId();
+    return current !== null && current === authenticated && ['tables.change', 'menu.change', 'employees.view', 'employees.change'].some(permission => hasPermissions(db, session, permission));
+  };
+  ipcMain.handle('arra:admin-access', (event, request) => {
+    if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype || Reflect.ownKeys(request).length !== 0) return { ok: false };
+    return { ok: true, signedIn: session.authenticatedUserId() !== null, selected: session.currentUserId() !== null, admin: adminAccess() };
+  });
   ipcMain.handle('arra:sign-in', (event, request) => isAllowedSender(event) ? session.signIn(request) : failure());
   ipcMain.handle('arra:waiters', (event, request) => isAllowedSender(event) && request && typeof request === 'object' && !Array.isArray(request) && Object.getPrototypeOf(request) === Object.prototype && Reflect.ownKeys(request).length === 0 ? session.listWaiters() : { ok: false });
-  ipcMain.handle('arra:select-waiter', (event, request) => isAllowedSender(event) ? session.selectWaiter(request) : { ok: false });
+  ipcMain.handle('arra:select-waiter', (event, request) => {
+    if (!isAllowedSender(event)) return { ok: false };
+    const result = session.selectWaiter(request);
+    if (!result.ok) return result;
+    return { ok: true, admin: adminAccess() };
+  });
   ipcMain.handle('arra:clear-waiter', (event, request) => isAllowedSender(event) && request && typeof request === 'object' && !Array.isArray(request) && Object.getPrototypeOf(request) === Object.prototype && Reflect.ownKeys(request).length === 0 ? session.clearWaiter() : { ok: false });
   ipcMain.handle('arra:sign-out', (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) ||

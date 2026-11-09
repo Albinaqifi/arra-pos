@@ -4,7 +4,8 @@ test('sales report controls select a period and clear stale data', async () => {
   class Component { constructor(props){this.props=props;} setState(x){Object.assign(this.state,x);} }
   const React={Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})};
   const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:{financialVisibility:async r=>{request=r;return response;}}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report=SalesReports;',context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report=ArraComponents.SalesReports;', context);
   const screen=new context.Report({}); screen.setState({period:'day',dayId:'3',account:'A',method:'cash'}); await screen.load({preventDefault(){}});
   assert.equal(request.dayId,3); assert.equal(request.from,null); assert.equal(request.account,'A'); assert.equal(request.method,'cash');
   const text=JSON.stringify(screen.render()); for (const value of ['200','Payment #1','Correction #1','B to A','Provisional']) assert.ok(text.includes(value),value);
@@ -18,7 +19,8 @@ test('closing a business day remounts the sales report so it reloads the new per
   class Component { constructor(props){this.props=props;} setState(x){Object.assign(this.state,x);} }
   const React={Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})};
   const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{confirm:()=>true,arra:{businessDays:async r=>r.action==='close'?{ok:true}:{ok:true,data:{days:[],issues:{orders:[],printJobs:[]}}}}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial=FinancialVisibility; this.Days=BusinessDays; this.Sales=SalesReports;',context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial=ArraComponents.FinancialVisibility; this.Days=ArraComponents.BusinessDays; this.Sales=ArraComponents.SalesReports;', context);
   const parent=new context.Financial({});
   const find=(node,type)=>!node || typeof node!=='object'?null:node.type===type?node:node.children.flatMap(x=>Array.isArray(x)?x:[x]).map(x=>find(x,type)).find(Boolean);
   assert.equal(find(parent.render(),context.Sales).props.key,0);

@@ -7,7 +7,7 @@ test('administration overview and sidebar navigate all six areas and identify th
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: {} }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
-  const component = require('esbuild').buildSync({ entryPoints: [require.resolve('../src/AdminShell.jsx')], bundle: true, format: 'iife', globalName: 'ArraComponents', write: false }).outputFiles[0].text;
+  const component = require('esbuild').buildSync({ entryPoints: [require.resolve('../src/admin/index.js')], bundle: true, format: 'iife', globalName: 'ArraComponents', write: false }).outputFiles[0].text;
   vm.runInNewContext(component, context);
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
   const findAll = (node, predicate) => {
@@ -17,7 +17,7 @@ test('administration overview and sidebar navigate all six areas and identify th
   const app = new context.Demo();
   const routes = [['Areas and tables', 'tableConfig'], ['Menu', 'menuConfig'], ['Employees', 'employeeConfig'], ['Order history', 'orderHistory'], ['Financial information', 'financialVisibility'], ['Operational reports', 'operationalReports']];
   for (const [label, screen] of routes) {
-    app.setState({screen: 'admin'});
+    app.setState({screen: 'admin', adminAccess: true});
     let shell = app.render(), view = shell.type(shell.props);
     const buttons = findAll(view, n => n.type === 'button' && JSON.stringify(n.children).includes(label));
     assert.equal(buttons.length, 2, label);

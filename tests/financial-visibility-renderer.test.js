@@ -11,7 +11,8 @@ test('financial screen displays scoped results and clears them on a failed refre
   class Component { constructor(props) {this.props=props;} setState(update) {Object.assign(this.state,update);} }
   const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children};}};
   const context={React,ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial = FinancialVisibility;',context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({onBack(){}}); await screen.load();
   assert.equal(screen.state.records[0].account,'A'); assert.equal(screen.state.totals.total,100);
   await screen.detail(1); assert.equal(screen.state.detail.lines[0].name,'Sample A');

@@ -4,7 +4,8 @@ test('configuration pages show loading and denied states without exposing editin
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const deny = async () => ({ ok: false, error: 'Access denied.' });
   const ctx = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: { employeeConfig: deny, tableConfig: deny, menuConfig: deny } }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.pages = [EmployeeConfig, TableConfig, MenuConfig];', ctx);
+  vm.runInNewContext(require('./support/admin-bundle')(), ctx);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.pages = [ArraComponents.EmployeeConfig, ArraComponents.TableConfig, ArraComponents.MenuConfig];', ctx);
   for (const Page of ctx.pages) {
     const page = new Page({onBack(){}});
     assert.match(JSON.stringify(page.render()), /Loading/);

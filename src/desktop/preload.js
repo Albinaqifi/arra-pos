@@ -52,9 +52,12 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     } catch (_) {}
     return { ok: false };
   },
+  async adminAccess() {
+    try { const r = await ipcRenderer.invoke('arra:admin-access', {}); return r?.ok ? { ok: true, signedIn: r.signedIn === true, selected: r.selected === true, admin: r.admin === true } : { ok: false }; } catch (_) { return { ok: false }; }
+  },
   async selectWaiter(id, pin) {
     if (!Number.isSafeInteger(id) || id <= 0 || typeof pin !== 'string') return { ok: false };
-    try { return (await ipcRenderer.invoke('arra:select-waiter', { id, pin }))?.ok ? { ok: true } : { ok: false }; } catch (_) { return { ok: false }; }
+    try { const result = await ipcRenderer.invoke('arra:select-waiter', { id, pin }); return result?.ok ? { ok: true, admin: result.admin === true } : { ok: false }; } catch (_) { return { ok: false }; }
   },
   async clearWaiter() {
     try { return (await ipcRenderer.invoke('arra:clear-waiter', {}))?.ok ? { ok: true } : { ok: false }; } catch (_) { return { ok: false }; }
