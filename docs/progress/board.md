@@ -36,7 +36,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-031 | Done | PR #36 merged as `55e6f50`. |
 | S-032 | In progress | Local recovery worked; separate protected copy and other-machine test deferred until storage is available. |
 | S-033 | Blocked | Public-source investigation recorded; provider identity, equipment and fiscal clarification outstanding. |
-| S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
+| S-037 | Blocked | Electron navigation, identity switching, denied access, resize and keyboard verification outstanding; owner authorized S-041–S-043 to proceed. |
 | S-038 | Done | Review and sample desktop verification passed; PR #56 merged as `561efa6`. |
 | S-039 | Done | Independent review, focused tests and owner-reported desktop checks passed; PR #58 merged as `44e8044`. |
 | S-040 | Done | Independent review, focused tests and owner-reported sample Electron checks passed; PR #60 merged as `7a2e5db`. |
@@ -50,4 +50,4 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 ## Current
 
-The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner will test a separate protected copy on another machine later as part of S-032; this need not hold up unrelated development, but remains a prerequisite for S-036 and live use. S-037 is blocked pending desktop verification.
+The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner cannot test on another machine now. S-032's separate protected copy and separate-device recovery remain unverified and a prerequisite for S-036 and live use, but do not hold up S-041–S-043 or S-037. S-037 remains blocked pending its own desktop verification on the available machine; the owner authorized S-041–S-043 to proceed and will finish S-037 later. Do not mark S-037 Done without its required evidence and workflow completion.
