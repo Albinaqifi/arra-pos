@@ -833,7 +833,7 @@ class WaiterDemo extends React.Component {
       return {
         name: p.name, price: money(p.price), hasOpts: p.groups.length > 0, hasBadge: b > 0, badge: String(b),
         aria: 'Add ' + p.name + ', ' + money(p.price) + (p.groups.length ? ', has options' : ''),
-        style: 'position:relative; min-height:116px; border-radius:18px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; gap:10px; text-align:left; background:' + c.tint + '; border:2px solid ' + (b > 0 ? c.color : 'transparent'),
+        style: 'position:relative; min-height:116px; border-radius:18px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; gap:10px; text-align:left; background:' + c.tint + '; border:3px solid ' + (b > 0 ? c.color : '#94A3B8'),
         priceStyle: 'font-size:16px; font-weight:800; color:' + c.color,
         add: () => this.addProduct(p.id)
       };
