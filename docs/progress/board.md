@@ -32,9 +32,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-026 | Done | PR #37 merged as `6e6fd63`. |
 | S-027 | Done | PR #38 merged as `facea2f`. |
 | S-028 | Done | PR #39 merged as `f6db7ec`. |
-| S-030 | In progress | Sales and correction reporting; owner directed proceeding without refunds. |
+| S-030 | Done | PR #40 merged as `19ccc65`; refunds deferred. |
 | S-031 | In progress | PR #36 open; integrating current main. |
 
 ## Current
 
-S-030 is in progress. S-031's recorded status awaits a post-merge update.
+S-031's recorded status awaits a post-merge update.
