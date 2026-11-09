@@ -1,0 +1,48 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const vm = require('node:vm');
+const { openDatabase } = require('../src/desktop/database');
+const { registerTableConfig } = require('../src/desktop/table-config');
+const { registerOrders } = require('../src/desktop/orders');
+const { registerTables } = require('../src/desktop/tables');
+
+test('floor editor and local services preserve orders and update the waiter grid', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-floor-flow-'));
+  const db = openDatabase(dir);
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'sample-admin', x'00', x'00'), (2, 'sample-waiter', x'00', x'00'); INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users; INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');");
+  let user = 1;
+  const trusted = {}, handlers = {}, ipc = { handle: (name, fn) => { handlers[name] = fn; } };
+  const session = { currentUserId: () => user, authenticatedUserId: () => user };
+  for (const register of [registerTableConfig, registerOrders, registerTables]) register(ipc, e => e === trusted, db, session);
+  const invoke = (channel, request) => handlers[channel](trusted, JSON.parse(JSON.stringify(request)));
+  class Component { constructor(props) { this.props = props; } setState(patch) { Object.assign(this.state, patch); } }
+  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
+  const ctx = { React, window: { arra: { tableConfig: async request => invoke('arra:table-config', request) } } };
+  vm.runInNewContext(require('./support/admin-bundle')() + '\nthis.Config = ArraComponents.TableConfig;', ctx);
+  const screen = new ctx.Config({ onBack() {} });
+  await screen.load();
+  screen.editArea(null); screen.setState({ editor: { ...screen.state.editor, name: 'Patio' } }); await screen.save();
+  const area = screen.state.areas[0]; assert.equal(area.name, 'Patio');
+  screen.editArea(area); screen.setState({ editor: { ...screen.state.editor, name: 'Garden' } }); await screen.save();
+  screen.editTable(null); screen.setState({ editor: { ...screen.state.editor, id: '23', areaId: String(area.id), capacity: '6' } }); await screen.save();
+  assert.equal(screen.state.notice, 'Table saved.');
+  let table = screen.state.tables[0]; assert.equal(table.id, 23); assert.equal(table.capacity, 6);
+  screen.editTable(table); screen.setState({ editor: { ...screen.state.editor, capacity: '8' } }); await screen.save();
+  assert.equal(invoke('arra:tables', {}).data[0].area, 'Garden');
+  assert.equal(invoke('arra:open-order', { tableId: 23 }).ok, true);
+  await screen.load(); table = screen.state.tables[0]; assert.equal(table.hasOrder, 1);
+  screen.editTable(table); screen.setState({ editor: { ...screen.state.editor, active: false } }); await screen.save();
+  assert.equal(screen.state.error, 'Table has an open order');
+  assert.equal(invoke('arra:tables', {}).data[0].orderId, 1);
+  assert.equal(db.prepare('SELECT table_id FROM orders WHERE id = 1').get().table_id, 23);
+  db.exec("UPDATE orders SET status = 'completed' WHERE id = 1");
+  await screen.save(); assert.equal(screen.state.notice, 'Table saved.');
+  assert.equal(invoke('arra:tables', {}).data.length, 0);
+  assert.equal(db.prepare('SELECT table_id FROM orders WHERE id = 1').get().table_id, 23);
+  user = 2; await screen.load(); assert.equal(screen.state.access, false);
+  assert.equal(invoke('arra:table-config', { action: 'area', id: null, name: 'Denied', active: true }).error, 'Access denied');
+});

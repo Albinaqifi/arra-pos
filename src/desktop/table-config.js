@@ -24,6 +24,7 @@ function registerTableConfig(ipcMain, isAllowedSender, db, session) {
         return { ok: true };
       }
       if (req.action === 'table' && keys(req, ['action', 'id', 'areaId', 'capacity', 'active', 'create']) && id(req.id) && id(req.areaId) && id(req.capacity) && req.capacity <= 1000 && typeof req.active === 'boolean' && typeof req.create === 'boolean') {
+        if (req.create && db.prepare('SELECT 1 FROM dining_tables WHERE id = ?').get(req.id)) return { ok: false, error: 'Table number already exists. Choose a different number.' };
         const area = db.prepare('SELECT name, active FROM dining_areas WHERE id = ?').get(req.areaId);
         if (!area || (req.active && !area.active)) return { ok: false, error: 'Area unavailable' };
         if (!req.active && db.prepare("SELECT 1 FROM orders WHERE table_id = ? AND status = 'open'").get(req.id)) return { ok: false, error: 'Table has an open order' };

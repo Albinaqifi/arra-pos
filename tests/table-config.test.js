@@ -25,7 +25,7 @@ test('configuration permissions, validation, persistence and open-order safeguar
   const areaId = config(trusted, { action: 'list' }).data.areas[0].id;
   const table = { action: 'table', id: 23, areaId, capacity: 6, active: true, create: true };
   for (const bad of [0, -1, 1.5, 1001]) assert.equal(config(trusted, { ...table, capacity: bad }).ok, false);
-  assert.equal(config(trusted, table).ok, true); assert.equal(config(trusted, table).ok, false);
+  assert.equal(config(trusted, table).ok, true); assert.equal(config(trusted, table).error, 'Table number already exists. Choose a different number.');
   assert.equal(open(trusted, { tableId: 23 }).ok, true);
   assert.equal(config(trusted, { ...table, create: false, active: false }).error, 'Table has an open order');
   assert.equal(config(trusted, { action: 'area', id: areaId, name: 'Patio', active: false }).error, 'Area has an open order');
