@@ -5,7 +5,8 @@ test('date controls remain disabled until the requested report returns', async (
   class Component { constructor(props) { this.props=props; } setState(update) { Object.assign(this.state,update); } }
   const React = {Component, Fragment:'fragment', createElement(type,props,...children) { return {type,props:props||{},children}; }};
   const context = {React,ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report = OperationalReports;', context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report = ArraComponents.OperationalReports;', context);
   const screen = new context.Report({onBack(){}});
   screen.setState({from:'2026-01-01',to:'2026-01-02'});
   const pending = screen.load({preventDefault(){}});
@@ -24,7 +25,8 @@ test('report displays the selected period results and provisional attribution, t
   class Component { constructor(props) { this.props=props; } setState(update) { Object.assign(this.state,update); } }
   const React = {Component, Fragment:'fragment', createElement(type,props,...children) { return {type,props:props||{},children}; }};
   const context = {React,ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:{operationalReports: async r => { request=r; return response; }}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report = OperationalReports;', context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Report = ArraComponents.OperationalReports;', context);
   const screen = new context.Report({onBack(){}});
   screen.setState({from:'2026-01-01',to:'2026-01-02'});
   await screen.load({preventDefault(){}});

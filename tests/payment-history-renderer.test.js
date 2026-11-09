@@ -17,7 +17,8 @@ test('history renders corrected and unpaid details, empty results, and failed re
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Financial = FinancialVisibility;', context);
+  vm.runInNewContext(require('./support/admin-bundle')(), context);
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({ onBack() {} });
   const text = node => Array.isArray(node) ? node.map(text).join(' ') : node && typeof node === 'object' ? text(node.children) : String(node || '');
   await screen.load();

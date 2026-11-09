@@ -6,7 +6,7 @@ const root = __dirname;
 const output = path.join(root, 'dist');
 fs.mkdirSync(output, { recursive: true });
 esbuild.buildSync({
-  entryPoints: [path.join(root, 'src/AdminShell.jsx')],
+  entryPoints: [path.join(root, 'src/admin/index.js')],
   bundle: true,
   format: 'iife',
   globalName: 'ArraComponents',

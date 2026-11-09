@@ -1,0 +1,1 @@
+module.exports = () => require('esbuild').buildSync({ entryPoints: [require.resolve('../../src/admin/index.js')], bundle: true, format: 'iife', globalName: 'ArraComponents', write: false }).outputFiles[0].text;
