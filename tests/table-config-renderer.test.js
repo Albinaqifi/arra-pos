@@ -14,7 +14,7 @@ test('manage tables navigation opens configuration and returns to refreshed grid
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Config = ArraComponents.TableConfig;', context);
+  vm.runInNewContext(require('./support/waiter-views')() + fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Config = ArraComponents.TableConfig;', context);
   const app = new context.Demo(); app.componentDidMount(); app.setState({ screen: 'tables', adminAccess: true });
   const find = (node, predicate) => {
     if (!node || typeof node !== 'object') return null;

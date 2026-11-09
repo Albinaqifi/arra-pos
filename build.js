@@ -16,6 +16,10 @@ esbuild.buildSync({
 for (const [source, destination] of [
   ['index.html', 'index.html'],
   ['src/App.js', 'App.js'],
+  ['src/waiter/Tables.js', 'waiter-tables.js'],
+  ['src/waiter/Order.js', 'waiter-order.js'],
+  ['src/waiter/MoveTable.js', 'waiter-move-table.js'],
+  ['src/waiter/MoveItems.js', 'waiter-move-items.js'],
   ['src/styles.css', 'styles.css'],
   ['src/desktop-status.js', 'desktop-status.js'],
   ['vendor/react.js', 'react.js'],
