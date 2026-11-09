@@ -246,6 +246,13 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Reproduce the reported desktop flow with sample data; verify the free status after returning and restarting, and verify that leaving a table with pending or sent items still preserves the order and shows Taken. Check the relevant service and renderer behavior, including a failed save or cleanup if applicable.
 
+### S-055 — Return to waiter selection after sending or completing a bill
+**Goal:** After a waiter successfully sends an order or completes the final payment step of a bill, show the waiter selection screen so the next user can select their name.
+
+**Acceptance:** A confirmed successful Send Order returns to waiter selection; a confirmed successful final bill/payment action also returns there. The next user can select a waiter normally. Keep the existing send, printing, billing, payment, permissions and retry behavior unchanged; the navigation change must not cause another send or payment. Failed or uncertain actions retain their existing error and recovery flow rather than navigating away. Preserve any existing warnings, including pending items or print issues, so they remain visible and actionable.
+
+**Checks/review:** Verify both successful paths with sample data and waiter reselection; check failed and uncertain responses, a send with a print issue or remaining pending items, and retry behavior. Confirm no duplicate send or payment and no change to existing financial rules.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.

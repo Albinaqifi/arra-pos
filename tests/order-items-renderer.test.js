@@ -89,6 +89,7 @@ test('modifier dialog locks during save, closes after success and remains retrya
 test('a replay after a lost send response warns that newly added items remain pending', async () => {
   let rows = [], round = false, first = true, nextId = 1, token = 0; const sends = [];
   const api = {
+    clearWaiter: async () => ({ok:true}), getWaiters: async () => ({ok:true,data:[{id:1,name:'Sample',hasPin:false}]}), selectWaiter: async () => ({ok:true}), printJobs: async () => ({ok:true,data:{jobs:[]}}),
     getMenu: async () => ({ok:true,data:{categories:[{id:'c',name:'Food'}],products:[{id:'p',categoryId:'c',name:'Dish',price:10}]}}),
     getTables: async () => ({ok:true,data:[{id:1,area:'Inside',orderId:3,openedAt:1}]}),
     openOrder: async () => ({ok:true,data:{id:3,tableId:1,openedAt:1}}),
@@ -107,6 +108,7 @@ test('a replay after a lost send response warns that newly added items remain pe
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.openTable(1);
   await app.addProduct('p'); await app.send(); await app.addProduct('p'); await app.send();
-  assert.equal(sends[0],sends[1]); assert.equal(app.state.items[1].status,'pending'); assert.match(app.state.toast.msg,/still pending; send again/);
-  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(app.state.items[1].status,'sent'); assert.match(app.state.toast.msg,/simulated printing/);
+  assert.equal(sends[0],sends[1]); assert.equal(app.state.screen,'waiters'); assert.match(app.state.handoffNotice,/still pending/);
+  await app.chooseWaiter({id:1,name:'Sample',color:'#123'},''); await app.openTable(1); assert.equal(app.state.items[1].status,'pending');
+  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(app.state.screen,'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.state.handoffNotice,/No physical ticket/);
 });
