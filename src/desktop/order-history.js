@@ -29,7 +29,7 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
       if (req.orderId === null) return { ok: true, data: { orders: db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders ORDER BY id DESC').all() } };
       const order = db.prepare('SELECT id, table_id AS tableId, opened_at AS openedAt, status FROM orders WHERE id=?').get(req.orderId);
       if (!order) return { ok: false };
-      const items = db.prepare('SELECT id, name, quantity, status FROM order_items WHERE order_id=? ORDER BY id').all(req.orderId);
+      const items = db.prepare('SELECT i.id, i.name, i.quantity, i.status, COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id), 0) AS correctedQuantity FROM order_items i WHERE i.order_id=? ORDER BY i.id').all(req.orderId);
       const rows = db.prepare(`SELECT a.id, a.action, a.entity_type, a.entity_id, a.order_id, a.occurred_at, a.context, u.username AS actor FROM application_audit a JOIN local_users u ON u.id=a.actor_id
         WHERE a.order_id IS NOT NULL ORDER BY a.occurred_at, a.id`).all();
       // Include the prior history of items moved into this order, including
