@@ -52,7 +52,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-052 | In progress | Local backup and GUI restore worked; story completion and PR pending. |
 | S-053 | Done | Independent review and focused tests passed; PR #69 merged as `116759f`. |
 | S-054 | Done | Independent review and focused checks passed; PR #71 merged as `ad6c827`. |
-| S-055 | In progress | Independent review and focused tests passed; PR pending. |
+| S-055 | In progress | Independent review and focused tests passed; PR #74 open. |
 
 ## Current
 
