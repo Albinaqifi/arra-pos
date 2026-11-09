@@ -114,3 +114,33 @@ input { font-family: inherit; }
 .finance-issues p { margin: 8px 0 0; color: #475569; } .finance-day { margin: 16px 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; } .finance-day h3 { margin: 0; }
 .finance-confirm { margin-top: 12px; padding: 16px; background: #fff7ed; color: #7c2d12; border: 1px solid #fed7aa; border-radius: 12px; }
 @media (max-width: 540px) { .history-panel { padding: 16px; } .admin-shell .history-order { flex-wrap: wrap; } }
+/* Operational reports and restricted transfer workspace */
+.report-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
+.admin-content .report-form label { display:flex; flex-direction:column; gap:6px; margin:0; }
+.report-table-wrap { overflow-x:auto; }
+.report-table { width:100%; border-collapse:collapse; text-align:left; }
+.report-table th { color:#64748b; font-size:13px; padding:12px; border-bottom:1px solid #cbd5e1; }
+.report-table td { padding:14px 12px; border-bottom:1px solid #e2e8f0; overflow-wrap:anywhere; }
+.report-table small { display:block; color:#64748b; margin-top:4px; }
+.reports-period { font-weight:700; color:#475569; margin-top:28px; }
+.transfer-shell { min-height:100vh; background:#f4f6fa; color:#0f172a; font-family:system-ui,sans-serif; }
+.transfer-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:16px 30px; background:white; border-bottom:1px solid #e2e8f0; }
+.transfer-content { max-width:1000px; padding:30px; margin:auto; }
+.transfer-content h1 { margin:12px 0; font-size:32px; }
+.transfer-content h2 { margin:8px 0; }
+.transfer-shell button { min-height:42px; padding:9px 15px; border:1px solid #cbd5e1; border-radius:10px; background:white; color:#1e293b; font:inherit; font-weight:700; cursor:pointer; }
+.transfer-shell button:hover { border-color:#2563eb; color:#1d4ed8; }
+.transfer-shell button:disabled { opacity:.55; cursor:default; }
+.transfer-shell :focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+.transfer-shell .transfer-primary { background:#1d4ed8; border-color:#1d4ed8; color:white; }
+.transfer-error { padding:12px 14px; border:1px solid #fecaca; border-radius:10px; background:#fef2f2; color:#991b1b; }
+.transfer-tables { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; }
+.transfer-shell .transfer-tables button { display:flex; flex-direction:column; align-items:flex-start; gap:6px; text-align:left; padding:16px; }
+.transfer-tables span, .transfer-tables small, .transfer-payments span { color:#64748b; font-weight:500; }
+.transfer-payments { list-style:none; margin:0; padding:0; }
+.transfer-payments li { display:flex; align-items:center; flex-wrap:wrap; gap:12px; padding:16px 0; border-top:1px solid #e2e8f0; }
+.transfer-payments li > div { flex:1; min-width:160px; }
+.transfer-payments span { display:block; margin-top:4px; }
+.transfer-reason { display:flex; flex-direction:column; gap:6px; margin:14px 0; font-weight:700; }
+.transfer-reason textarea { min-height:75px; max-width:100%; padding:10px; border:1px solid #94a3b8; border-radius:9px; font:inherit; resize:vertical; }
+@media (max-width:540px) { .transfer-header, .transfer-content { padding:16px; } .transfer-payments li { align-items:flex-start; } }

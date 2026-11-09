@@ -9,3 +9,4 @@ export { TableConfig } from './TableConfig.js';
 export { MenuConfig } from './MenuConfig.js';
 
 export { SentItemCorrection, installCorrectionFocus } from '../waiter/SentItemCorrection.js';
+export { TransferCorrection } from '../TransferCorrection.js';

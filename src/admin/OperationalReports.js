@@ -1,27 +1,102 @@
-export class OperationalReports extends React.Component {
-  constructor(props) { super(props); this.state = { from:'', to:'', data:null, error:'', busy:false }; }
+const h = React.createElement;
+class OperationalReports extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { from: "", to: "", data: null, error: "", busy: false };
+    this.sequence = 0;
+  }
+  componentWillUnmount() {
+    this.sequence++;
+  }
   async load(e) {
     e.preventDefault();
-    const from = new Date(this.state.from + 'T00:00:00').getTime();
-    const end = new Date(this.state.to + 'T00:00:00'); end.setDate(end.getDate() + 1);
+    if (this.state.busy) return;
+    const from = (/* @__PURE__ */ new Date(this.state.from + "T00:00:00")).getTime();
+    const end = /* @__PURE__ */ new Date(this.state.to + "T00:00:00");
+    end.setDate(end.getDate() + 1);
     const to = end.getTime();
-    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from >= to) return this.setState({ data:null, error:'Choose a valid date range.' });
-    this.setState({ busy:true, data:null, error:'' });
-    const r = await window.arra.operationalReports({ from, to, account:null });
-    this.setState(r.ok ? { data:r.data, error:'', busy:false } : { data:null, error:'Report unavailable.', busy:false });
+    if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from >= to) return this.setState({ data: null, error: "Choose a valid date range." });
+    const sequence = ++this.sequence;
+    this.setState({ busy: true, data: null, error: "" });
+    try {
+      const r = await window.arra.operationalReports({ from, to, account: null });
+      if (sequence === this.sequence) this.setState(r.ok ? { data: r.data, error: "", busy: false } : { data: null, error: "Report unavailable.", busy: false });
+    } catch (_) {
+      if (sequence === this.sequence) this.setState({ data: null, error: "Report unavailable.", busy: false });
+    }
   }
   render() {
-    const h = React.createElement, d = this.state.data;
-    const list = (rows, format) => rows.length ? h('ul', null, rows.map((row, i) => h('li', {key:i}, format(row)))) : h('p', null, 'No records in this period.');
-    return h('main', {style:{padding:24, height:'100vh', overflow:'auto'}},
-      h('button', {onClick:this.props.onBack}, 'Back to administration'), h('h1', null, 'Operational reports'),
-      h('p', null, 'Provisional: paid bills only, by local payment date and your financial scope. Values are bill snapshot amounts in minor units. Products are grouped by ID and show their latest paid snapshot name in the period. Unpaid orders are excluded.'),
-      h('p', null, 'Table usage counts the table on the paid order; moved tables are not attributed to earlier tables. Waiter activity counts the person who recorded payment, not every contributing waiter. Definitions are provisional.'),
-      h('form', {onSubmit:e => this.load(e)}, h('label', null, 'From ', h('input', {type:'date', required:true, disabled:this.state.busy, value:this.state.from, onChange:e => this.setState({from:e.target.value, data:null})})), ' ',
-        h('label', null, 'Through ', h('input', {type:'date', required:true, disabled:this.state.busy, value:this.state.to, onChange:e => this.setState({to:e.target.value, data:null})})), ' ', h('button', {disabled:this.state.busy}, 'Show report')),
-      this.state.error && h('p', {role:'alert'}, this.state.error, ' Check your access or sign in and select your own name.'), d && h('div', null,
-        h('h2', null, 'Products'), list(d.products, r => r.name + ' (ID: ' + r.productId + ') · quantity ' + r.quantity + ' · value ' + r.value),
-        h('h2', null, 'Tables'), list(d.tables, r => 'Table ' + r.tableId + ' · paid orders ' + r.count),
-        h('h2', null, 'Waiters'), list(d.waiters, r => r.actor + ' · payments recorded ' + r.count)));
+    const { from, to, data, error, busy } = this.state;
+    return h("main", { className: "reports" },
+      h("button", { onClick: this.props.onBack }, "\u2190 Back to administration"),
+      h("p", { className: "admin-eyebrow floor-eyebrow" }, "ADMINISTRATION / REPORTS"),
+      h("h1", null, "Operational reports"),
+      h("p", { className: "admin-intro" }, "Explore paid product, table and waiter activity for a local date range."),
+      h("section", { className: "history-panel" },
+      h("p", { className: "admin-eyebrow" }, "REPORT PERIOD"),
+      h("h2", null, "Choose dates"),
+      h("form", { className: "report-form", onSubmit: (e) => this.load(e) },
+      h("label", null, "From",
+      h("input", { type: "date", required: true, disabled: busy, value: from, onChange: (e) => this.setState({ from: e.target.value, data: null, error: "" }) })),
+      h("label", null, "Through",
+      h("input", { type: "date", required: true, disabled: busy, value: to, onChange: (e) => this.setState({ to: e.target.value, data: null, error: "" }) })),
+      h("button", { className: "floor-primary", disabled: busy }, busy ? "Loading\u2026" : "Show report"))),
+      h("div", { className: "floor-note" },
+      h("strong", null, "Provisional definitions"),
+      h("p", null, "Paid bills only, by local payment date and your financial scope. Values are bill snapshot amounts in minor units. Products are grouped by ID and show their latest paid snapshot name in the period. Unpaid orders are excluded."),
+      h("p", null, "Table usage counts the table on the paid order; moved tables are not attributed to earlier tables. Waiter activity counts the person who recorded payment, not every contributing waiter.")), busy &&
+      h("p", { role: "status", className: "admin-status" }, "Loading report\u2026"), error &&
+      h("p", { role: "alert" }, error, " ", error === "Report unavailable." && "Check your access or sign in and select your own name."), data &&
+      h("div", null,
+      h("p", { className: "reports-period" }, "Results \xB7 ", from, " through ", to),
+      h("section", { className: "history-panel" },
+      h("p", { className: "admin-eyebrow" }, "PAID BILL LINES"),
+      h("h2", null, "Products"), data.products.length ?
+      h("div", { className: "report-table-wrap" },
+      h("table", { className: "report-table" },
+      h("thead", null,
+      h("tr", null,
+      h("th", null, "Product"),
+      h("th", null, "Quantity"),
+      h("th", null, "Value \xB7 minor units"))),
+      h("tbody", null, data.products.map((r) =>
+      h("tr", { key: r.productId },
+      h("td", null,
+      h("strong", null, r.name),
+      h("small", null, "ID: ", r.productId)),
+      h("td", null, "quantity " + r.quantity),
+      h("td", null, "value " + r.value)))))) :
+      h("p", { className: "floor-empty" }, "No products in this period.")),
+      h("section", { className: "history-panel" },
+      h("p", { className: "admin-eyebrow" }, "PAID ORDERS"),
+      h("h2", null, "Tables"), data.tables.length ?
+      h("div", { className: "report-table-wrap" },
+      h("table", { className: "report-table" },
+      h("thead", null,
+      h("tr", null,
+      h("th", null, "Table"),
+      h("th", null, "Paid orders"))),
+      h("tbody", null, data.tables.map((r) =>
+      h("tr", { key: r.tableId },
+      h("td", null, "Table " + r.tableId),
+      h("td", null, r.count)))))) :
+      h("p", { className: "floor-empty" }, "No paid orders in this period.")),
+      h("section", { className: "history-panel" },
+      h("p", { className: "admin-eyebrow" }, "PAYMENT ACTIVITY"),
+      h("h2", null, "Waiters"), data.waiters.length ?
+      h("div", { className: "report-table-wrap" },
+      h("table", { className: "report-table" },
+      h("thead", null,
+      h("tr", null,
+      h("th", null, "Recorded by"),
+      h("th", null, "Payments recorded"))),
+      h("tbody", null, data.waiters.map((r, i) =>
+      h("tr", { key: i },
+      h("td", null, r.actor),
+      h("td", null, r.count)))))) :
+      h("p", { className: "floor-empty" }, "No payments recorded in this period."))));
   }
 }
+export {
+  OperationalReports
+};
