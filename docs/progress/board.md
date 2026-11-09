@@ -42,12 +42,6 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
 | S-047 | Done | Independent review and focused testing passed; PR #49 merged as `4b8ad6c`. |
-<<<<<<< Updated upstream
-
-## Current
-
-S-032 is blocked pending interactive recovery verification. S-037 is blocked pending desktop verification.
-=======
 | S-048 | Done | Independent review and focused testing passed; PR #51 merged as `9e148f4`. |
 | S-049 | Done | Independent review, focused tests and sample desktop checks passed; PR #53 merged as `4ad6604`. |
 | S-052 | In progress | Local backup and GUI restore worked; story completion and PR pending. |
@@ -55,4 +49,3 @@ S-032 is blocked pending interactive recovery verification. S-037 is blocked pen
 ## Current
 
 The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner will test a separate protected copy on another machine later as part of S-032; this need not hold up unrelated development, but remains a prerequisite for S-036 and live use. S-037 is blocked pending desktop verification; S-038 is blocked on S-037.
->>>>>>> Stashed changes

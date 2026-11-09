@@ -64,7 +64,7 @@ After `npm run build`, the original browser demo remains available with:
 npm start
 ```
 
-Open http://localhost:3000. Browser sign-in accepts any nonempty values and is simulated. Pick a waiter; for a waiter with a PIN, enter any four digits. Waiter selection is simulated only in the browser demo.
+Open http://localhost:3000, which serves the separate `demo.html` entry point. It shows a persistent browser-demo banner; all its data and actions are simulated and disappear on reload. The desktop entry point requires its local bridge and stops with an error if it is unavailable. Browser sign-in accepts any nonempty values and is simulated. Pick a waiter; for a waiter with a PIN, enter any four digits. Waiter selection is simulated only in the browser demo.
 
 If port 3000 is in use, choose another available port, for example:
 

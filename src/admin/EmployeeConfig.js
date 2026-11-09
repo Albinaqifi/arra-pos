@@ -1,3 +1,5 @@
+import { accessNotice } from './shared.js';
+
 export class EmployeeConfig extends React.Component {
   constructor(props) { super(props); this.state = { users: [], grants: [], audit: [], credentialAudit: [], accountAudit: [], permissions: [], selected: null, error: '', access: null }; }
   componentDidMount() { this.load(); }
@@ -14,7 +16,7 @@ export class EmployeeConfig extends React.Component {
   }
   render() {
     const h = React.createElement, selected = this.state.users.find(u => u.id === this.state.selected);
-    if (this.state.access !== true) return h('main', null, h('button', {onClick:this.props.onBack}, 'Back to administration'), h('h1', null, 'Employees and permissions'), this.state.access === null ? h('p', {role:'status'}, 'Loading employees…') : h('p', {role:'alert'}, this.state.error, ' Sign in with your own administrator account and select your own name.'));
+    if (this.state.access !== true) return accessNotice({ title: 'Employees and permissions', loading: this.state.access === null && 'Loading employees…', error: this.state.error, guidance: ' Sign in with your own administrator account and select your own name.', onBack: this.props.onBack });
     const granted = selected ? this.state.grants.filter(g => g.userId === selected.id).map(g => g.permission) : [];
     const submit = fn => e => { e.preventDefault(); fn(e.currentTarget); };
     return h('main', { style: { padding: 24, overflow: 'auto', height: '100vh', boxSizing: 'border-box' } },
