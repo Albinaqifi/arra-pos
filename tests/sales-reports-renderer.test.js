@@ -24,8 +24,8 @@ test('closing a business day remounts the sales report so it reloads the new per
   const parent=new context.Financial({});
   const find=(node,type)=>!node || typeof node!=='object'?null:node.type===type?node:node.children.flatMap(x=>Array.isArray(x)?x:[x]).map(x=>find(x,type)).find(Boolean);
   assert.equal(find(parent.render(),context.Sales).props.key,0);
-  const child=new context.Days(find(parent.render(),context.Days).props); await child.close(1);
+  const child=new context.Days(find(parent.render(),context.Days).props); child.setState({confirmId:1}); await child.close(1);
   assert.equal(find(parent.render(),context.Sales).props.key,1);
-  context.window.arra.businessDays=async()=>({ok:false}); await child.close(2);
+  context.window.arra.businessDays=async()=>({ok:false}); child.setState({confirmId:2}); await child.close(2);
   assert.equal(find(parent.render(),context.Sales).props.key,1);
 });
