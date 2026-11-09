@@ -39,7 +39,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-037 | Blocked | Electron navigation, identity switching and denied-access verification outstanding. |
 | S-038 | Done | Review and sample desktop verification passed; PR #56 merged as `561efa6`. |
 | S-039 | Done | Independent review, focused tests and owner-reported desktop checks passed; PR #58 merged as `44e8044`. |
-| S-040 | In progress | Independent review, focused tests and owner-reported sample Electron checks passed; PR pending merge. S-037 desktop verification remains outstanding. |
+| S-040 | Done | Independent review, focused tests and owner-reported sample Electron checks passed; PR #60 merged as `7a2e5db`. |
 | S-044 | Done | PR #43 merged as `5c361df`; final independent review and offline Electron smoke passed. |
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
