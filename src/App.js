@@ -95,7 +95,7 @@ class WaiterDemo extends React.Component {
         });
         const orders = {};
         result.data.forEach(table => {
-          if (table.orderId !== null) orders[table.id] = { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [] };
+          if (table.orderId !== null) orders[table.id] = { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [], untouched: table.untouched === true };
         });
         this.setState({ sections, orders, tableLoad: 'ready' });
       }).catch(() => { if (this._mounted && generation === this._dataGeneration) this.setState({ tableLoad: 'error', sections: [], orders: {}, items: [], tableId: null, modal: null }); });
@@ -367,7 +367,7 @@ class WaiterDemo extends React.Component {
         this.mut(n => {
           const old = n.orders[id];
           n.orders[id] = { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0,
-            log: old?.log || [], itemsLoaded: old?.id === result.data.id && !!old.itemsLoaded };
+            log: old?.log || [], untouched: result.data.untouched === true, itemsLoaded: old?.id === result.data.id && !!old.itemsLoaded };
         });
         const items = await desktopBridge.orderItems('list', result.data.id);
         if (!this._mounted) return;
@@ -403,14 +403,24 @@ class WaiterDemo extends React.Component {
     const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
     if (!orderId) return;
     this._itemBusy = true;
+    // A lost response may hide a committed add; remain conservative until refreshed.
+    if (action === 'add') this.mut(n => { n.orders[tableId].untouched = false; });
     try {
       const result = await desktopBridge.orderItems(action, orderId, value);
       if (!this._mounted) return;
       if (!result.ok) { this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); return false; }
-      this.mut(n => this.replaceDesktopItems(n, tableId, result.data.items));
+      this.mut(n => { this.replaceDesktopItems(n, tableId, result.data.items); if (action === 'add') n.orders[tableId].untouched = false; });
+      if ((action === 'remove' || action === 'decrement') && result.data.items.length === 0) await this.refreshDesktopAvailability(tableId, orderId);
       return result.data;
     } catch (_) { if (this._mounted) this.mut(n => this.toast(n, 'Could not save order items. Try again.', 'err')); }
     finally { this._itemBusy = false; }
+  }
+  async refreshDesktopAvailability(tableId, orderId) {
+    let tables;
+    try { tables = await desktopBridge.getTables(); } catch (_) { tables = null; }
+    if (!this._mounted) return;
+    const table = tables?.ok && Array.isArray(tables.data) ? tables.data.find(t => t.id === tableId && t.orderId === orderId) : null;
+    if (table) this.mut(n => { if (n.orders[tableId]?.id === orderId) n.orders[tableId].untouched = table.untouched === true; });
   }
   addProduct(pid) {
     if (desktopBridge && !this.menu().byId[pid]?.groups.length) return this.changeDesktopItems('add', pid);
@@ -567,6 +577,8 @@ class WaiterDemo extends React.Component {
       try {
         const result = await desktopBridge.orderItems('correct', orderId, { itemId: m.itemId, quantity: m.qty, reason, requestId });
         if (!this._mounted) return;
+        if (result.ok) await this.refreshDesktopAvailability(tableId, orderId);
+        if (!this._mounted) return;
         this.mut(n => {
           if (result.ok) { this.replaceDesktopItems(n, tableId, result.data.items); n.modal = null; this.toast(n, 'Correction saved. Tell preparation staff in person.'); }
           else if (result.rejected) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; n.modal.error = 'Correction rejected. Check authorization and quantity.'; }
@@ -596,14 +608,14 @@ class WaiterDemo extends React.Component {
     if (desktopBridge) {
       if (this._itemBusy || this.state.modal?.saving) return;
       const from = this.state.tableId, to = this.state.modal?.dest, orderId = this.state.orders[from]?.id;
-      if (!orderId || !to || to === from || this.state.orders[to]) return;
+      if (!orderId || !to || to === from || (this.state.orders[to] && !this.state.orders[to].untouched)) return;
       this._moveRequests = this._moveRequests || {};
       const key = [orderId, from, to].join(':');
       const token = this._moveRequests[key] || (this._moveRequests[key] = crypto.randomUUID());
       this._itemBusy = true;
       this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
       try {
-        let result;
+        let result, reconciledTable;
         try { result = await desktopBridge.moveOrder(orderId, from, to, token); } catch (_) { result = { ok: false }; }
         if (!this._mounted) return;
         if (!result.ok) {
@@ -615,12 +627,13 @@ class WaiterDemo extends React.Component {
             return;
           }
           const current = tables.data.find(t => t.orderId === orderId);
+          reconciledTable = current;
           if (current?.id !== to) {
             this.mut(n => {
               const previous = n.orders;
               n.orders = {};
               for (const table of tables.data) if (table.orderId !== null)
-                n.orders[table.id] = Object.values(previous).find(o => o.id === table.orderId) || { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [] };
+                n.orders[table.id] = Object.values(previous).find(o => o.id === table.orderId) || { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [], untouched: table.untouched === true };
               if (current?.id === from) {
                 n.modal.saving = false; n.modal.unresolved = false; n.modal.dest = null;
                 n.modal.error = 'Order was not moved. Check the destination and try again.';
@@ -634,11 +647,13 @@ class WaiterDemo extends React.Component {
         }
         delete this._moveRequests[key];
         this.mut(n => {
-          n.orders[to] = n.orders[from]; delete n.orders[from];
+          n.orders[to] = n.orders[from]; n.orders[to].untouched = false; delete n.orders[from];
           n.items.forEach(i => { if (i.tableId === from) i.tableId = to; });
           n.tableId = to; n.modal = null;
           this.toast(n, 'Everything moved to Table ' + to + '. Table ' + from + ' is free now.');
         });
+        if (reconciledTable) this.mut(n => { if (n.orders[to]?.id === orderId) n.orders[to].untouched = reconciledTable.untouched === true; });
+        else await this.refreshDesktopAvailability(to, orderId);
       } finally { this._itemBusy = false; }
       return;
     }
@@ -763,7 +778,7 @@ class WaiterDemo extends React.Component {
     v.sections = s.sections.map(sec => ({
       label: sec.label,
       tables: sec.ids.map(id => {
-        const o = s.orders[id]; const tk = !!o; if (tk) taken++; else free++;
+        const o = s.orders[id]; const tk = !!o && !o.untouched; if (tk) taken++; else free++;
         const figuresKnown = !desktopBridge || !tk || !!o.itemsLoaded;
         const its = s.items.filter(i => i.tableId === id);
         const unsent = its.filter(i => i.status === 'pending').reduce((a, i) => a + i.qty, 0);
@@ -980,7 +995,7 @@ class WaiterDemo extends React.Component {
       v.modalTitle = 'Move the whole table';
       v.modalSub = md.error || ('Everything on Table ' + tid + ' moves to the table you pick. Table ' + tid + ' becomes free. Only free tables can be picked, so no order gets overwritten.');
       v.mtTables = s.sections.flatMap(sec => sec.ids).filter(id => id !== tid).map(id => {
-        const tk = !!s.orders[id]; const on = md.dest === id;
+        const tk = !!s.orders[id] && !s.orders[id].untouched; const on = md.dest === id;
         return {
           num: String(id), sub: tk ? 'Taken' : 'Free', disabled: tk,
           aria: 'Table ' + id + (tk ? ', taken, not available' : ', free'),

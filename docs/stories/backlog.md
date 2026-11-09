@@ -239,6 +239,13 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** verify the waiter flow and whole-order moves, direct item-move requests, and an existing item-move history fixture; review data preservation and retry behavior. **Risk:** existing whole-order moves require a free destination, so this does not merge orders at occupied tables.
 
+### S-054 — Keep an untouched table free after leaving it
+**Bug:** Select a free table, then return to the table list without adding or sending anything. The table appears orange and Taken even though no order was made.
+
+**Expected:** The untouched table remains Free when returning to the list, including after reopening the app. A table with an actual order remains Taken and its items and history are preserved. Reopening an untouched table should work normally without accumulating duplicate active orders.
+
+**Checks/review:** Reproduce the reported desktop flow with sample data; verify the free status after returning and restarting, and verify that leaving a table with pending or sent items still preserves the order and shows Taken. Check the relevant service and renderer behavior, including a failed save or cleanup if applicable.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.

@@ -222,6 +222,9 @@ const migrations = [
   CREATE TRIGGER payment_corrections_no_update BEFORE UPDATE ON payment_account_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;
   CREATE TRIGGER payment_corrections_no_delete BEFORE DELETE ON payment_account_corrections BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;
   CREATE TRIGGER payment_corrections_no_replace BEFORE INSERT ON payment_account_corrections WHEN EXISTS (SELECT 1 FROM payment_account_corrections WHERE id=NEW.id OR payment_id=NEW.payment_id) BEGIN SELECT RAISE(ABORT, 'Corrections are immutable'); END;` },
+  { version: 25, sql: `ALTER TABLE orders ADD COLUMN retired_empty INTEGER NOT NULL DEFAULT 0 CHECK(retired_empty IN (0,1));
+  DROP INDEX one_open_order_per_table;
+  CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open' AND retired_empty = 0;` },
 ];
 
 function migrate(db) {

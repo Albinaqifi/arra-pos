@@ -22,7 +22,8 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
     try {
       db.exec('BEGIN IMMEDIATE');
       try {
-        if (!db.prepare("SELECT id FROM orders WHERE id = ? AND status = 'open'").get(request.orderId)) throw Error('Invalid order');
+        if (!db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
+          WHERE o.id = ? AND o.status = 'open' AND o.retired_empty = 0 AND t.active = 1 AND COALESCE(a.active, 1) = 1`).get(request.orderId)) throw Error('Invalid order');
         if (request.action === 'correct') {
           const prior = db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId);
           if (prior) {

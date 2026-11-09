@@ -22,7 +22,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     CREATE TABLE menu_products (id TEXT PRIMARY KEY NOT NULL, category_id TEXT NOT NULL REFERENCES menu_categories(id), name TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;
     CREATE TABLE user_permissions (user_id INTEGER NOT NULL REFERENCES local_users(id), permission TEXT NOT NULL, PRIMARY KEY(user_id, permission)) STRICT;
     INSERT INTO dining_tables VALUES (12, 'Inside'), (19, 'Terrace');
-    INSERT INTO orders VALUES (7, 12, 123, 'open'), (8, 19, 100, 'completed');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES (7, 12, 123, 'open'), (8, 19, 100, 'completed');
     INSERT INTO local_users (id, username, salt, password_hash) VALUES (3, 'sample-admin', x'00', x'00'), (4, 'sample-waiter', x'00', x'00');
     INSERT INTO user_permissions VALUES (3, 'tables.view'), (3, 'orders.view'), (3, 'orders.change'), (4, 'tables.view');
     DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; PRAGMA user_version = 10;`);
@@ -30,7 +30,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
   db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 24);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 25);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);

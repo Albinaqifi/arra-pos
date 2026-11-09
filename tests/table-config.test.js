@@ -27,6 +27,12 @@ test('configuration permissions, validation, persistence and open-order safeguar
   for (const bad of [0, -1, 1.5, 1001]) assert.equal(config(trusted, { ...table, capacity: bad }).ok, false);
   assert.equal(config(trusted, table).ok, true); assert.equal(config(trusted, table).error, 'Table number already exists. Choose a different number.');
   assert.equal(open(trusted, { tableId: 23 }).ok, true);
+  assert.equal(config(trusted, { action: 'list' }).data.tables[0].hasOrder, 0);
+  assert.equal(config(trusted, { ...table, create: false, active: false }).ok, true);
+  assert.equal(open(trusted, { tableId: 23 }).ok, false);
+  assert.equal(config(trusted, { ...table, create: false, active: true }).ok, true);
+  require('../src/desktop/menu').seedMenu(db);
+  db.exec("INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',100,1,'pending')");
   assert.equal(config(trusted, { ...table, create: false, active: false }).error, 'Table has an open order');
   assert.equal(config(trusted, { action: 'area', id: areaId, name: 'Patio', active: false }).error, 'Area has an open order');
   assert.equal(config(trusted, { ...table, create: false, capacity: 8 }).ok, true);

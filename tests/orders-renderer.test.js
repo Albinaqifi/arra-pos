@@ -36,3 +36,37 @@ test('desktop opens and restores an order and reports an open failure', async ()
   fail = true; await app.openTable(1);
   assert.equal(app.state.screen, 'tables'); assert.match(app.state.toast.msg, /Could not open/);
 });
+test('desktop leaves untouched tables free and keeps failed item saves free', async () => {
+ let added=false, failSave=true, loseResponse=false;
+ const api={getMenu:async()=>({ok:true,data:{categories:[{id:'food',name:'Food'}],products:[{id:'p',name:'Dish',categoryId:'food',price:100}]}}),getTables:async()=>({ok:true,data:[{id:1,area:'Inside',orderId:5,openedAt:1,untouched:!added}]}),openOrder:async()=>({ok:true,data:{id:5,tableId:1,openedAt:1,untouched:!added}}),orderItems:async action=>{if(action==='add'){if(failSave)return {ok:false}; added=true; if(loseResponse) return {ok:false};} return {ok:true,data:{items:added?[{id:1,productId:'p',name:'Dish',unitPrice:100,quantity:1,status:'pending'}]:[]}};}};
+ class Component {setState(update){Object.assign(this.state,typeof update==='function'?update(this.state):update);}}
+ const context={React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',context);
+ const load=async()=>{const app=new context.Demo();app.componentDidMount();app.loadDesktopData();await new Promise(resolve=>setImmediate(resolve));return app;};
+ let app=await load(); assert.equal(app.renderVals().sections[0].tables[0].free,true); await app.openTable(1); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].free,true);
+ await app.openTable(1); await app.addProduct('p'); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].taken,true); app=await load(); assert.equal(app.renderVals().sections[0].tables[0].free,true);
+ await app.openTable(1); failSave=false; loseResponse=true; await app.addProduct('p'); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].taken,true);
+ app=await load(); assert.equal(app.renderVals().sections[0].tables[0].taken,true);
+});
+test('removing the last pending item refreshes availability; an uncertain refresh stays taken', async () => {
+ let hasItem=true, failTables=false, loseRemoval=false;
+ const api={openOrder:async()=>({ok:true,data:{id:5,tableId:1,openedAt:1,untouched:!hasItem}}),getTables:async()=>failTables?{ok:false}:{ok:true,data:[{id:1,area:'Inside',orderId:5,openedAt:1,untouched:!hasItem}]}, orderItems:async action=>{if(action==='remove'){hasItem=false; if(loseRemoval)return {ok:false};}return {ok:true,data:{items:hasItem?[{id:1,productId:'p',name:'Dish',unitPrice:100,quantity:1,status:'pending'}]:[]}};}};
+ class Component {setState(u){Object.assign(this.state,typeof u==='function'?u(this.state):u);}}
+ const context={React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}}}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',context);
+ const app=new context.Demo(); app.componentDidMount(); Object.assign(app.state,{screen:'tables',sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}}});
+ await app.openTable(1); await app.removeItem(1); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].free,true);
+ hasItem=true; await app.openTable(1); failTables=true; await app.removeItem(1); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].taken,true);
+ hasItem=true; failTables=false; await app.openTable(1); loseRemoval=true; await app.removeItem(1); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].taken,true);
+});
+test('correcting the final sent item refreshes the card and preserves uncertainty', async () => {
+ let available=false, failTables=false, loseResponse=false;
+ const api={getTables:async()=>failTables?{ok:false}:{ok:true,data:[{id:1,orderId:5,openedAt:1,untouched:available}]},orderItems:async()=>{available=true;if(loseResponse)return {ok:false};return {ok:true,data:{items:[{id:1,productId:'p',name:'Dish',unitPrice:100,quantity:1,status:'sent',correctedQuantity:1}]}};}};
+ class Component {setState(u){Object.assign(this.state,typeof u==='function'?u(this.state):u);}}
+ const context={React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}}}},document:{getElementById(){}},window:{arra:api},crypto:{randomUUID:()=> 'correction-token'},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+ vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',context);
+ const app=new context.Demo();app.componentDidMount(); const init=()=>Object.assign(app.state,{screen:'order',tableId:1,sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}},items:[{id:1,tableId:1,status:'sent',qty:1,unit:100,cxQty:0}],modal:{type:'cancel',itemId:1,qty:1,reason:'Mistake'}});
+ init(); await app.confirmCancel(); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].free,true);
+ init(); failTables=true; await app.confirmCancel(); app.goTables(); assert.equal(app.renderVals().sections[0].tables[0].taken,true);
+ init(); failTables=false; loseResponse=true; await app.confirmCancel(); app.goTables(); assert.equal(app.state.screen,'order'); assert.equal(app.state.modal.unresolved,true);
+});
