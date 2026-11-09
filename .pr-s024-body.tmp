@@ -1,0 +1,5 @@
+Adds full cash or separate-terminal card payment recording in test mode. Trusted code enforces card to A, one immutable full payment per bill, atomic order closure and audit history, and safe retries after uncertain responses. Payment is independent of simulated print results.
+
+Independent review approved the change and the lost-response fix. Builder: `npm test` passed 84/84 before the fix; focused payment, renderer and bridge checks passed 7/7 afterward. Independent tester runs passed 14/14, 12/12 and 3/3, covering concurrency, rollback, migration, permissions and history. See the S-024 handoff for exact commands and earlier corrected test failures.
+
+Stacked on S-023; do not merge until authorized. Physical printing, an offline desktop session and real payments were not tested.

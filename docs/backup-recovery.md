@@ -1,0 +1,20 @@
+# Backup and recovery (development procedure)
+
+Backups contain user credential hashes, orders, payments and other sensitive records. Use only sample data until readiness. Keep the live data directory and restore test directory restricted to the OS account running the app. On Windows, mode bits do not set NTFS permissions: configure and verify folder ACLs yourself. SQLite's online backup temporarily creates a plaintext snapshot under the live data directory; restore temporarily writes plaintext in the chosen recovery directory. Crashes can leave these files behind; securely remove any `.backup-*` or `.restore-*` remnants while the app is stopped. Disk encryption protects these temporary files and the recovered database. The encrypted backup uses AES-256-GCM and a passphrase-derived key; do not lose the passphrase. Store it separately from the backup in a suitable password manager.
+
+1. Identify the live app data directory containing `arra.sqlite` (see README). While the app is running, connect a separately protected external drive. Create a directory there and restrict access. Use a unique new filename. A directory on the same PC is not protection against PC failure.
+2. From a terminal with Node.js 23.8 or later, run `node src/desktop/backup-cli.js backup "<live data directory>" "<external directory>\<unique name>.enc"`. Enter and repeat a long passphrase when prompted; input is hidden and is not passed on the command line. The command will not replace an existing backup. Confirm the success message; any failure exits nonzero and must be investigated and retried. Do not assume a failed backup exists or is usable. Ensure enough free space for a plaintext snapshot and the encrypted copy.
+3. Test recovery on another machine or isolated location with a compatible app and Node version. Create an empty, access-restricted test directory and run `node src/desktop/backup-cli.js restore "<backup file>" "<empty test directory>"`. Enter the same passphrase. The command rejects nonempty destinations, authenticates the encrypted contents, checks SQLite integrity and foreign keys, and does not intentionally replace a database. Check the success message. For a **sample-data-only** recovery test on Windows, close any running Arra POS app, then from the repository directory use the following PowerShell commands. Replace the path with the absolute path of the restored test directory, and verify it is the isolated copy before proceeding:
+
+```powershell
+$restoreDirectory = 'C:\path\to\isolated-restored-test-directory'
+New-Item -ItemType File -Path (Join-Path $restoreDirectory 'SAMPLE-DATA-ONLY') -ErrorAction Stop
+& .\node_modules\.bin\electron.cmd . "--sample-data-directory=$restoreDirectory"
+```
+
+The marker permits the sample-directory launch; the full argument is required. Never add this marker to a live database. Launching normally without the argument opens the default app database instead. Sign in with an existing sample account and verify known sample orders and user identities; do not display or export credential hashes. The app may migrate and write to this restored copy, so preserve the encrypted backup and use a new restore for another pristine test. The sample launch mechanism is not a production recovery interface.
+4. For an actual recovery, stop the application, preserve the failed database and all sidecar files for investigation, and restore to a new empty restricted directory. Verify using an isolated app first, then arrange for the stopped app to use the verified recovered database. The backup represents the point of its snapshot; later changes are not present. Never overwrite a live database or merge divergent histories manually.
+
+The tool reads the database into memory for encryption and decryption, so large databases require sufficient memory. The procedure is manual; scheduling, retention and final backup location remain open (Q-12). Test recovery regularly, including access to the passphrase and separate device. This development procedure is not yet a packaged owner interface or a production-readiness claim.
+
+

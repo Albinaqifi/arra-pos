@@ -14,7 +14,7 @@ Only decisions likely to cause substantial rework, data loss, financial errors, 
 
 The question means: after a customer pays in cash or on the restaurant's separate card terminal, how does a waiter tell the POS that the bill has been paid? For example, [P] the waiter could press “Paid” after receiving the money or seeing the terminal approve the card. This is a workflow detail we can refine when building payment; it does not need an answer to start the system.
 
-Working assumption: [P] the POS records a staff-confirmed payment, while the card terminal handles the actual card transaction. Printing and payment are separate. Refund details can be designed later.
+Working assumption: [P] the POS records a staff-confirmed payment, while the card terminal handles the actual card transaction. Printing and payment are separate. The owner has ruled out a refund workflow (D-011).
 
 ## Q-03 — Business day and corrections — deferred
 
@@ -49,12 +49,12 @@ The user wants to start building a real system in increments, without first deci
 These are not questions holding up planning. The project can use reversible, explicitly proposed defaults and refine them with real usage. Keep financial, privacy and audit invariants from the source documents intact.
 
 - **Q-04** Sent-item correction interaction and optional preparation notice: [P] authorized admin records a reasoned correction; staff notify preparation directly. Confirm the business consequences alongside Q-02 if necessary.
-- **Q-05** Refund amounts and interface: [P] preserve a traceable record; detailed limits can follow the real procedure in Q-02.
+- **Q-05** Refund amounts and interface: closed by the owner's no-refund decision (D-011). Fiscal reversal obligations remain to be verified under Q-07.
 - **Q-08** Correction reason, day/shift filter and interface: [P] whole eligible cash payment, mandatory reason, current business day. The confirmed pre-close B-to-A restriction remains; exceptional post-close authority is part of Q-03.
 - **Q-09** PIN length, reset screens and routine permission administration: [P] unique administrator identities, protected credentials, rate limits and session locking. Optional waiter PINs remain a known attribution risk; refine with implementation.
 - **Q-13** Item move details: [P] preserve identities and history, never overwrite an active order, and use confirmation for merges; refine the interaction during development.
 - **Q-14** Modifier controls and pending-price behavior: [P] use configurable choices and preserve historical sale details; refine using the actual menu.
-- **Q-15** Report labels and counting conventions: [P] retain underlying events and show voids and refunds separately; refine report definitions before relying on them for accounting.
+- **Q-15** Report labels and counting conventions: [P] retain underlying events and show voids separately; refine report definitions before relying on them for accounting.
 - **Q-16** Export and deletion interface: [P] restrict access and establish retention/deletion rules with jurisdiction-specific advice before production; legal obligations belong to Q-07.
 - **Q-17** Notifications: [P] start with in-app warnings.
 - **Q-18** Setup and migration: [P] start with manual setup and no historical import, unless existing data changes the scope.

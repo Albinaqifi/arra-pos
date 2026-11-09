@@ -83,7 +83,7 @@ Status: proposed backlog, 2026-11-03. Each story is intended for one development
 **As a waiter**, I can move selected items between tables while keeping their history. **Depends on:** S-019. **Acceptance:** moved items retain IDs and appear in only one active order; invalid or already-moved selections are rejected; an occupied destination is never overwritten; history includes actor, source and destination; source-table state follows remaining active order. Quantity/merge details use reversible defaults (Q-13).
 
 ### S-021 — Admin correction of sent items
-**As an authorized admin**, I can record a correction to a sent item. **Depends on:** S-017 and S-010. **Acceptance:** waiters cannot edit/remove sent items; an authorized admin can record a reasoned correction or void without deleting the original item or preparation history; actor, quantity and time are recorded; billable totals reflect the valid correction. Handling after payment remains for S-029.
+**As an authorized admin**, I can record a correction to a sent item. **Depends on:** S-017 and S-010. **Acceptance:** waiters cannot edit/remove sent items; an authorized admin can record a reasoned correction or void without deleting the original item or preparation history; actor, quantity and time are recorded; billable totals reflect the valid correction. Post-payment handling is not defined by this story.
 
 ### S-022 — View order and activity history
 **As an authorized admin**, I can inspect an order's history. **Depends on:** S-016, S-019 and S-021. **Acceptance:** view order details and timeline of additions, sends, moves and corrections with actor and time; access is checked in application services; no other owner's protected financial details are exposed. Payment/print events appear when their stories are complete.
@@ -111,7 +111,7 @@ Status: proposed backlog, 2026-11-03. Each story is intended for one development
 **As an authorized admin**, I can review bills, payments and corrections. **Depends on:** S-025 and S-027. **Acceptance:** history connects order, bill, original payment and corrections with actors and times; account scope applies to search, details and totals; original and effective classification are traceable without duplicate sales; empty results are clear.
 
 ### S-029 — Record refunds
-**As an authorized admin**, I can record a refund against an original payment. **Depends on:** S-024, S-025 and S-016. **Acceptance:** refund preserves the payment and records amount, reason, actor, method and time; unauthorized requests and amounts exceeding eligible payment are rejected; card-terminal action is never falsely described as processed by the POS; reports distinguish refunds from sales. Final procedure/amount policy requires Q-02/Q-05 before real use.
+**Retired:** The owner confirmed that there will be no refunds (D-011). Fiscal reversal obligations remain to be verified under Q-07.
 
 ## Milestone 5 — Operations, reporting and launch readiness
 
@@ -137,6 +137,49 @@ Status: proposed backlog, 2026-11-03. Each story is intended for one development
 
 ### S-036 — Package, restore and pilot readiness
 **As an owner**, I can install and safely evaluate a release on the restaurant PC. **Depends on:** S-015, S-025, S-032, S-033, S-034 and S-035; complete other required stories for the chosen pilot scope. **Acceptance:** installation, startup and core operations work offline on the target PC; no development/default credentials are shipped; backup and restoration are demonstrated; permissions and payment rules are checked with realistic scenarios; known limitations and a rollback/support procedure are documented; required fiscal/legal and provider checks are completed before real sales. Split packaging and pilot verification into separate stories if needed.
+
+## Milestone 6 — Designed administration experience
+
+**Outcome:** Replace the plain, browser-default presentation of the existing administration features with a coherent, finished desktop experience. These are implementation stories, not mockups: connect the designed screens to the existing local services and preserve their current behavior. Use the waiter interface as a visual starting point while making administration easy to scan and operate on the shared PC. Native semantic HTML controls are fine, but their appearance and layout must be intentionally designed rather than left as browser defaults.
+
+For every story in this milestone: use a consistent visual language, clear hierarchy, readable labels and appropriately sized controls; support keyboard operation, visible focus and accessible names; handle loading, empty, denied, validation, success and failure states where applicable. Keep navigation and data usable at the target desktop window size and when resized. Verify the real Electron flow with sample data as well as appropriate automated checks, and record what was actually verified. Do not invent dashboard figures, financial definitions, new privileges or hardware functionality; preserve trusted-service authorization, account scope, audit history, retry behavior and offline operation. Do not expose secrets or another owner's data. If a required capability is unavailable to the signed-in identity, show an appropriate access state rather than bypassing its service restrictions. The S-031 board status requires a post-merge update; its merge is present in local history.
+
+For future end-to-end automation, each builder should document a few concise scenarios in the story handoff: sample setup, user actions and expected outcome, including an appropriate denied or failure case. Record which scenarios were actually exercised and their results. Use sample data; no E2E framework or automated E2E suite is required by these stories.
+
+### S-037 — Administration navigation and visual foundation
+**As an authorized administrator**, I can find the available administration areas in a consistent, polished desktop layout. **Depends on:** S-010, S-012, S-013, S-015 and S-025. **Acceptance:** replace the row of plain administration links with an intentional, coherent navigation and page shell that fits the existing product; provide clear entry, return and current-location cues without weakening the existing sign-in or identity checks; link to the existing areas, menu, employees, order history, financial information and operational reports flows; make unavailable or denied access understandable without implying access has been granted. Establish reusable styling and components for the following stories, including buttons, form fields, status messages and confirmation surfaces. Do not present unimplemented dashboard metrics or create a new authentication mechanism. Verify navigation, identity switching and denied access in the desktop app.
+
+**E2E scenarios to document:** navigate between permitted areas and return to tables; switch identity and verify restricted areas and stale data are inaccessible.
+
+### S-038 — Designed areas and tables management
+**As an authorized administrator**, I can configure the floor through a clear, finished interface. **Depends on:** S-012 and S-037. **Acceptance:** design the area and table lists and create/edit flows, including capacity and active state, with clear relationships between areas and tables; make validation, saving, deactivation and the existing open-order restriction understandable; reflect saved changes on returning to the table grid. Preserve stable identities, existing authorization and historical references. Verify create, edit, deactivate, denied and open-order cases using sample data.
+
+**E2E scenarios to document:** create and edit an area and table, then check the waiter grid; attempt to deactivate a table with an open order and confirm the order remains intact.
+
+### S-039 — Designed menu and modifier management
+**As an authorized administrator**, I can maintain the menu and product choices without navigating unstyled forms. **Depends on:** S-013, S-014 and S-037. **Acceptance:** design the category and subcategory hierarchy, product list and editing flows for names, prices, ordering, activation and preparation destination; provide clear management of modifier groups, required/optional choices, options and price adjustments; show validation and save outcomes. Preserve existing selection limits, snapshots, routing semantics and service authorization. Verify representative category, product and modifier edits and the resulting waiter menu with sample data.
+
+**E2E scenarios to document:** configure a product and required modifier, then order it as a waiter; change the menu and verify the earlier order snapshot stays unchanged.
+
+### S-040 — Designed employee and permission management
+**As an authorized administrator**, I can manage staff and their existing operational permissions confidently. **Depends on:** S-015 and S-037. **Acceptance:** design employee selection, creation, editing, activation, credential reset, grants and existing change-history views; group and label permissions in language staff can understand while retaining the distinction between viewing and changing; make sensitive actions, validation and save results clear without displaying or retaining credentials unnecessarily. Preserve service checks, session invalidation, audit behavior and last-administrator protection. Do not add financial-scope grants or decide Q-01. Verify allowed and denied actions, reset and deactivation with sample identities.
+
+**E2E scenarios to document:** create a sample employee, grant and revoke an action, and verify the resulting access; reset or deactivate an account and verify access changes and history.
+
+### S-041 — Designed order history and sent-item corrections
+**As an authorized user**, I can understand an order's operational history and record an eligible correction through a finished interface. **Depends on:** S-021, S-022 and S-037. **Acceptance:** design the existing order list, detail, item and activity timeline, including moves, sends and simulated print attempts; replace raw event property dumps with readable descriptions and clearly indicate the existing privacy and access limits. Design the existing sent-item correction interaction with quantity, reason, confirmation and error states; preserve the original history and trusted-service checks. Do not add post-payment corrections or expand owner access while shared-history policy is unresolved. Verify navigation, history across moves, allowed and denied corrections and failure states with sample data.
+
+**E2E scenarios to document:** send and move items, then inspect their timeline; record an authorized correction and verify its history, and check that an unauthorized user cannot correct it.
+
+### S-042 — Designed financial history and business-day close
+**As an authorized administrator**, I can inspect the financial information available to me and close a business day through a clear, finished interface. **Depends on:** S-025, S-026, S-028 and S-037. **Acceptance:** design the existing scoped payment list, totals, bill/payment detail, unpaid-bill and correction history views; distinguish original and effective account and make clear that a correction is not a second payment. Design the existing business-day view, outstanding issues and close confirmation, including the effect on transfer-manager corrections. Preserve scope on records, totals and details; do not imply a real fiscal receipt, invent accounting definitions or expose unclassified bills beyond existing authorization. Verify A, B and combined sample identities, corrected payments, denial and close behavior.
+
+**E2E scenarios to document:** inspect sample payments as A, B and combined users, including a corrected payment; close a day with outstanding issues and verify the recorded close and correction cutoff.
+
+### S-043 — Designed operational reports and restricted transfer flow
+**As an authorized user**, I can read existing operational reports or perform the restricted transfer-manager task in a coherent, finished interface. **Depends on:** S-027, S-031 and S-037. **Acceptance:** design report date selection, product, table and waiter results and empty/error states, retaining the existing provisional counting definitions and financial scope. Separately design the transfer manager's table selection, eligible payment list and B-to-A correction confirmation, making the open-day restriction and optional reason clear; this restricted identity must not gain administration or waiter navigation. Preserve single-count totals, retry safety and service authorization. Verify representative reports and transfer success, denied, repeated and closed-day cases with sample data. Sales reports remain S-030 and are not invented here. Split this story if the two flows do not fit one session.
+
+**E2E scenarios to document:** filter reports for a sample period and verify scoped results; correct an eligible cash payment once and verify repeat and closed-day attempts fail.
 
 ## Suggested next session
 
