@@ -15,20 +15,20 @@ test('history renders corrected and unpaid details, empty results, and failed re
     return { ok: true, data: { bill, lines: [], payment: { id: 1, actorId: 2, paidAt: 30, method: 'cash', amount: 100, originalAccount: 'B', account: 'A' }, corrections: [{ id: 3, actorId: 4, occurredAt: 40, fromAccount: 'B', toAccount: 'A', reason: 'sample reason' }] } };
   }};
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
-  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, children }; } };
+  const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({ onBack() {} });
-  const text = node => Array.isArray(node) ? node.map(text).join(' ') : node && typeof node === 'object' ? text(node.children) : String(node || '');
+  const text = node => Array.isArray(node) ? node.map(text).join(' ') : node && typeof node === 'object' ? typeof node.type === 'function' && !node.type.prototype?.render ? text(node.type(node.props)) : text(node.children) : String(node || '');
   await screen.load();
-  assert.match(text(screen.render()), /No payments\./);
+  assert.match(text(screen.render()), /No payments in your available scope\./);
   assert.match(text(screen.render()), /No unpaid bills\./);
   await screen.detail(1);
   const paid = text(screen.render());
-  for (const expected of ['Bill #7', 'Order #8', 'actor #11', 'actor #2', 'Original account B', 'Effective account A', 'Correction #3', 'Actor #4', 'sample reason']) assert.ok(paid.includes(expected), expected);
+  for (const expected of ['Bill #7', 'Order #8', 'actor #11', 'Actor #2', 'Original account B', 'Effective account A', 'Correction #3', 'Actor #4', 'sample reason']) assert.ok(paid.includes(expected), expected);
   await screen.unpaidDetail(7);
-  assert.match(text(screen.render()), /Bill #7.*Unpaid/);
+  assert.match(text(screen.render()), /UNPAID BILL.*Bill #7/);
   fail = true;
   await screen.load();
   assert.match(text(screen.render()), /Financial information unavailable/);
