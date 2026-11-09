@@ -41,6 +41,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-045 | Done | Independent review and focused testing passed; PR #45 merged as `fbbb6cb`. |
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
 | S-047 | Done | Independent review and focused testing passed; PR #49 merged as `4b8ad6c`. |
+| S-048 | In progress | Separating the retained browser demo from desktop workflows. |
 
 ## Current
 

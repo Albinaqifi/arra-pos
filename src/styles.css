@@ -1,3 +1,6 @@
+#application-status { position: sticky; top: 0; z-index: 100; padding: 8px 16px; background: #1e293b; color: #fff; font: 700 14px system-ui, sans-serif; }
+body[data-mode="demo"] #application-status { background: #9a3412; }
+#application-status[role="alert"] { background: #991b1b; }
 body { margin: 0; background: #F4F6FB; }
 a { color: #1D4ED8; }
 a:hover { color: #1E3A8A; }
