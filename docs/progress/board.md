@@ -42,7 +42,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-046 | Done | Independent review and focused testing passed; PR #47 merged as `f1bc24d`. |
 | S-047 | Done | Independent review and focused testing passed; PR #49 merged as `4b8ad6c`. |
 | S-048 | Done | Independent review and focused testing passed; PR #51 merged as `9e148f4`. |
-| S-049 | In progress | Independent review, focused tests and representative sample desktop checks passed; PR pending. |
+| S-049 | Done | Independent review, focused tests and sample desktop checks passed; PR #53 merged as `4ad6604`. |
 
 ## Current
 
