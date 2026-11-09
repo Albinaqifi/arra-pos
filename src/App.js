@@ -1,24 +1,5 @@
 // Capture the bridge once so a lost desktop connection cannot select demo behavior.
 const desktopBridge = window.arra;
-class TransferCorrection extends React.Component {
-  constructor(props) { super(props); this.state = { records: null, table: null, reason: '', error: '', busy: false }; }
-  componentDidMount() { this.load(); }
-  async load() { const r = await desktopBridge.transferCorrection({action:'list'}); this.setState(r.ok ? {records:r.data.payments, tables:r.data.tables, error:''} : {records:null,error:'Eligible payments unavailable.'}); }
-  async correct(id) {
-    if (this.state.busy || !window.confirm('Correct this cash payment from Account B to Account A?')) return;
-    this.setState({busy:true});
-    const r = await desktopBridge.transferCorrection({action:'correct',paymentId:id,reason:this.state.reason});
-    if (r.ok) { this.setState({reason:'',error:''}); await this.load(); }
-    else { await this.load(); this.setState({error:'Correction was not confirmed. Refresh the list before trying again.'}); }
-    this.setState({busy:false});
-  }
-  render() {
-    const h=React.createElement, rows=this.state.records, table=this.state.table;
-    return h('main',{style:{padding:24,overflow:'auto',height:'100vh'}},h('button',{onClick:this.props.onBack},'Switch user'),h('h1',null,'Transfer Manager'),h('p',null,'Eligible cash payments in the open business period.'),this.state.error && h('p',{role:'alert'},this.state.error),
-      rows && table === null ? h(React.Fragment,null,h('h2',null,'Tables'),this.state.tables.map(t=>h('button',{key:t.id,onClick:()=>this.setState({table:t.id})},'Table '+t.id+' · '+t.area+(t.active ? '' : ' · inactive'))),!this.state.tables.length && h('p',null,'No tables.')) : null,
-      rows && table !== null ? h(React.Fragment,null,h('button',{onClick:()=>this.setState({table:null})},'All tables'),h('h2',null,'Table '+table),h('label',null,'Reason (optional)',h('input',{value:this.state.reason,maxLength:500,onChange:e=>this.setState({reason:e.target.value})})),!rows.some(x=>x.tableId===table) && h('p',null,'No eligible payments for this table.'),rows.filter(x=>x.tableId===table).map(p=>h('div',{key:p.id},'Payment #'+p.id+' · '+p.amount+' · '+new Date(p.paidAt).toLocaleString()+' ',h('button',{disabled:this.state.busy,onClick:()=>this.correct(p.id)},'Correct B to A')))) : null,h('button',{onClick:()=>this.load()},'Refresh'));
-  }
-}
 // Convert the design's CSS declarations to React's style object.
 function style(text) {
   const result = {};
@@ -1153,7 +1134,7 @@ class WaiterDemo extends React.Component {
     return v;
   }
   render() {
-    if (this.state.screen === 'transferCorrection') return React.createElement(TransferCorrection, { onBack: () => this.switchWaiter() });
+    if (this.state.screen === 'transferCorrection') return React.createElement(ArraComponents.TransferCorrection, { onBack: () => this.switchWaiter() });
     const adminScreens = { operationalReports: ArraComponents.OperationalReports, financialVisibility: ArraComponents.FinancialVisibility, orderHistory: ArraComponents.OrderHistory, employeeConfig: ArraComponents.EmployeeConfig, menuConfig: ArraComponents.MenuConfig, tableConfig: ArraComponents.TableConfig };
     const AdminPage = adminScreens[this.state.screen];
     const adminIdentityGeneration = this._identityGeneration || 0;
