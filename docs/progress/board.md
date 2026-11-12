@@ -53,7 +53,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-053 | Done | Independent review and focused tests passed; PR #69 merged as `116759f`. |
 | S-054 | Done | Independent review and focused checks passed; PR #71 merged as `ad6c827`. |
 | S-055 | Done | Independent review and focused tests passed; PR #74 merged as `f41a24f`. |
-| S-056 | In progress | Implementing sample-only kitchen, bar and bill printing; hardware verification pending. |
+| S-056 | In progress | Sample printing implementation; hardware verification pending. |
+| S-057 | Done | Review and focused tests passed; PR #75 merged as `d0759ee`. |
 
 ## Current
 

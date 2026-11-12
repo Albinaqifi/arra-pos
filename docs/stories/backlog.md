@@ -288,4 +288,3 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
-
