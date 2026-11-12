@@ -116,3 +116,28 @@ test('later rounds contain only newly sent items and preserve modifier snapshots
   assert.deepEqual(snapshots[1].lines.map(x=>x.name),['Shopska salad']);
   db.close();
 });
+
+test('owners configure printers and unpaid jobs follow payment scope on retry', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-unpaid-print-')), db=authorizedDatabase(openDatabase(dir));
+  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});}); seedTables(db);
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'a',x'00',x'00'),(3,'b',x'00',x'00'),(4,'combined',x'00',x'00');
+    INSERT INTO financial_scopes VALUES(2,'A'),(3,'B'),(4,'combined');
+    INSERT INTO user_permissions VALUES(2,'employees.view'),(2,'employees.change'),(3,'employees.view'),(3,'employees.change'),(4,'employees.view'),(4,'employees.change');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'sample');`);
+  let current=2, call, outputs=[]; const session={currentUserId:()=>current,authenticatedUserId:()=>current};
+  printing.registerTestPrinting({handle:(_,fn)=>call=fn},()=>true,db,session,job=>{outputs.push(job); return 'accepted';},true);
+  for (const id of [2,3,4]) { current=id; assert.equal(call({}, {action:'configure',destination:'bill',queue:'Sample queue'}).ok,true); }
+  current=2; assert.equal(call({}, {action:'bill',billId:1,requestId:'unpaid'}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  current=3; assert.equal(call({}, {action:'list'}).data.jobs.length,1);
+  db.exec("INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,100,'cash','B')");
+  current=2; assert.equal(call({}, {action:'list'}).data.jobs.length,0); assert.equal(call({}, {action:'retry',jobId:1,requestId:'denied',checked:true}).ok,false);
+  current=3; assert.equal(call({}, {action:'retry',jobId:1,requestId:'allowed',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve)); assert.equal(outputs.length,2);
+  db.exec("INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(1,4,3,'sample')");
+  assert.equal(call({}, {action:'retry',jobId:1,requestId:'denied-after-correction',checked:true}).ok,false);
+  current=2; assert.equal(call({}, {action:'retry',jobId:1,requestId:'allowed-after-correction',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(outputs.length,3); assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,1);
+});
