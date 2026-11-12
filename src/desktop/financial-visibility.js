@@ -31,9 +31,9 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
         if (account) args.push(account);
         if (req.method) { where.push('p.method=?'); args.push(req.method); }
         const records = db.prepare(`SELECT p.id, p.bill_id AS billId, pd.business_day_id AS dayId, p.paid_at AS paidAt,
-          p.amount, p.method, COALESCE(c.account,p.account) AS account, c.id AS correctionId,
+          p.amount, p.method, o.table_id AS tableId, p.actor_id AS waiterId, u.username AS waiter, COALESCE(c.account,p.account) AS account, c.id AS correctionId,
           c.occurred_at AS correctedAt, c.actor_id AS correctionActorId, c.reason AS correctionReason
-          FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id
+          FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id JOIN bills b ON b.id=p.bill_id JOIN orders o ON o.id=b.order_id JOIN local_users u ON u.id=p.actor_id
           LEFT JOIN (SELECT *, 'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id
           WHERE ${where.join(' AND ')} ORDER BY p.paid_at, p.id`).all(...args);
         const groups = new Map(), corrections = [];
@@ -44,9 +44,9 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
           group.count++; group.total += row.amount;
           if (!Number.isSafeInteger(group.count) || !Number.isSafeInteger(group.total)) throw Error('Report total too large');
           groups.set(key, group);
-          if (row.correctionId !== null) corrections.push({ id:row.correctionId, paymentId:row.id, amount:row.amount, occurredAt:row.correctedAt, actorId:row.correctionActorId, reason:row.correctionReason });
+          if (scope === 'combined' && row.correctionId !== null) corrections.push({ id:row.correctionId, paymentId:row.id, amount:row.amount, occurredAt:row.correctedAt, actorId:row.correctionActorId, reason:row.correctionReason });
         }
-        return { ok:true, data:{ groups:[...groups.values()], records:records.map(({ correctionId, correctedAt, correctionActorId, correctionReason, ...row }) => row), corrections } };
+        return { ok:true, data:{ groups:[...groups.values()], records:records.map(({ correctionId, correctedAt, correctionActorId, correctionReason, ...row }) => row), corrections:scope === 'combined' ? corrections : null } };
       }
       if (req.action === 'unpaid' || req.action === 'unpaidDetail') {
         if (scope !== 'combined') return req.action === 'unpaid' ? { ok: true, data: null } : { ok: false };
@@ -78,9 +78,10 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
       const bill = db.prepare(`SELECT b.id, b.order_id AS orderId, o.table_id AS tableId, o.opened_at AS openedAt,
         b.actor_id AS actorId, b.generated_at AS generatedAt, b.total
         FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=?`).get(payment.billId);
-      Object.assign(payment, db.prepare('SELECT actor_id AS actorId, account AS originalAccount FROM payments WHERE id=?').get(payment.id));
-      const corrections = db.prepare(`SELECT id, actor_id AS actorId, occurred_at AS occurredAt, reason,
-        'B' AS fromAccount, 'A' AS toAccount FROM payment_account_corrections WHERE payment_id=? ORDER BY id`).all(payment.id);
+      Object.assign(payment, db.prepare('SELECT actor_id AS actorId FROM payments WHERE id=?').get(payment.id));
+      if (scope === 'combined') Object.assign(payment, db.prepare('SELECT account AS originalAccount FROM payments WHERE id=?').get(payment.id));
+      const corrections = scope === 'combined' ? db.prepare(`SELECT id, actor_id AS actorId, occurred_at AS occurredAt, reason,
+        'B' AS fromAccount, 'A' AS toAccount FROM payment_account_corrections WHERE payment_id=? ORDER BY id`).all(payment.id) : null;
       return { ok: true, data: { payment, bill, corrections, lines } };
     } catch (_) { return { ok: false }; }
   });

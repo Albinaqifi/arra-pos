@@ -21,14 +21,15 @@ test('sales reports reconcile payments and corrections within scope and period',
   const call=r=>handler({allowed:true},r), range={action:'report',from:100,to:301,dayId:null,account:null,method:null};
   const all=call(range).data;
   assert.deepEqual(all.groups,[{account:'A',method:'card',count:1,total:100},{account:'A',method:'cash',count:1,total:200},{account:'B',method:'cash',count:1,total:300}]);
+  assert.equal(all.records[0].tableId,1); assert.equal(all.records[0].waiter,'sample-1');
   assert.equal(all.records.reduce((sum,r)=>sum+r.amount,0),600);
   assert.equal(all.corrections.length,1); assert.equal(all.corrections[0].paymentId,2);
   assert.equal(call({...range,to:200}).data.records.length,1);
   assert.equal(call({...range,from:200,to:201,method:'card'}).data.records.length,0);
   assert.equal(call({...range,from:null,to:null,dayId:day,account:'A',method:'cash'}).data.groups[0].total,200);
   assert.equal(call({...range,from:null,to:null,dayId:day+999}).ok,false);
-  current=auth=1; assert.equal(call(range).data.records.length,2); assert.equal(call(range).data.corrections.length,1); assert.equal(call({...range,account:'B'}).ok,false);
-  current=auth=2; assert.deepEqual(call(range).data.records.map(x=>x.amount),[300]); assert.deepEqual(call(range).data.corrections,[]); assert.equal(call({...range,account:'A'}).ok,false);
+  current=auth=1; assert.equal(call(range).data.records.length,2); assert.equal(call(range).data.corrections,null); assert.equal(call({action:'detail',paymentId:2}).data.corrections,null); assert.equal(Object.hasOwn(call({action:'detail',paymentId:2}).data.payment,'originalAccount'),false); assert.equal(call({...range,account:'B'}).ok,false);
+  current=auth=2; assert.deepEqual(call(range).data.records.map(x=>x.amount),[300]); assert.equal(call(range).data.corrections,null); assert.equal(call({...range,account:'A'}).ok,false);
   for (const req of [{...range,method:'other'},{...range,from:-1},{...range,to:100},{...range,extra:1},{...range,dayId:day},{...range,from:null,to:null,dayId:0}]) assert.equal(call(req).ok,false);
   assert.equal(handler({allowed:false},range).ok,false);
   current=auth=4; assert.equal(call(range).ok,false); current=3; auth=1; assert.equal(call(range).ok,false);

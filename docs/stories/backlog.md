@@ -253,7 +253,22 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Verify both successful paths with sample data and waiter reselection; check failed and uncertain responses, a send with a print issue or remaining pending items, and retry behavior. Confirm no duplicate send or payment and no change to existing financial rules.
 
+### S-057 — Daily detailed turnover
+
+**Goal:** As an authorized administrator, I can review detailed turnover for a system day in Financial Information.
+
+**Depends on:** S-024, S-025, S-026, S-028 and S-030.
+
+**Acceptance:**
+
+- A system day runs from its start until an authorized admin closes it, with no fixed time limit; it can continue past midnight. Closing it automatically starts the next system day. Show running turnover for the open day and allow completed days to be reviewed with their start and close times. Before confirmation, show the authorized admin the day's scoped turnover and outstanding orders.
+- Base turnover on recorded paid bills. Show totals by payment method and permitted account, and a detailed payment list with time, table, waiter, amount and method. Allow inspection of the associated bill details within the user's scope.
+- Account A sees only A turnover; account B sees only B turnover; an authorized combined account sees A and B turnover and transfer details. Enforce the same scope for totals, lists, details and direct requests in trusted application code.
+- Show transfers/corrections to authorized combined users with their history. Count each payment once under its effective account; a transfer is not another payment. Preserve the original payment and correction history, and retain the rule that card belongs to A.
+- Work offline and preserve existing records. Clearly handle an empty day and unavailable data. Do not present the report as a fiscal or finalized accounting report; final accounting definitions remain subject to Q-15.
+
+**Checks/review:** Use sample data to verify a day spanning midnight, running and closed-day results, automatic next-day start, repeated close requests and failure recovery, cash and card, a B-to-A transfer, reconciliation to underlying payments, and direct-request denial for A and B across totals and details. Check persistence across restart and review financial and authorization behavior. Resolve any necessary historical-day handling before implementation.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
-

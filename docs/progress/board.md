@@ -54,6 +54,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-054 | Done | Independent review and focused checks passed; PR #71 merged as `ad6c827`. |
 | S-055 | In progress | Independent review and focused tests passed; PR #74 open. |
 
+| S-057 | In progress | Builder implementation and checks underway; independent review and testing pending. |
+
 ## Current
 
 The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner cannot test on another machine now. S-032's separate protected copy and separate-device recovery remain unverified and a prerequisite for S-036 and live use, but do not hold up S-041–S-043 or S-037. S-037 remains blocked pending its own desktop verification on the available machine; the owner authorized S-041–S-043 to proceed and will finish S-037 later. Do not mark S-037 Done without its required evidence and workflow completion.
