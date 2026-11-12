@@ -300,6 +300,21 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Verify a day spanning midnight, multiple bills, cash and card, a corrected payment and total reconciliation; denied direct requests; repeated close and print requests; printer failure, uncertain output, retry and restart recovery. Inspect the sample printed paper for completeness and readability. Review financial integrity and authorization.
 
+### S-059 — Owner administration with protected financial scope
+
+**Goal:** Apply the owner-approved administration and privacy rules in D-013 consistently across the admin application. **Depends on:** S-010, S-015, S-025, S-026, S-027, S-057 and S-058. Coordinate with S-058, which is in progress; preserve its close and print history and do not disturb its verification. If the scope cannot be delivered and verified in one session, split it into sequenced stories without weakening the policy.
+
+**Acceptance:**
+
+- Combined can use every admin feature and see both accounts. Owner A and Owner B can use admin features while financial records, totals, reports and details remain restricted to A and B respectively, including direct requests and printed output. Card remains A. Do not leak the other account through aggregates, search, exports, print jobs, errors or historical records.
+- Either owner or Combined can close the one shared system day. Before confirmation explain that it closes for both owners, stops that day's transfer-manager corrections and automatically opens the next day. Display only permitted turnover. Preserve outstanding-issue warnings, history, retry safety and atomic close behavior.
+- When A closes, print A's paid-bill report only; when B closes, print B's only; when Combined closes, print both. Combined can print the full closed-day report later. Keep scoped and full reports protected across retries, printer failures and restarts; preserve existing report snapshots and jobs without exposing previously printed full reports to A or B. Printing is non-fiscal, and queue acceptance is not proof of paper output.
+- Both owners can manage shared menu, prices, tables and staff. Identify shared changes as affecting the restaurant and preserve attributable change history. Only Combined can create or change owner accounts or financial access, including credentials and grants, so neither owner can obtain the other's access or Combined access. Preserve active-administrator and session protections.
+- Both owners can see unpaid bills as shared operational information before account classification. Preserve protection of paid bills and any associated financial information after payment.
+- A B-to-A correction counts once in A turnover and is no longer in B turnover. Only Combined sees the transfer history and original B account; A sees it as an A payment. Preserve the original payment, correction history and existing transfer-manager restrictions.
+
+**Checks/review:** Test all three identities using UI and direct requests, including denied cross-account details, totals, account management and print retries; verify unpaid-to-paid transitions and a B-to-A transfer. Exercise close by each identity, repeated requests, shared-day consequences, report reconciliation, print failure and uncertain recovery, restart, and existing historical snapshots. Test shared configuration and audit attribution. Use sample data and include financial, authorization and migration review plus appropriate offline printer verification; report any unverified hardware results.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.

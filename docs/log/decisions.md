@@ -73,3 +73,10 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** A system day runs without a fixed time limit, including past midnight, until an authorized admin closes it. The next system day starts automatically on close. Before confirmation, show the admin the day's permitted turnover and outstanding orders.
 - **Why:** Match the restaurant's actual closing routine and keep the POS ready for the next day.
 - **Revisit if:** The owner changes the closing routine. Exceptional post-close correction authority remains open under Q-03.
+
+## D-013 — Owner administration and financial scope
+- **Origin:** Owner direction, 2026-11-12; clarifies D-005 and Q-01.
+- **What:** Combined has full administration access and sees A and B. Owner A and Owner B can use administration features with only their respective financial data. Both may close the single shared system day; warn that this also closes it for the other owner, stops that day's transfers and automatically starts the next day. Print only the closing owner's account report; Combined may print the full report later. Combined closing prints both accounts.
+- **Shared administration:** Both owners may manage shared menu, prices, tables and staff; changes affect the whole restaurant and must be attributable. Only Combined may create or change owner accounts or financial access; this protects the A/B boundary. Both owners may see unpaid bills as shared operational information because the payment account is not assigned yet.
+- **Transfers:** A B-to-A correction counts once in A turnover and no longer in B turnover. Only Combined sees the transfer history and original B account; A sees the payment as A turnover.
+- **Revisit if:** The owner changes these rules. Preserve card-to-A and existing correction and financial-history rules.
