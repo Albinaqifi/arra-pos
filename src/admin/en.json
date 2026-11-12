@@ -290,5 +290,12 @@
   "waiter.Closing orders is not available yet.": "Closing orders is not available yet.",
   "waiter.Blocked: card payments can only go to Account A.": "Blocked: card payments can only go to Account A.",
   "waiter.Table {id} is free. Payment saved once: {method}, Account {account}, {total}.": "Table {id} is free. Payment saved once: {method}, Account {account}, {total}.",
-  "waiter.Session or administration access changed. Sign in or select your name again.": "Session or administration access changed. Sign in or select your name again."
+  "waiter.Session or administration access changed. Sign in or select your name again.": "Session or administration access changed. Sign in or select your name again.",
+  "message.unavailable": "Message unavailable.",
+  "waiter.Payment result unknown. Retry the same selection.": "Payment result unknown. Retry the same selection.",
+  "status.unavailable": "Desktop application unavailable. Close and restart Arra POS; seek support if the problem continues.",
+  "status.demo": "Browser demo — sample data and simulated actions only",
+  "status.development": "Development",
+  "waiter.Unknown destination": "Unknown destination",
+  "waiter.Bar": "Bar"
 }

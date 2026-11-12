@@ -290,5 +290,12 @@
   "waiter.Closing orders is not available yet.": "Mbyllja e porosive ende nuk është e disponueshme.",
   "waiter.Blocked: card payments can only go to Account A.": "E bllokuar: pagesat me kartë mund të shkojnë vetëm në llogarinë A.",
   "waiter.Table {id} is free. Payment saved once: {method}, Account {account}, {total}.": "Tavolina {id} është e lirë. Pagesa u ruajt një herë: {method}, Llogaria {account}, {total}.",
-  "waiter.Session or administration access changed. Sign in or select your name again.": "Sesioni ose qasja në administrim ka ndryshuar. Hyni ose zgjidhni përsëri emrin tuaj."
+  "waiter.Session or administration access changed. Sign in or select your name again.": "Sesioni ose qasja në administrim ka ndryshuar. Hyni ose zgjidhni përsëri emrin tuaj.",
+  "message.unavailable": "Mesazhi nuk është i disponueshëm.",
+  "waiter.Payment result unknown. Retry the same selection.": "Rezultati i pagesës është i panjohur. Provoni përsëri të njëjtën përzgjedhje.",
+  "status.unavailable": "Aplikacioni nuk është i disponueshëm. Mbyllni dhe rinisni Arra POS; kërkoni ndihmë nëse problemi vazhdon.",
+  "status.demo": "Demonstrim në shfletues — vetëm të dhëna shembull dhe veprime të simuluara",
+  "status.development": "Zhvillim",
+  "waiter.Unknown destination": "Destinacion i panjohur",
+  "waiter.Bar": "Bar"
 }

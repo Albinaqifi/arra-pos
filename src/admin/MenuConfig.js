@@ -1,4 +1,4 @@
-import { configText } from './config-i18n.js';
+import { configText, configError } from './config-i18n.js';
 import { accessNotice } from './shared.js';
 
 export class MenuConfig extends React.Component {
@@ -12,7 +12,7 @@ export class MenuConfig extends React.Component {
     try {
       const r = await window.arra.menuConfig({ action: 'list' });
       if (r.ok) { this.setState({ ...r.data, access: true }); return true; }
-      this.setState({ error: this.t(r.error) || this.t('Menu unavailable.'), access: false });
+      this.setState({ error: configError(this.props.language, r.error, 'Menu unavailable.'), access: false });
     } catch (_) { this.setState({ error: this.t('Could not load the menu.'), access: false }); }
     return false;
   }
@@ -48,7 +48,7 @@ export class MenuConfig extends React.Component {
       const r = await window.arra.menuConfig(request);
       if (!r.ok) {
         if (!r.error || r.error === 'Configuration unavailable') { await this.reconcile(); return; }
-        this.setState({ error: this.t(r.error), busy: false }); return;
+        this.setState({ error: configError(this.props.language, r.error, 'Could not save configuration.'), busy: false }); return;
       }
       const loaded = await this.load();
       this.setState({ busy: false, editor: null, ...(loaded ? { notice: this.t(e.kind[0].toUpperCase() + e.kind.slice(1) + ' saved.') } : { error: this.t('The change was saved, but the menu could not be refreshed. Reopen the menu to see it.') }) });

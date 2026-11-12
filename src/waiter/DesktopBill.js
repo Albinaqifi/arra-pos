@@ -3,20 +3,24 @@ class DesktopBill extends React.Component {
   componentDidMount() { this.review(); }
   async review() {
     const r = await window.arra.bill({ action: 'review', orderId: this.props.orderId });
-    this.setState(r.ok ? { data: r.data, error: '' } : { data: null, error: r.error });
+    this.setState(r.ok ? { data: r.data, error: '' } : { data: null, error: this.serviceError(r.error, 'Could not prepare bill') });
   }
   async generate() {
     if (this.state.busy || !this.state.data) return;
     this.setState({ busy: true });
     const r = await window.arra.bill({ action: 'generate', orderId: this.props.orderId, fingerprint: this.state.data.fingerprint });
-    this.setState(r.ok ? { data: r.data, error: '', busy: false } : { error: r.error, busy: false });
+    this.setState(r.ok ? { data: r.data, error: '', busy: false } : { error: this.serviceError(r.error, 'Could not prepare bill'), busy: false });
   }
   async pay() {
     if (this.state.busy || !this.state.data?.id || !this.state.method || !this.state.account) return;
     this.setState({ busy: true, error: '' });
     const r = await window.arra.payment({ billId: this.state.data.id, method: this.state.method, account: this.state.account });
     if (r.ok) this.props.onPaid();
-    else this.setState({ busy: false, uncertain: this.state.uncertain || !!r.uncertain, error: r.error || (typeof waiterTranslate === 'function' ? waiterTranslate : (language, key, values = {}) => key.replace(/^waiter\./, '').replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match))(this.props.language, "waiter.Payment unavailable. Retry the same selection.") });
+    else this.setState({ busy: false, uncertain: this.state.uncertain || !!r.uncertain, error: this.serviceError(r.error, 'Could not record payment. Retry the same selection.') });
+  }
+  serviceError(error, fallback) {
+    const known = ['Invalid request', 'Access denied', 'Send or remove new items before billing', 'No eligible items', 'Order changed; review the bill again', 'Bill already generated', 'Could not prepare bill', 'Bill unavailable', 'Bill already paid with a different selection', 'Could not record payment. Retry the same selection.', 'Payment result unknown. Retry the same selection.'];
+    return known.includes(error) ? error : fallback;
   }
   async printTestBill() {
     if (this.state.busy || !this.state.data?.id || !window.arra.testPrinting) return;

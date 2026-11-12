@@ -7,6 +7,10 @@ function waiterTranslate(language, key, values = {}) {
   }
   return key.replace(/^waiter\./, '').replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
 }
+function printDestination(language, destination) {
+  const keys = { kitchen: 'Kitchen', bar: 'Bar', bill: 'Bill' };
+  return Object.hasOwn(keys, destination) ? waiterTranslate(language, 'waiter.' + keys[destination]) : waiterTranslate(language, 'waiter.Unknown destination');
+}
 // Convert the design's CSS declarations to React's style object.
 function style(text) {
   const result = {};
@@ -33,7 +37,7 @@ class TestPrintJobs extends React.Component {
     this.setState({busy:true,error:''});
     const r = await desktopBridge.testPrinting(request);
     if (r.ok) { if (request.action === 'retry') delete this.tokens[request.jobId]; this.setState({data:r.data,busy:false}); }
-    else this.setState({busy:false,error:r.error || waiterTranslate(this.props?.language, "waiter.Unable to change test printing. Check permission and output before trying again.")});
+    else this.setState({busy:false,error:waiterTranslate(this.props?.language, "waiter.Unable to change test printing. Check permission and output before trying again.")});
   }
   render() {
     const h=React.createElement, d=this.state.data;
@@ -41,10 +45,10 @@ class TestPrintJobs extends React.Component {
     return h('section',{style:{padding:12,background:'#fff7ed'}},h('strong',null,waiterTranslate(this.props?.language, "waiter.TEST MODE: Windows printer queues")),
       h('p',null,waiterTranslate(this.props?.language, "waiter.Queue acceptance does not confirm paper. Inspect the printer and paper before retrying.")),
       this.state.error && h('p',{role:'alert'},this.state.error),
-      (d?.queues || []).map(q=>h('div',{key:q.destination},h('label',null,waiterTranslate(this.props?.language, 'waiter.{destination} queue', {destination:q.destination}) + ' ',h('input',{defaultValue:q.queue,id:'test-queue-'+q.destination,maxLength:255})),h('button',{disabled:this.state.busy,onClick:()=>this.change({action:'configure',destination:q.destination,queue:document.getElementById('test-queue-'+q.destination).value})},waiterTranslate(this.props?.language, "waiter.Save queue")))),
+      (d?.queues || []).map(q=>h('div',{key:q.destination},h('label',null,waiterTranslate(this.props?.language, 'waiter.{destination} queue', {destination:printDestination(this.props?.language, q.destination)}) + ' ',h('input',{defaultValue:q.queue,id:'test-queue-'+q.destination,maxLength:255})),h('button',{disabled:this.state.busy,onClick:()=>this.change({action:'configure',destination:q.destination,queue:document.getElementById('test-queue-'+q.destination).value})},waiterTranslate(this.props?.language, "waiter.Save queue")))),
       h('p',null,waiterTranslate(this.props?.language, "waiter.Changing queues requires employee management permission.")),
       h('button',{disabled:this.state.busy,onClick:()=>this.load()},waiterTranslate(this.props?.language, "waiter.Refresh test jobs")),
-      (d?.jobs || []).map(j=>h('div',{key:j.id},waiterTranslate(this.props?.language, j.ticketId ? 'waiter.{destination} job #{id} · Table {table} · Round {round} · {attempts} attempt(s) · {queue} · ' : 'waiter.{destination} job #{id} · Bill #{bill} · {attempts} attempt(s) · {queue} · ', {destination:j.destination,id:j.id,table:j.tableId,round:j.round,bill:j.billId,attempts:j.attempts,queue:j.queue})+(j.result==='accepted'?waiterTranslate(this.props?.language, "waiter.Accepted by Windows; check paper"):j.result==='failed'?waiterTranslate(this.props?.language, "waiter.Queue missing"):waiterTranslate(this.props?.language, "waiter.Output uncertain; check paper")),
+      (d?.jobs || []).map(j=>h('div',{key:j.id},waiterTranslate(this.props?.language, j.ticketId ? 'waiter.{destination} job #{id} · Table {table} · Round {round} · {attempts} attempt(s) · {queue} · ' : 'waiter.{destination} job #{id} · Bill #{bill} · {attempts} attempt(s) · {queue} · ', {destination:printDestination(this.props?.language, j.destination),id:j.id,table:j.tableId,round:j.round,bill:j.billId,attempts:j.attempts,queue:j.queue})+(j.result==='accepted'?waiterTranslate(this.props?.language, "waiter.Accepted by Windows; check paper"):j.result==='failed'?waiterTranslate(this.props?.language, "waiter.Queue missing"):waiterTranslate(this.props?.language, "waiter.Output uncertain; check paper")),
         h('button',{disabled:this.state.busy,onClick:()=>{if (!window.confirm(waiterTranslate(this.props?.language, "waiter.Have you checked the printer and paper? Retrying may print a duplicate."))) return; const requestId=this.tokens[j.id] || (this.tokens[j.id]=crypto.randomUUID()); this.change({action:'retry',jobId:j.id,requestId,checked:true});}},waiterTranslate(this.props?.language, "waiter.Retry after checking")))));
   }
 }
@@ -53,7 +57,7 @@ class PrintJobs extends React.Component {
   componentDidMount() { this.load(); }
   componentDidUpdate(previous) { if (previous.revision !== this.props.revision) this.load(); }
   async load() {
-    try { const r = await desktopBridge.printJobs({ action: 'list' }); if (r.ok) this.setState({ ...r.data, error: '' }); else this.setState({ error: r.error || waiterTranslate(this.props?.language, "waiter.Print jobs unavailable.") }); }
+    try { const r = await desktopBridge.printJobs({ action: 'list' }); if (r.ok) this.setState({ ...r.data, error: '' }); else this.setState({ error: waiterTranslate(this.props?.language, "waiter.Print jobs unavailable.") }); }
     catch (_) { this.setState({ error: waiterTranslate(this.props?.language, "waiter.Print jobs unavailable.") }); }
   }
   async change(request) {
@@ -62,7 +66,7 @@ class PrintJobs extends React.Component {
     try {
       const r = await desktopBridge.printJobs(request);
       if (r.ok) { if (request.action === 'retry') delete this.tokens[request.jobId]; this.setState({ ...r.data, error: '' }); }
-      else this.setState({ error: r.error || waiterTranslate(this.props?.language, "waiter.Print jobs unavailable. Try again.") });
+      else this.setState({ error: waiterTranslate(this.props?.language, "waiter.Print jobs unavailable. Try again.") });
     } catch (_) { this.setState({ error: waiterTranslate(this.props?.language, "waiter.Print jobs unavailable. Try again.") }); }
     finally { this.busy = false; this.setState({ busy: false }); }
   }
@@ -75,10 +79,10 @@ class PrintJobs extends React.Component {
     return h('section', { style: { padding: '10px 20px', background: '#fff7ed', maxHeight: 220, overflow: 'auto' } },
       h('strong', null, waiterTranslate(this.props?.language, "waiter.Simulated preparation print history")),
       this.state.error && h('p', { role: 'alert' }, this.state.error),
-      h('div', null, this.state.printers.map(p => h('label', { key: p.destination, style: { marginRight: 16 } }, waiterTranslate(this.props?.language, 'waiter.{destination} simulated result', {destination:p.destination}) + ' ',
+      h('div', null, this.state.printers.map(p => h('label', { key: p.destination, style: { marginRight: 16 } }, waiterTranslate(this.props?.language, 'waiter.{destination} simulated result', {destination:printDestination(this.props?.language, p.destination)}) + ' ',
         h('select', { value: p.result, disabled: this.state.busy, onChange: e => this.change({ action: 'simulate', destination: p.destination, result: e.target.value }) },
           h('option', { value: 'success' }, waiterTranslate(this.props?.language, "waiter.Success")), h('option', { value: 'failed' }, waiterTranslate(this.props?.language, "waiter.Failure")), h('option', { value: 'uncertain' }, waiterTranslate(this.props?.language, "waiter.Uncertain")))))),
-      this.state.jobs.map(j => h('div', { key: j.id }, waiterTranslate(this.props?.language, 'waiter.{destination} · Table {table} · Round {round} · {attempts} attempt(s) · ', {destination:j.destination,table:j.tableId,round:j.round,attempts:j.attempts}),
+      this.state.jobs.map(j => h('div', { key: j.id }, waiterTranslate(this.props?.language, 'waiter.{destination} · Table {table} · Round {round} · {attempts} attempt(s) · ', {destination:printDestination(this.props?.language, j.destination),table:j.tableId,round:j.round,attempts:j.attempts}),
         j.result === 'uncertain' ? waiterTranslate(this.props?.language, "waiter.Output uncertain; check before retrying.") : j.result === 'failed' ? waiterTranslate(this.props?.language, "waiter.Simulated failure.") : waiterTranslate(this.props?.language, "waiter.Simulated success."),
         j.hadUncertain && j.result !== 'uncertain' && waiterTranslate(this.props?.language, "waiter. An earlier attempt was uncertain; duplicate output is possible."),
         j.result !== 'success' && h('button', { disabled: this.state.busy, onClick: () => this.retry(j.id), style: { marginLeft: 10 } }, waiterTranslate(this.props?.language, "waiter.Retry simulated job")))), h(TestPrintJobs,{revision:this.props?.revision,language:this.props?.language}));
@@ -102,6 +106,7 @@ class WaiterDemo extends React.Component {
     if (this.state.languageBusy || !desktopBridge?.language) return;
     this.setState({ languageBusy: true, languageFeedback: '' });
     const r = await desktopBridge.language({ action: 'set', language });
+    if (r.ok && typeof CustomEvent === 'function' && window.dispatchEvent) window.dispatchEvent(new CustomEvent('arra-language-changed', { detail: r.language }));
     if (this._mounted) this.setState(r.ok ? { language: r.language, languageBusy: false, languageFeedback: 'saved' } : { languageBusy: false, languageFeedback: 'failed' });
   }
   clearDesktopData() {

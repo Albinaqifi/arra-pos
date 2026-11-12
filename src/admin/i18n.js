@@ -3,6 +3,6 @@ import sq from './sq.json';
 
 const dictionaries = { en, sq };
 export function translate(language, key, values = {}) {
-  const template = dictionaries[language]?.[key] ?? en[key] ?? key;
-  return template.replace(/\{([\w]+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
+  const template = dictionaries[language]?.[key] ?? en[key] ?? dictionaries[language]?.['message.unavailable'] ?? en['message.unavailable'];
+  return template.replace(/\{([\w]+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : "");
 }
