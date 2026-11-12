@@ -20,6 +20,7 @@ test('history renders corrected and unpaid details, empty results, and failed re
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({ onBack() {} });
+  screen.state.view = 'history';
   const text = node => Array.isArray(node) ? node.map(text).join(' ') : node && typeof node === 'object' ? typeof node.type === 'function' && !node.type.prototype?.render ? text(node.type(node.props)) : text(node.children) : String(node || '');
   await screen.load();
   assert.match(text(screen.render()), /No payments in your available scope\./);
