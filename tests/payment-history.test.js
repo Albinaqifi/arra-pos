@@ -26,10 +26,10 @@ test('history links immutable correction and bill records while enforcing effect
   assert.equal(detail.payment.actorId,2); assert.equal(detail.payment.paidAt,30);
   assert.equal(detail.bill.orderId,1); assert.equal(detail.bill.actorId,1); assert.equal(detail.bill.generatedAt,20);
   assert.equal(call({action:'detail',paymentId:2}).ok,false);
-  assert.equal(call({action:'unpaid'}).data,null); assert.equal(call({action:'unpaidDetail',billId:3}).ok,false);
+  assert.deepEqual(call({action:'unpaid'}).data.map(x=>x.id),[3]); assert.equal(call({action:'unpaidDetail',billId:3}).data.bill.orderId,3);
   assert.deepEqual({...call({action:'aggregate',account:null}).data},{count:1,total:100});
   user=auth=2;
-  assert.equal(call({action:'detail',paymentId:1}).ok,false); assert.equal(call({action:'unpaidDetail',billId:3}).ok,false);
+  assert.equal(call({action:'detail',paymentId:1}).ok,false); assert.equal(call({action:'unpaidDetail',billId:3}).data.bill.orderId,3);
   assert.deepEqual(call({action:'search',account:null}).data.map(x=>x.id),[2]);
   assert.deepEqual({...call({action:'aggregate',account:null}).data},{count:1,total:200});
   user=auth=3;

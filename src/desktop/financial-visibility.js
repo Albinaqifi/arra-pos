@@ -49,7 +49,6 @@ function registerFinancialVisibility(ipcMain, isAllowedSender, db, session) {
         return { ok:true, data:{ groups:[...groups.values()], records:records.map(({ correctionId, correctedAt, correctionActorId, correctionReason, ...row }) => row), corrections:scope === 'combined' ? corrections : null } };
       }
       if (req.action === 'unpaid' || req.action === 'unpaidDetail') {
-        if (scope !== 'combined') return req.action === 'unpaid' ? { ok: true, data: null } : { ok: false };
         const sql = `SELECT b.id, b.order_id AS orderId, o.table_id AS tableId, o.opened_at AS openedAt,
           b.actor_id AS actorId, b.generated_at AS generatedAt, b.total
           FROM bills b JOIN orders o ON o.id=b.order_id
