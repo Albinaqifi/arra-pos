@@ -1,35 +1,37 @@
+import { historyReportsText } from './history-reports-i18n.js';
 const h = React.createElement;
 const date = value => new Date(value).toLocaleString();
 const itemRefs = ids => (ids || []).map(id => '#' + id).join(', ');
-export function describeEvent(e) {
-  switch (e.action) {
-    case 'open': return `Opened at table ${e.tableId}.`;
-    case 'add': return `Added ${e.quantity} × ${e.name} (item #${e.entityId}).`;
-    case 'quantity_changed': return `Changed ${e.name} (item #${e.entityId}) from ${e.beforeQuantity} to ${e.afterQuantity}.`;
-    case 'remove': return `Removed ${e.name} (item #${e.entityId}); quantity ${e.beforeQuantity} to ${e.afterQuantity}.`;
-    case 'note_changed': return `Updated the note for item #${e.entityId}. Note text is private.`;
-    case 'send': return `Sent round ${e.number} for preparation: items ${itemRefs(e.itemIds)}.`;
-    case 'move': return `Moved the order from table ${e.sourceId} to table ${e.destinationId}.`;
-    case 'move_items': return `Moved items ${itemRefs(e.itemIds)} from table ${e.sourceId} to table ${e.destinationId} (order #${e.destinationOrderId}).`;
-    case 'correct_sent': return `Corrected ${e.quantity} of item #${e.entityId}. Reason: ${e.reason}.`;
-    case 'print_attempt': return `Simulated ${e.destination} print attempt for round ${e.number}: ${e.result}.`;
-    default: return 'Activity recorded.';
-  }
+export function describeEvent(e, language = 'en') {
+ const t = (key, values) => historyReportsText(language, key, values);
+ switch (e.action) {
+ case 'open': return t('Opened at table {table}.',{table:e.tableId});
+ case 'add': return t('Added {quantity} × {name} (item #{id}).',{quantity:e.quantity,name:e.name,id:e.entityId});
+ case 'quantity_changed': return t('Changed {name} (item #{id}) from {before} to {after}.',{name:e.name,id:e.entityId,before:e.beforeQuantity,after:e.afterQuantity});
+ case 'remove': return t('Removed {name} (item #{id}); quantity {before} to {after}.',{name:e.name,id:e.entityId,before:e.beforeQuantity,after:e.afterQuantity});
+ case 'note_changed': return t('Updated the note for item #{id}. Note text is private.',{id:e.entityId});
+ case 'send': return t('Sent round {number} for preparation: items {items}.',{number:e.number,items:itemRefs(e.itemIds)});
+ case 'move': return t('Moved the order from table {source} to table {destination}.',{source:e.sourceId,destination:e.destinationId});
+ case 'move_items': return t('Moved items {items} from table {source} to table {destination} (order #{order}).',{items:itemRefs(e.itemIds),source:e.sourceId,destination:e.destinationId,order:e.destinationOrderId});
+ case 'correct_sent': return t('Corrected {quantity} of item #{id}. Reason: {reason}.',{quantity:e.quantity,id:e.entityId,reason:e.reason});
+ case 'print_attempt': return t('Simulated {destination} print attempt for round {number}: {result}.',{destination:t(e.destination),number:e.number,result:t(e.result)});
+ default: return t('Activity recorded.');
+ }
 }
-function OrderList({ orders, open }) {
+function OrderList({ orders, open, t }) {
   return h('section', {className:'history-panel'},
-    h('div', {className:'history-section-head'}, h('div', null, h('p',{className:'admin-eyebrow'},'ORDERS'),h('h2',null,'All orders')),h('span',null,orders.length+' recorded')),
+    h('div', {className:'history-section-head'}, h('div', null, h('p',{className:'admin-eyebrow'},t('ORDERS')),h('h2',null,t('All orders'))),h('span',null,t('{count} recorded',{count:orders.length}))),
     orders.length ? h('ul',{className:'history-list'},orders.map(o=>h('li',{key:o.id},h('button',{className:'history-order',onClick:()=>open(o.id)},
-      h('span',null,h('strong',null,'Order #'+o.id),h('small',null,'Table '+o.tableId+' · Opened '+date(o.openedAt))),h('span',{className:'history-badge'},o.status),h('span',{'aria-hidden':true},'→'))))) : h('p',{className:'floor-empty'},'No orders recorded.'));
+      h('span',null,h('strong',null,t('Order #{id}',{id:o.id})),h('small',null,t('Table {id} · Opened {date}',{id:o.tableId,date:date(o.openedAt)}))),h('span',{className:'history-badge'},t(o.status)),h('span',{'aria-hidden':true},'→'))))) : h('p',{className:'floor-empty'},t('No orders recorded.')));
 }
-function OrderDetail({ data, open }) {
+function OrderDetail({ data, open, t, language }) {
   const {order,items,events}=data;
   return h(React.Fragment,null,
-    h('section',{className:'history-panel history-summary'},h('p',{className:'admin-eyebrow'},'ORDER DETAILS'),h('h2',null,'Order #'+order.id),h('div',{className:'history-meta'},h('strong',null,'Table '+order.tableId),h('span',{className:'history-badge'},order.status),h('span',null,'Opened '+date(order.openedAt)))),
-    h('section',{className:'history-panel'},h('div',{className:'history-section-head'},h('div',null,h('p',{className:'admin-eyebrow'},'CURRENT ORDER'),h('h2',null,'Current items')),h('span',null,items.length+' lines')),
-      items.length ? h('ul',{className:'history-items'},items.map(i=>h('li',{key:i.id},h('span',null,h('strong',null,i.name),h('small',null,'Item #'+i.id+' · '+i.status)),h('span',{className:'history-quantity'},h('strong',null,(i.quantity-(i.correctedQuantity||0))+' remaining'),h('small',null,i.quantity+' original · '+(i.correctedQuantity||0)+' corrected'))))) : h('p',{className:'floor-empty'},'No current items.')),
-    h('section',{className:'history-panel'},h('p',{className:'admin-eyebrow'},'OLDEST FIRST'),h('h2',null,'Activity timeline'),h('p',{className:'history-muted'},'Item history can include activity from other orders after a move.'),
-      events.length ? h('ol',{className:'history-timeline'},events.map(e=>h('li',{key:e.id},h('div',null,h('strong',null,describeEvent(e)),h('small',null,date(e.occurredAt)+' · '+e.actor),e.orderId!==order.id && h('button',{onClick:()=>open(e.orderId)},'View order #'+e.orderId))))) : h('p',{className:'floor-empty'},'No activity recorded.')));
+    h('section',{className:'history-panel history-summary'},h('p',{className:'admin-eyebrow'},t('ORDER DETAILS')),h('h2',null,t('Order #{id}',{id:order.id})),h('div',{className:'history-meta'},h('strong',null,t('Table {id}',{id:order.tableId})),h('span',{className:'history-badge'},t(order.status)),h('span',null,t('Opened {date}',{date:date(order.openedAt)})))),
+    h('section',{className:'history-panel'},h('div',{className:'history-section-head'},h('div',null,h('p',{className:'admin-eyebrow'},t('CURRENT ORDER')),h('h2',null,t('Current items'))),h('span',null,t('{count} lines',{count:items.length}))),
+      items.length ? h('ul',{className:'history-items'},items.map(i=>h('li',{key:i.id},h('span',null,h('strong',null,i.name),h('small',null,t('Item #{id} · {status}',{id:i.id,status:t(i.status)}))),h('span',{className:'history-quantity'},h('strong',null,t('{count} remaining',{count:i.quantity-(i.correctedQuantity||0)})),h('small',null,t('{original} original · {corrected} corrected',{original:i.quantity,corrected:i.correctedQuantity||0})))))) : h('p',{className:'floor-empty'},t('No current items.'))),
+    h('section',{className:'history-panel'},h('p',{className:'admin-eyebrow'},t('OLDEST FIRST')),h('h2',null,t('Activity timeline')),h('p',{className:'history-muted'},t('Item history can include activity from other orders after a move.')),
+      events.length ? h('ol',{className:'history-timeline'},events.map(e=>h('li',{key:e.id},h('div',null,h('strong',null,describeEvent(e,language)),h('small',null,date(e.occurredAt)+' · '+e.actor),e.orderId!==order.id && h('button',{onClick:()=>open(e.orderId)},t('View order #{id}',{id:e.orderId})))))) : h('p',{className:'floor-empty'},t('No activity recorded.'))));
 }
 export class OrderHistory extends React.Component {
   constructor(props) { super(props); this.state={orders:[],data:null,error:'',loading:true}; this.sequence=0; }
@@ -45,7 +47,9 @@ export class OrderHistory extends React.Component {
   }
   render() {
     const {data,error,loading}=this.state;
-    return h('main',null,h('button',{onClick:this.props.onBack},'← Back to administration'),h('p',{className:'admin-eyebrow floor-eyebrow'},'ADMINISTRATION / ORDER HISTORY'),h('h1',null,'Order history'),h('p',{className:'admin-intro'},'Review operational activity across orders and moves.'),h('p',{className:'admin-access-note'},'Prices, payments and note text are excluded. Owner history is limited to permitted accounts, including connected orders after item moves.'),
-      data && h('button',{onClick:()=>this.load(null)},'← All orders'),loading ? h('p',{role:'status',className:'admin-status'},'Loading order history…') : error ? h('div',null,h('p',{role:'alert'},error),h('button',{onClick:()=>this.load(null)},'Try again')) : data ? OrderDetail({data,open:id=>this.load(id)}) : OrderList({orders:this.state.orders,open:id=>this.load(id)}));
+    const language=this.props.language || 'en';
+    const t=(key,values)=>historyReportsText(language,key,values);
+    return h('main',null,h('button',{onClick:this.props.onBack},t('← Back to administration')),h('p',{className:'admin-eyebrow floor-eyebrow'},t('ADMINISTRATION / ORDER HISTORY')),h('h1',null,t('Order history')),h('p',{className:'admin-intro'},t('Review operational activity across orders and moves.')),h('p',{className:'admin-access-note'},t('Prices, payments and note text are excluded. Owner history is limited to permitted accounts, including connected orders after item moves.')),
+      data && h('button',{onClick:()=>this.load(null)},t('← All orders')),loading ? h('p',{role:'status',className:'admin-status'},t('Loading order history…')) : error ? h('div',null,h('p',{role:'alert'},t(error)),h('button',{onClick:()=>this.load(null)},t('Try again'))) : data ? OrderDetail({data,open:id=>this.load(id),t,language}) : OrderList({orders:this.state.orders,open:id=>this.load(id),t}));
   }
 }

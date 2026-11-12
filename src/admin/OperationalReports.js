@@ -1,3 +1,4 @@
+import { historyReportsText } from './history-reports-i18n.js';
 const h = React.createElement;
 class OperationalReports extends React.Component {
   constructor(props) {
@@ -27,74 +28,75 @@ class OperationalReports extends React.Component {
   }
   render() {
     const { from, to, data, error, busy } = this.state;
+    const t = (key, values) => historyReportsText(this.props.language || 'en', key, values);
     return h("main", { className: "reports" },
-      h("button", { onClick: this.props.onBack }, "\u2190 Back to administration"),
-      h("p", { className: "admin-eyebrow floor-eyebrow" }, "ADMINISTRATION / REPORTS"),
-      h("h1", null, "Operational reports"),
-      h("p", { className: "admin-intro" }, "Explore paid product, table and waiter activity for a local date range."),
+      h("button", { onClick: this.props.onBack }, t("← Back to administration")),
+      h("p", { className: "admin-eyebrow floor-eyebrow" }, t("ADMINISTRATION / REPORTS")),
+      h("h1", null, t("Operational reports")),
+      h("p", { className: "admin-intro" }, t("Explore paid product, table and waiter activity for a local date range.")),
       h("section", { className: "history-panel" },
-      h("p", { className: "admin-eyebrow" }, "REPORT PERIOD"),
-      h("h2", null, "Choose dates"),
+      h("p", { className: "admin-eyebrow" }, t("REPORT PERIOD")),
+      h("h2", null, t("Choose dates")),
       h("form", { className: "report-form", onSubmit: (e) => this.load(e) },
-      h("label", null, "From",
+      h("label", null, t("From"),
       h("input", { type: "date", required: true, disabled: busy, value: from, onChange: (e) => this.setState({ from: e.target.value, data: null, error: "" }) })),
-      h("label", null, "Through",
+      h("label", null, t("Through"),
       h("input", { type: "date", required: true, disabled: busy, value: to, onChange: (e) => this.setState({ to: e.target.value, data: null, error: "" }) })),
-      h("button", { className: "floor-primary", disabled: busy }, busy ? "Loading\u2026" : "Show report"))),
+      h("button", { className: "floor-primary", disabled: busy }, busy ? t("Loading…") : t("Show report")))),
       h("div", { className: "floor-note" },
-      h("strong", null, "Provisional definitions"),
-      h("p", null, "Paid bills only, by local payment date and your financial scope. Values are bill snapshot amounts in minor units. Products are grouped by ID and show their latest paid snapshot name in the period. Unpaid orders are excluded."),
-      h("p", null, "Table usage counts the table on the paid order; moved tables are not attributed to earlier tables. Waiter activity counts the person who recorded payment, not every contributing waiter.")), busy &&
-      h("p", { role: "status", className: "admin-status" }, "Loading report\u2026"), error &&
-      h("p", { role: "alert" }, error, " ", error === "Report unavailable." && "Check your access or sign in and select your own name."), data &&
+      h("strong", null, t("Provisional definitions")),
+      h("p", null, t("Paid bills only, by local payment date and your financial scope. Values are bill snapshot amounts in minor units. Products are grouped by ID and show their latest paid snapshot name in the period. Unpaid orders are excluded.")),
+      h("p", null, t("Table usage counts the table on the paid order; moved tables are not attributed to earlier tables. Waiter activity counts the person who recorded payment, not every contributing waiter."))), busy &&
+      h("p", { role: "status", className: "admin-status" }, t("Loading report…")), error &&
+      h("p", { role: "alert" }, t(error), " ", error === "Report unavailable." && t("Check your access or sign in and select your own name.")), data &&
       h("div", null,
-      h("p", { className: "reports-period" }, "Results \xB7 ", from, " through ", to),
+      h("p", { className: "reports-period" }, t("Results · {from} through {to}", {from, to})),
       h("section", { className: "history-panel" },
-      h("p", { className: "admin-eyebrow" }, "PAID BILL LINES"),
-      h("h2", null, "Products"), data.products.length ?
+      h("p", { className: "admin-eyebrow" }, t("PAID BILL LINES")),
+      h("h2", null, t("Products")), data.products.length ?
       h("div", { className: "report-table-wrap" },
       h("table", { className: "report-table" },
       h("thead", null,
       h("tr", null,
-      h("th", null, "Product"),
-      h("th", null, "Quantity"),
-      h("th", null, "Value \xB7 minor units"))),
+      h("th", null, t("Product")),
+      h("th", null, t("Quantity")),
+      h("th", null, t("Value · minor units")))),
       h("tbody", null, data.products.map((r) =>
       h("tr", { key: r.productId },
       h("td", null,
       h("strong", null, r.name),
       h("small", null, "ID: ", r.productId)),
-      h("td", null, "quantity " + r.quantity),
-      h("td", null, "value " + r.value)))))) :
-      h("p", { className: "floor-empty" }, "No products in this period.")),
+      h("td", null, t("quantity {value}",{value:r.quantity})),
+      h("td", null, t("value {value}",{value:r.value}))))))) :
+      h("p", { className: "floor-empty" }, t("No products in this period."))),
       h("section", { className: "history-panel" },
-      h("p", { className: "admin-eyebrow" }, "PAID ORDERS"),
-      h("h2", null, "Tables"), data.tables.length ?
+      h("p", { className: "admin-eyebrow" }, t("PAID ORDERS")),
+      h("h2", null, t("Tables")), data.tables.length ?
       h("div", { className: "report-table-wrap" },
       h("table", { className: "report-table" },
       h("thead", null,
       h("tr", null,
-      h("th", null, "Table"),
-      h("th", null, "Paid orders"))),
+      h("th", null, t("Table")),
+      h("th", null, t("Paid orders")))),
       h("tbody", null, data.tables.map((r) =>
       h("tr", { key: r.tableId },
-      h("td", null, "Table " + r.tableId),
+      h("td", null, t("Table {id}",{id:r.tableId})),
       h("td", null, r.count)))))) :
-      h("p", { className: "floor-empty" }, "No paid orders in this period.")),
+      h("p", { className: "floor-empty" }, t("No paid orders in this period."))),
       h("section", { className: "history-panel" },
-      h("p", { className: "admin-eyebrow" }, "PAYMENT ACTIVITY"),
-      h("h2", null, "Waiters"), data.waiters.length ?
+      h("p", { className: "admin-eyebrow" }, t("PAYMENT ACTIVITY")),
+      h("h2", null, t("Waiters")), data.waiters.length ?
       h("div", { className: "report-table-wrap" },
       h("table", { className: "report-table" },
       h("thead", null,
       h("tr", null,
-      h("th", null, "Recorded by"),
-      h("th", null, "Payments recorded"))),
+      h("th", null, t("Recorded by")),
+      h("th", null, t("Payments recorded")))),
       h("tbody", null, data.waiters.map((r, i) =>
       h("tr", { key: i },
       h("td", null, r.actor),
       h("td", null, r.count)))))) :
-      h("p", { className: "floor-empty" }, "No payments recorded in this period."))));
+      h("p", { className: "floor-empty" }, t("No payments recorded in this period.")))));
   }
 }
 export {
