@@ -1,4 +1,4 @@
-import { configText } from './config-i18n.js';
+import { configText, configError } from './config-i18n.js';
 import { accessNotice } from './shared.js';
 
 const permissionGroups = [
@@ -19,7 +19,7 @@ export class EmployeeConfig extends React.Component {
     try {
       const r = await window.arra.employeeConfig({ action: 'list' });
       if (r.ok) { this.setState(s => ({ ...r.data, access: true, revision: s.revision + 1 })); return true; }
-      this.setState({ error: this.t(r.error) || this.t('Employees unavailable.'), access: false });
+      this.setState({ error: configError(this.props.language, r.error, 'Employees unavailable.'), access: false });
     } catch (_) { this.setState({ error: this.t('Could not load employees.'), access: false }); }
     return false;
   }
@@ -30,7 +30,7 @@ export class EmployeeConfig extends React.Component {
       const r = await window.arra.employeeConfig(request);
       if (!r.ok) {
         if (!r.error || r.error === 'Configuration unavailable') throw new Error('Unconfirmed');
-        this.setState({ error: this.t(r.error), busy: false }); return;
+        this.setState({ error: configError(this.props.language, r.error, 'Could not save configuration.'), busy: false }); return;
       }
       if (this.props.onAccessChanged && !(await this.props.onAccessChanged())) return;
       const loaded = await this.load();

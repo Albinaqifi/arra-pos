@@ -1,4 +1,4 @@
-import { configText } from './config-i18n.js';
+import { configText, configError } from './config-i18n.js';
 import { accessNotice } from './shared.js';
 
 export class TableConfig extends React.Component {
@@ -12,7 +12,7 @@ export class TableConfig extends React.Component {
     try {
       const r = await window.arra.tableConfig({ action: 'list' });
       if (r.ok) { this.setState({ ...r.data, access: true }); return true; }
-      this.setState({ error: this.t(r.error) || this.t('Areas and tables unavailable.'), access: false });
+      this.setState({ error: configError(this.props.language, r.error, 'Areas and tables unavailable.'), access: false });
     } catch (_) { this.setState({ error: this.t('Could not load areas and tables.'), access: false }); }
     return false;
   }
@@ -42,7 +42,7 @@ export class TableConfig extends React.Component {
     this.setState({ busy: true, error: '', notice: '' });
     try {
       const r = await window.arra.tableConfig(request);
-      if (!r.ok) { this.setState({ error: this.t(r.error) || this.t('Could not save configuration.'), busy: false }); return; }
+      if (!r.ok) { this.setState({ error: configError(this.props.language, r.error, 'Could not save configuration.'), busy: false }); return; }
       const loaded = await this.load();
       this.setState({ busy: false, ...(loaded ? { editor: null, notice: e.kind === 'area' ? this.t('Area saved.') : this.t('Table saved.') } : {}) });
     } catch (_) { this.setState({ busy: false, error: this.t('Could not save configuration. Check the list before trying again.') }); }
