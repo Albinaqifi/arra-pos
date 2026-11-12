@@ -8,7 +8,7 @@ Only decisions likely to cause substantial rework, data loss, financial errors, 
 
 [P] Plan separately authenticated accounts and a simple permissions screen with view and action permissions and financial-data scope, enforced by the application on every request. Start with the documented Owner A, Owner B and combined-account restrictions as defaults; make grants configurable by an appropriately authorized account. The exact screens and controls can evolve during implementation.
 
-**Still to clarify before implementing access administration:** Who is allowed to change financial access, including their own, and may the existing A/B privacy restrictions be changed? The original admin requirements describe these restrictions as mandatory. [P] Until the user decides otherwise, preserve them and do not assume anyone may grant access across them.
+**User decision:** Only Combined may create or change owner accounts or financial access. Owner A and Owner B have admin access limited to their respective financial data; both may manage staff and shared restaurant settings. Preserve A/B privacy, including against self-grants or changes to another owner. See D-013. Any further delegation or changes to these boundaries require an owner decision.
 
 ## Q-02 — Payment recording
 
