@@ -42,4 +42,3 @@ test('Albanian failed-print banner offers a translated backup action',()=>{
   const rendered=JSON.stringify(app.render());
   assert.ok(rendered.includes('Printo në printerin rezervë')); assert.ok(!rendered.includes('Print on backup printer'));
 });
-
