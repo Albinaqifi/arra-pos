@@ -90,7 +90,9 @@ Upgraded accounts receive no financial scope automatically and cannot access pro
 
 For sample-only transfer testing, close the app and run `node src/desktop/create-sample-transfer-manager.js "<absolute-sample-directory>"` interactively. Choose a four-digit sample PIN; it is stored hashed and is not displayed. Sign in with a sample restaurant account and select Transfer Manager at the end of the user list. This helper modifies only the marked sample database; it is not production provisioning. Reasons are optional pending Q-08, and the open manual business period is the provisional filter.
 
-To prepare order and payment scenarios for the turnover report, first create the isolated sample accounts above and copy the displayed directory path. With the desktop app closed, run these PowerShell commands, replacing the example path with that directory:
+To create a fresh isolated sample database with accounts, a transfer manager, tables, menu and order/payment scenarios in one step, close the desktop app and run `node src/desktop/create-sample-scenarios.js` interactively. Choose four distinct sample passwords and a transfer manager PIN. Run `npm run build` and then the launch command it prints; sign in and select `sample-combined` to review all turnover.
+
+To add the scenarios to an already-created, fresh sample database instead, copy its directory path. With the desktop app closed, run these PowerShell commands, replacing the example path with that directory:
 
 ```powershell
 $sample = 'C:\path\to\arra-sample-directory'
