@@ -54,7 +54,7 @@ test('migration assigns existing payments and new payments to the current manual
   assert.notEqual(db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=2').get().business_day_id,old);
   assert.throws(()=>db.exec('UPDATE payment_business_days SET business_day_id=2 WHERE payment_id=1'));
 });
-test('provisioned combined sample account can close while other identities and revoked grants cannot', t => {
+test('provisioned owners can access close while waiter and revoked combined grant cannot', t => {
   const { createSampleAccounts } = require('../src/desktop/sample-accounts');
   const { createSession } = require('../src/desktop/session');
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-day-roles-')); const db=openDatabase(dir);
@@ -68,7 +68,8 @@ test('provisioned combined sample account can close while other identities and r
     const id=db.prepare('SELECT id FROM local_users WHERE username=?').get(name).id;
     assert.equal(session.selectWaiter({id,pin:''}).ok,true);
     const list=call({action:'list'});
-    if(index<3) assert.equal(list.ok,false);
+    if(index===0) assert.equal(list.ok,false);
+    else if(index<3) assert.equal(list.ok,true);
     else {
       assert.equal(list.ok,true); const dayId=list.data.days[0].id;
       assert.equal(call({action:'close',dayId}).ok,true);
@@ -119,7 +120,7 @@ test('sample close-grant upgrade accepts a normally migrated v23 copy and reject
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
     DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
     DELETE FROM user_permissions WHERE permission='business_days.close'; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=22;`);
-  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,29);
+  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,30);
   const assigned=db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=1').get().business_day_id;
   db.close(); db=null; fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');
   upgraded=await upgradeSampleBusinessDays(path.join(dir,'arra.sqlite'),'sample-combined',passwords[3]);

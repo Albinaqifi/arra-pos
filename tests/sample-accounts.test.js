@@ -77,7 +77,7 @@ test('sample recovery snapshots populated old database, authenticates and preser
   copied=await recoverSample(source,'sample-legacy','sample-legacy-password');
   assert.notEqual(copied,dir); assert.deepEqual(fs.readFileSync(source),original);
   db=openDatabase(copied);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 29);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
   assert.equal(db.prepare('SELECT count(*) n FROM orders').get().n,1);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope,'waiter');
   assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE action='sample_waiter_setup'").get().n,1);
