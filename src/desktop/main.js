@@ -20,6 +20,8 @@ const { registerOrderHistory } = require('./order-history');
 const { registerPrintJobs } = require('./print-jobs');
 const { registerSession } = require('./session');
 const { registerEmployeeConfig } = require('./employee-config');
+const testPrinting = require('./test-printing');
+const { printTestJob } = require('./windows-test-printer');
 
 let database;
 let mainWindow;
@@ -71,9 +73,12 @@ app.whenReady().then(() => {
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
-  registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session);
+  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
+  const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:printTestJob } : null;
+  registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
+  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, printTestJob, testPrintEnabled);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -16,9 +16,9 @@ The question means: after a customer pays in cash or on the restaurant's separat
 
 Working assumption: [P] the POS records a staff-confirmed payment, while the card terminal handles the actual card transaction. Printing and payment are separate. The owner has ruled out a refund workflow (D-011).
 
-## Q-03 — Business day and corrections — deferred
+## Q-03 — Business day and corrections — partially decided
 
-The user wants to establish the system first. [P] Design the data so business-day rules and authorized corrections can be configured or extended later; do not choose a closing time now. The documented rule that transfer-manager corrections stop after closure remains in force.
+**User decision:** A system day has no fixed closing time and can run past midnight. An authorized admin closes it when the restaurant closes, and the next system day starts automatically. See D-012. The documented rule that transfer-manager corrections stop after closure remains in force. Exceptional post-close correction authority and other unresolved handling remain open.
 
 ## Q-06 — Printers — deferred
 

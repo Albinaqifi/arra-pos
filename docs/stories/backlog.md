@@ -253,6 +253,22 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Verify both successful paths with sample data and waiter reselection; check failed and uncertain responses, a send with a print issue or remaining pending items, and retry behavior. Confirm no duplicate send or payment and no change to existing financial rules.
 
+### S-056 — Test kitchen, bar and bill printing on one printer
+
+**Goal:** Test actual output from the desktop app using sample orders and bills. Keep three separate logical destinations—kitchen, bar and bill—with independently changeable Windows printer queue identifiers. Initially map all three to `Arra Test Printer`; later they can be mapped to different printers without changing the order or bill workflows. This is a test-mode experiment, not fiscal integration or approval for live sales.
+
+**Depends on:** S-018 and S-023. This limited sample-only hardware test may proceed while S-033 remains blocked; it does not complete or replace S-033, S-034 or S-035.
+
+**Acceptance:**
+
+- Provide a clearly labeled test-mode configuration for each destination, persisted across restarts and validated in trusted application code. The three mappings can share a queue or be changed independently; the named queue is an initial test setting, not a hard-coded production assumption. Explain how to select or change the queues.
+- Sending a sample order produces separate kitchen and bar tickets using the existing item routing and the newly sent round only. Each ticket identifies its destination, table and round, and includes the relevant quantities, item names, modifiers and notes where available. A mixed order must not leak bar items onto the kitchen ticket or vice versa, even when both use the same physical printer.
+- Provide a clearly marked **test bill, not a fiscal receipt** print from an existing generated sample bill, with its saved lines, modifiers and total. Keep the bill destination separate from the preparation destinations. Printing or reprinting must never create a bill, payment, sale or charge, or change A/B classification; card remains A. Enforce existing permissions and financial visibility.
+- Record distinct print jobs and attempts, preserving existing order, ticket, bill and payment history. Send to the configured local Windows queue offline. A queue acceptance is not proof that paper was printed; expose failed and uncertain outcomes and an explicit operator check before retrying uncertain output. Retries refer to the original job and do not duplicate order or payment data. Handle missing queues, disconnected printers, paper issues and interrupted/restarted app without silently claiming a physical print succeeded.
+- Verify on the owner's connected Birch device using the `Arra Test Printer` Windows queue: a mixed sample order prints separate kitchen and bar tickets and a generated sample bill prints separately; inspect paper for routing, content and readability. Verify that changing one destination does not change the others, including a test with different queue identifiers or controlled fakes. Record the actual hardware results and any limitations; do not claim a separate-physical-printer test until those devices are available.
+
+**Checks/review:** Focused tests for routing, snapshots, permissions, bill/payment invariants, repeated requests, failures and uncertain recovery, plus an offline desktop and physical-printer test with sample data. Review persistence and safe failure handling. Document Windows setup, test mode, queue mappings and later separate-printer test steps. Actual fiscal output and provider/legal verification remain separate.
+
 ### S-057 — Daily detailed turnover
 
 **Goal:** As an authorized administrator, I can review detailed turnover for a system day in Financial Information.

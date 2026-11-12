@@ -3,7 +3,7 @@ const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:order-items';
 const validId = n => Number.isSafeInteger(n) && n > 0;
 
-function registerOrderItems(ipcMain, isAllowedSender, db, session) {
+function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
     const keys = { correct: ['action', 'orderId', 'itemId', 'quantity', 'reason', 'requestId'], list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
       note: ['action', 'orderId', 'itemId', 'note'], increment: ['action', 'orderId', 'itemId'], decrement: ['action', 'orderId', 'itemId'], remove: ['action', 'orderId', 'itemId'] };
@@ -20,6 +20,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, error: 'Access denied' };
     if (request.action === 'correct' && !hasPermissions(db, session, 'orders.correct_sent')) return { ok: false, error: 'Access denied' };
     try {
+      const testAttempts = [];
       db.exec('BEGIN IMMEDIATE');
       try {
         if (!db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
@@ -50,6 +51,10 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
                 if (!selected.length) continue;
                 const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;
                 for (const item of selected) db.prepare('INSERT INTO preparation_ticket_items (ticket_id, item_id, quantity) VALUES (?, ?, ?)').run(ticketId, item.id, item.quantity);
+                if (testPrinting) {
+                  const job = testPrinting.createPreparationJob(db, ticketId);
+                  testAttempts.push(testPrinting.reserveAttempt(db, job, 'prep-' + ticketId, session.currentUserId()));
+                }
                 const jobId = db.prepare('INSERT INTO print_jobs (ticket_id, created_at) VALUES (?, ?)').run(ticketId, Date.now()).lastInsertRowid;
                 const result = db.prepare('SELECT result FROM simulated_printers WHERE destination = ?').get(destination).result;
                 db.prepare('INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) VALUES (?, ?, ?, ?, ?)').run(jobId, 'initial-' + jobId, session.currentUserId(), Date.now(), result);
@@ -109,7 +114,8 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session) {
           total += line;
         }
         db.exec('COMMIT');
-        return { ok: true, data: { items, total } };
+        if (testPrinting) for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt);
+        return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting) } };
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } catch (_) { return { ok: false, error: 'Could not update order items' }; }
   });
