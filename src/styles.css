@@ -113,6 +113,14 @@ input { font-family: inherit; }
 .finance-metrics span, .finance-metrics strong { display: block; } .finance-metrics span { color: #64748b; font-size: 14px; } .finance-metrics strong { margin-top: 5px; font-size: 22px; }
 .finance-issues p { margin: 8px 0 0; color: #475569; } .finance-day { margin: 16px 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; } .finance-day h3 { margin: 0; }
 .finance-confirm { margin-top: 12px; padding: 16px; background: #fff7ed; color: #7c2d12; border: 1px solid #fed7aa; border-radius: 12px; }
+.day-turnover { margin: 18px 0; padding: 18px; border-radius: 12px; background: #112548; color: #fff; }
+.day-turnover span, .day-turnover strong, .day-turnover small { display: block; }
+.day-turnover strong { font-size: 28px; margin: 6px 0; }
+.day-current h4 { margin-bottom: 6px; }
+.day-details { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+.day-details summary { cursor: pointer; font-weight: 700; }
+.day-print-notice { margin: 16px 0; padding: 14px 16px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 12px; }
+.day-print-notice p { margin: 8px 0; }
 @media (max-width: 540px) { .history-panel { padding: 16px; } .admin-shell .history-order { flex-wrap: wrap; } }
 /* Operational reports and restricted transfer workspace */
 .report-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
