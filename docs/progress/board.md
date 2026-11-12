@@ -64,7 +64,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-064 | Done | Independent review and focused tests passed; owner reports desktop checks worked; PR #86 merged as c47ad18. |
 | S-065 | Done | Independent review and focused tests passed; owner reports desktop and offline checks passed; PR #88 merged as `26f15ee`. |
 
-| S-066 | In progress | Review and focused tests passed; owner reports desktop and offline checks worked. PR pending; fluent review unconfirmed. |
+| S-066 | Done | Review and focused tests passed; owner reports desktop and offline checks worked; PR #90 merged as `e1cbf62`. Fluent review unconfirmed. |
 
 ## Current
 
