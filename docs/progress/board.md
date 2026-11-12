@@ -62,7 +62,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-062 | In progress | Independent review and focused tests passed; desktop and offline printer verification outstanding. |
 | S-063 | Done | Independent review, focused tests and owner-reported desktop, restart and offline checks passed; PR #85 merged as 27613f4. |
 | S-064 | Done | Independent review and focused tests passed; owner reports desktop checks worked; PR #86 merged as c47ad18. |
-| S-065 | In progress | Independent review and focused tests passed; owner reports desktop and offline checks passed; PR pending. |
+| S-065 | Done | Independent review and focused tests passed; owner reports desktop and offline checks passed; PR #88 merged as `26f15ee`. |
 
 ## Current
 
