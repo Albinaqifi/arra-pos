@@ -67,13 +67,13 @@ app.whenReady().then(() => {
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
-  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session);
+  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
+  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
   registerOperationalReports(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
-  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:printTestJob } : null;
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);

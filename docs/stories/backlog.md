@@ -285,6 +285,21 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Use sample data to verify a day spanning midnight, running and closed-day results, automatic next-day start, repeated close requests and failure recovery, cash and card, a B-to-A transfer, reconciliation to underlying payments, and direct-request denial for A and B across totals and details. Check persistence across restart and review financial and authorization behavior. Resolve any necessary historical-day handling before implementation.
 
+### S-058 — Print daily turnover when closing the system day
+
+**Goal:** When an authorized admin closes the system day, automatically print a report listing its paid bills and total turnover on the restaurant printer.
+
+**Depends on:** S-026, S-056 and S-057. This is a non-fiscal report; fiscal closing and fiscal output remain separate and subject to S-033 and S-035.
+
+**Acceptance:**
+
+- Closing the day creates a durable report and print job for that closed day and automatically attempts to print it. The report identifies the day and its opening and closing times, lists each paid bill with its number, time, table and amount, and shows the total. The list and total reconcile to the day's recorded payments; each payment counts once under its effective account, including corrected payments.
+- Closing and report creation must not duplicate payments or close multiple days on repeated requests. Preserve the closed day's report and history across restarts. A print failure or uncertain outcome must be visible and must not undo or repeat the day close. Allow an authorized user to retry the original report; when output is uncertain, ask the operator to check the printer before retrying.
+- Enforce the existing close and financial-scope permissions in trusted code. The full A/B report is available only to an authorized combined account; do not expose the other account's bills or totals to A-only or B-only users through printing, history or direct requests. Print locally without internet, using the existing configurable printer setup where suitable.
+- Clearly label the output as a non-fiscal daily turnover report. A Windows queue acceptance alone is not proof of paper output. Verify with sample data on the available restaurant printer and record the actual result or limitation.
+
+**Checks/review:** Verify a day spanning midnight, multiple bills, cash and card, a corrected payment and total reconciliation; denied direct requests; repeated close and print requests; printer failure, uncertain output, retry and restart recovery. Inspect the sample printed paper for completeness and readability. Review financial integrity and authorization.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.

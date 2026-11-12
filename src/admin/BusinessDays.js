@@ -4,7 +4,7 @@ function Issues({issues}) {
   return h('div',{className:'finance-issues'},h('div',null,h('strong',null,'Open orders ('+issues.orders.length+')'),h('p',null,issues.orders.map(o=>'#'+o.id+' · table '+o.tableId).join(', ') || 'None')),h('div',null,h('strong',null,'Unsuccessful or uncertain print jobs ('+issues.printJobs.length+')'),h('p',null,issues.printJobs.map(j=>'#'+j.id+' · '+j.result).join(', ') || 'None')));
 }
 export class BusinessDays extends React.Component {
-  constructor(props) { super(props); this.state={data:null,error:'',loading:true,busy:false,confirmId:null,preview:null,success:''}; this.sequence=0; }
+  constructor(props) { super(props); this.state={data:null,error:'',loading:true,busy:false,confirmId:null,preview:null,success:''}; this.sequence=0; this.retryTokens={}; }
   componentDidMount() { this.load(); }
   componentWillUnmount() { this.sequence++; }
   async load() {
@@ -38,10 +38,32 @@ export class BusinessDays extends React.Component {
       await this.load(); if(this.props.onDaysChanged) this.props.onDaysChanged();
     } catch (_) { this.setState({busy:false,confirmId:null,error:'The close result is unavailable. Refresh and check the day before trying again.'}); }
   }
+  async retry(id) {
+    if (this.state.busy || !window.confirm('Have you checked the printer and paper? Retrying may print a duplicate.')) return;
+    const requestId=this.retryTokens[id] || (this.retryTokens[id]=crypto.randomUUID());
+    this.setState({busy:true,error:'',success:''});
+    try {
+      const r=await window.arra.businessDays({action:'retry',dayId:id,requestId,checked:true});
+      if (!r.ok) { this.setState({busy:false,error:'Print retry unavailable. Check the printer and refresh before trying again.'}); return; }
+      delete this.retryTokens[id];
+      this.setState({busy:false,success:'Report print attempt started. Refresh for its status.'});
+      await this.load();
+    } catch (_) { this.setState({busy:false,error:'Print retry result unknown. Check the printer and refresh before trying again.'}); }
+  }
+  async configure(queue) {
+    if (this.state.busy) return;
+    this.setState({busy:true,error:'',success:''});
+    try {
+      const r=await window.arra.businessDays({action:'configure',queue:queue.trim()});
+      if (!r.ok) { this.setState({busy:false,error:'Printer queue could not be saved.'}); return; }
+      this.setState({busy:false,success:'Printer queue saved.'});
+      await this.load();
+    } catch (_) { this.setState({busy:false,error:'Printer queue could not be saved.'}); }
+  }
   render() {
     const s=this.state;
-    return h('section',{className:'history-panel'},h('p',{className:'admin-eyebrow'},'BUSINESS DAY'),h('h2',null,'Business day close'),h('p',{className:'history-muted'},'Manual sample periods; day boundaries are provisional. Closing records outstanding issues and opens a new day.'),s.loading && h('p',{role:'status'},'Loading business days…'),s.error && h('p',{role:'alert'},s.error),s.success && h('p',{role:'status',className:'floor-success'},s.success),!s.loading && !s.data && h('button',{onClick:()=>this.refresh()},'Retry business days'),s.data && !s.loading && h(React.Fragment,null,
-      h('h3',null,'Outstanding now'),h('p',{className:'history-muted'},'These issues remain open after closing. Refresh to see the latest state; the close records the issues present at that moment.'),h(Issues,{issues:s.data.issues}),
-      s.data.days.map(day=>h('div',{className:'finance-day',key:day.id},h('div',{className:'history-section-head'},h('h3',null,'Period #'+day.id),h('span',{className:'history-badge'},day.closedAt===null?'Open':'Closed')),h('p',{className:'history-muted'},'Opened '+date(day.openedAt)+(day.closedAt===null?'':' · Closed '+date(day.closedAt)+' · Actor #'+day.closedBy)),day.closedAt===null ? (s.confirmId===day.id ? h('div',{className:'finance-confirm',role:'group','aria-label':'Confirm business day close'},h('strong',null,'Close period #'+day.id+'?'),h('h4',null,'Turnover at review'),s.preview && s.preview.groups.length ? h('ul',null,s.preview.groups.map(g=>h('li',{key:g.account+g.method},g.account+' · '+g.method+' · '+g.count+' payments · '+g.total))) : h('p',null,'No payments in this day.'),h('p',null,'Turnover and outstanding issues may change before closing. Outstanding orders and print issues remain open. Transfer-manager corrections for payments in this day will no longer be allowed. A new day opens.'),h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.close(day.id)},s.busy?'Closing…':'Confirm close'),h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:null})},'Cancel'))) : h('button',{disabled:s.busy,onClick:()=>this.review(day.id)},'Review close')) : h(React.Fragment,null,h('h4',null,'Issues recorded at close'),h(Issues,{issues:day.issues})))),h('button',{disabled:s.busy,onClick:()=>this.refresh()},'Refresh business days')));
+    return h('section',{className:'history-panel'},h('p',{className:'admin-eyebrow'},'BUSINESS DAY'),h('h2',null,'Business day close'),h('p',{className:'history-muted'},'Manual sample periods; day boundaries are provisional. Closing records outstanding issues, opens a new day and attempts a non-fiscal turnover report on the configured report printer.'),s.loading && h('p',{role:'status'},'Loading business days…'),s.error && h('p',{role:'alert'},s.error),s.success && h('p',{role:'status',className:'floor-success'},s.success),!s.loading && !s.data && h('button',{onClick:()=>this.refresh()},'Retry business days'),s.data && !s.loading && h(React.Fragment,null,
+      h('form',{key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,'Windows turnover report printer queue ',h('input',{name:'queue',defaultValue:s.data.queue,required:true,maxLength:255})),h('button',{disabled:s.busy,type:'submit'},'Save printer queue')),h('h3',null,'Outstanding now'),h('p',{className:'history-muted'},'These issues remain open after closing. Refresh to see the latest state; the close records the issues present at that moment.'),h(Issues,{issues:s.data.issues}),
+      s.data.days.map(day=>h('div',{className:'finance-day',key:day.id},h('div',{className:'history-section-head'},h('h3',null,'Period #'+day.id),h('span',{className:'history-badge'},day.closedAt===null?'Open':'Closed')),h('p',{className:'history-muted'},'Opened '+date(day.openedAt)+(day.closedAt===null?'':' · Closed '+date(day.closedAt)+' · Actor #'+day.closedBy)),day.closedAt===null ? (s.confirmId===day.id ? h('div',{className:'finance-confirm',role:'group','aria-label':'Confirm business day close'},h('strong',null,'Close period #'+day.id+'?'),h('h4',null,'Turnover at review'),s.preview && s.preview.groups.length ? h('ul',null,s.preview.groups.map(g=>h('li',{key:g.account+g.method},g.account+' · '+g.method+' · '+g.count+' payments · '+g.total))) : h('p',null,'No payments in this day.'),h('p',null,'Turnover and outstanding issues may change before closing. Outstanding orders and print issues remain open. Transfer-manager corrections for payments in this day will no longer be allowed. A new day opens.'),h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.close(day.id)},s.busy?'Closing…':'Confirm close'),h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:null})},'Cancel'))) : h('button',{disabled:s.busy,onClick:()=>this.review(day.id)},'Review close')) : h(React.Fragment,null,h('h4',null,'Daily turnover report'),day.reportId ? h(React.Fragment,null,h('p',null,'Print status: '+day.printResult+' · '+day.printAttempts+' attempt(s). '+(day.printResult==='uncertain'?'Printing may still be in progress or its result may be unknown. Refresh business days after the printer finishes, and check paper before retrying. ':'')+'Windows queue acceptance does not confirm paper output.'),h('button',{disabled:s.busy,onClick:()=>this.retry(day.id)},'Retry report after checking printer')) : h('p',null,'No report was created for this earlier day.'),h('h4',null,'Issues recorded at close'),h(Issues,{issues:day.issues})))),h('button',{disabled:s.busy,onClick:()=>this.refresh()},'Refresh business days')));
   }
 }

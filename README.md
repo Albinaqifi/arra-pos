@@ -8,6 +8,8 @@ Windows sample-only printing is an experiment, not fiscal integration or permiss
 
 Queue acceptance is not proof of paper output. Check the printer and paper for every job; a missing queue is shown as failed and a driver failure, interruption or unknown callback remains uncertain. Refresh the test job list, check the paper and acknowledge that a duplicate is possible before retrying. A restart never automatically resubmits an uncertain job. Retrying uses its saved snapshot and does not send the order or record a payment again. For the Birch experiment use the owner's `Arra Test Printer` queue and inspect separate mixed-order tickets and the test bill for content and readability. When additional physical printers become available, map each destination to its own Windows queue and repeat the same sample checks. This does not resolve provider, legal or fiscal verification.
 
+Closing a system day also creates a non-fiscal turnover report and attempts to print it on Windows. An authorized combined-account day closer can set its dedicated queue in the close-day screen; it is initially copied from the bill queue and can then be changed independently. The saved report and print status remain available after closing. Refresh the status and check the paper before retrying an uncertain result. Queue acceptance does not confirm paper output. Verify this flow with sample data before relying on the printer.
+
 ## Desktop window
 
 Install Node.js 22.12 or later and run the following once while connected to the internet, from this directory:
