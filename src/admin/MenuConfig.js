@@ -75,6 +75,7 @@ export class MenuConfig extends React.Component {
       !child && s.categories.filter(x => x.parentId === c.id).map(x => category(x, true)));
     return h('main', { className: 'floor-page' }, button('← Back to administration', this.props.onBack),
       h('p', { className: 'admin-eyebrow floor-eyebrow' }, 'ADMINISTRATION / MENU'), h('h1', null, 'Menu management'), h('p', { className: 'admin-intro' }, 'Organize categories, products and the choices offered to guests.'),
+      h('p', { className: 'admin-access-note' }, 'Changes here affect the whole restaurant and are recorded under your account.'),
       h('div', { className: 'floor-note' }, h('strong', null, 'Menu visibility and choices'), h('p', null, 'Inactive categories hide their products and subcategories. Display order uses lower numbers first. Each modifier group permits at most one choice; a required group needs one active option. Existing order snapshots stay unchanged.')),
       s.notice && h('p', { role: 'status', className: 'floor-success' }, s.notice), s.error && h('p', { role: 'alert' }, s.error),
       e && h('section', { className: 'floor-editor', 'aria-label': e.kind + ' details' }, h('div', { className: 'floor-section-head' }, h('div', null, h('p', { className: 'floor-kicker' }, 'MENU DETAILS'), h('h2', null, (e.id ? 'Edit ' : 'New ') + e.kind)), button('Cancel', () => this.setState({ editor: null, error: '' }))),

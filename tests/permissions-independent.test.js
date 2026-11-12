@@ -15,7 +15,7 @@ test('each direct boundary rejects an untrusted sender and grant lookup fails cl
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-permission-check-'));
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  bootstrap(db, 'sample', 'sample password'); seedTables(db); seedMenu(db);
+  bootstrap(db, 'sample', 'sample password'); db.exec("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; DELETE FROM user_permissions WHERE user_id=1 AND permission='business_days.close'"); seedTables(db); seedMenu(db);
   const session = createSession(db);
   assert.equal(session.signIn({ username: 'sample', password: 'sample password' }).ok, true);
   const handlers = {}; const trusted = {};
@@ -33,9 +33,9 @@ test('each direct boundary rejects an untrusted sender and grant lookup fails cl
 test('failed version 9 migration rolls back and preserves existing order data', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-permission-rollback-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password'); seedTables(db);
+  let db = openDatabase(dir); bootstrap(db, 'sample', 'sample password'); db.exec("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; DELETE FROM user_permissions WHERE user_id=1 AND permission='business_days.close'"); seedTables(db);
   db.prepare("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 123, 'open')").run();
-  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; PRAGMA user_version = 8'); db.close();
+  db.exec('DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version = 8'); db.close();
   assert.throws(() => openDatabase(dir));
   db = new DatabaseSync(path.join(dir, 'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version, 8);

@@ -12,6 +12,7 @@ test('employee changes require authenticated administrator, protect credentials 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-employees-')); let db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   bootstrap(db, 'admin', 'sample admin password');
+  db.prepare("UPDATE financial_scopes SET scope='combined' WHERE user_id=1").run();
   const session = createSession(db), handlers = {}, trusted = {};
   registerEmployeeConfig({ handle: (channel, fn) => handlers[channel] = fn }, e => e === trusted, db, session);
   const invoke = req => handlers['arra:employee-config'](trusted, req);

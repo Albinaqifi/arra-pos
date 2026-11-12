@@ -19,4 +19,14 @@ function hasPermissions(db, session, ...permissions) {
     return permissions.every(permission => Boolean(check.get(id, permission)));
   } catch (_) { return false; }
 }
-module.exports = { hasPermissions };
+function hasTableConfigPermission(db, session) {
+  if (hasPermissions(db, session, 'tables.change')) return true;
+  try {
+    const id = session.currentUserId();
+    return id != null && id === session.authenticatedUserId() &&
+      !db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(id) &&
+      ['A', 'B', 'combined'].includes(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope) &&
+      !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='tables.change'").get(id);
+  } catch (_) { return false; }
+}
+module.exports = { hasPermissions, hasTableConfigPermission };

@@ -11,7 +11,7 @@ function find(node, predicate) {
 function setup() {
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const calls = [];
-  const data = { users: [{ id: 1, username: 'Sample', active: 1, hasPin: 0 }], grants: [], audit: [], credentialAudit: [], accountAudit: [], permissions: [] };
+  const data = { users: [{ id: 1, username: 'Sample', active: 1, hasPin: 0, scope: 'waiter' }], grants: [], audit: [], credentialAudit: [], accountAudit: [], actorScope: 'combined', actorId: 2, permissions: [] };
   const context = { React: { Component, createElement(type, props, ...children) { return { type, props: props || {}, children }; } }, TextEncoder, window: { confirm: () => true, arra: { employeeConfig: async request => { calls.push(request); return { ok: true, data }; } } } };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   const page = new context.ArraComponents.EmployeeConfig({});

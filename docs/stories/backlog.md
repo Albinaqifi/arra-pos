@@ -315,7 +315,7 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Goal:** Deliver D-013 shared configuration and protected account management. **Depends on:** S-059, S-010, S-015 and S-027.
 
-**Acceptance:** Both owners and Combined can manage shared menu, prices, tables and staff, with clear restaurant-wide messaging and attributable history. Only Combined can create or change owner accounts or financial access, including credentials and grants. Prevent self-escalation and preserve active-administrator and session protections. Keep sensitive operational and financial paths restricted unless explicitly authorized.
+**Acceptance:** Both owners and Combined can manage shared menu, prices, tables and staff within D-014's boundary, with clear restaurant-wide messaging and attributable history. Only Combined can manage staff credentials and operational permissions, or create or change owner accounts or financial access, including credentials and grants. Prevent self-escalation and preserve active-administrator and session protections. Keep sensitive operational and financial paths restricted unless explicitly authorized.
 
 **Checks/review:** Exercise all three identities and direct requests, attempts to change owner credentials and grants, self-escalation, shared changes and attribution, sessions, and applicable migration and restart behavior.
 

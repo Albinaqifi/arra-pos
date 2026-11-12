@@ -1,5 +1,5 @@
 const { randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
-const { hasPermissions } = require('./permissions');
+const { hasPermissions, hasTableConfigPermission } = require('./permissions');
 const OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const failure = () => ({ ok: false, error: 'Sign in failed' });
 const validUsername = value => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 128;
@@ -11,11 +11,11 @@ function bootstrap(db, username, password) {
   const hash = hashPassword(password, salt);
   db.exec('BEGIN IMMEDIATE');
   try {
-    if (db.prepare('SELECT count(*) AS count FROM local_users').get().count !== 0) throw new Error('An account already exists');
+    if (['local_users', 'orders', 'bills', 'payments', 'application_audit'].some(table => db.prepare('SELECT 1 FROM ' + table + ' LIMIT 1').get())) throw new Error('Initial account requires an empty database');
     const user = db.prepare('INSERT INTO local_users (username, salt, password_hash) VALUES (?, ?, ?)').run(username, salt, hash);
-    db.prepare("INSERT INTO financial_scopes(user_id, scope) VALUES (?, 'waiter')").run(user.lastInsertRowid);
+    db.prepare("INSERT INTO financial_scopes(user_id, scope) VALUES (?, 'combined')").run(user.lastInsertRowid);
     const grant = db.prepare('INSERT INTO user_permissions (user_id, permission) VALUES (?, ?)');
-    for (const permission of ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent']) grant.run(user.lastInsertRowid, permission);
+    for (const permission of ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent', 'business_days.close']) grant.run(user.lastInsertRowid, permission);
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
@@ -47,7 +47,7 @@ function createSession(db) {
     listWaiters() {
       if (!restaurantActive()) return { ok: false, error: 'Access denied' };
       try {
-        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Transfer Manager' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
+        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Transfer Manager' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND NOT EXISTS (SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
       } catch (_) { return { ok: false, error: 'Waiters unavailable' }; }
     },
     selectWaiter(request) {
@@ -58,7 +58,7 @@ function createSession(db) {
           !Object.hasOwn(request, 'id') || !Object.hasOwn(request, 'pin')) return fail();
       try {
         const row = db.prepare('SELECT active, pin_salt, pin_hash FROM local_users WHERE id = ?').get(request.id);
-        if (!row || row.active !== 1) return fail();
+        if (!row || row.active !== 1 || db.prepare('SELECT 1 FROM pending_staff WHERE user_id=?').get(request.id)) return fail();
         const selectedTransfer = Boolean(db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(request.id));
         if (db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(restaurantId)) return fail();
         if (selectedTransfer && (!row.pin_hash || !row.pin_salt)) return fail();
@@ -90,7 +90,7 @@ function registerSession(ipcMain, isAllowedSender, db) {
   const session = createSession(db);
   const adminAccess = () => {
     const current = session.currentUserId(), authenticated = session.authenticatedUserId();
-    return current !== null && current === authenticated && ['tables.change', 'menu.change', 'employees.view', 'employees.change'].some(permission => hasPermissions(db, session, permission));
+    return current !== null && current === authenticated && (hasTableConfigPermission(db, session) || ['menu.change', 'employees.view', 'employees.change'].some(permission => hasPermissions(db, session, permission)));
   };
   ipcMain.handle('arra:admin-access', (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype || Reflect.ownKeys(request).length !== 0) return { ok: false };

@@ -253,6 +253,11 @@ const migrations = [
   CREATE TRIGGER day_jobs_no_replace BEFORE INSERT ON day_print_jobs WHEN EXISTS(SELECT 1 FROM day_print_jobs WHERE id=NEW.id OR day_id=NEW.day_id) BEGIN SELECT RAISE(ABORT,'Reports are immutable'); END;
   CREATE TRIGGER day_attempts_no_replace BEFORE INSERT ON day_print_attempts WHEN EXISTS(SELECT 1 FROM day_print_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
   CREATE TRIGGER day_results_no_replace BEFORE INSERT ON day_print_results WHEN EXISTS(SELECT 1 FROM day_print_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
+  { version: 28, sql: `INSERT OR IGNORE INTO user_permissions(user_id, permission)
+    SELECT user_id, permission FROM financial_scopes CROSS JOIN
+    (SELECT 'tables.change' AS permission UNION ALL SELECT 'menu.change' UNION ALL SELECT 'employees.view' UNION ALL SELECT 'employees.change')
+    WHERE scope IN ('A','B','combined');` },
+  { version: 29, sql: `CREATE TABLE pending_staff (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;` },
 ];
 
 function migrate(db) {
