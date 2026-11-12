@@ -24,7 +24,7 @@ test('preload and IPC round trip restrict the exposed API and reject untrusted r
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'), 'utf8'), {
     require(name) { assert.equal(name, 'electron'); return { contextBridge: { exposeInMainWorld(name, value) { assert.equal(name, 'arra'); api = value; } }, ipcRenderer }; },
   });
-  assert.deepEqual(Object.keys(api), ['operationalReports', 'transferCorrection', 'businessDays', 'financialVisibility', 'payment', 'bill', 'orderHistory', 'printJobs', 'employeeConfig', 'menuConfig', 'tableConfig', 'getWaiters', 'adminAccess', 'selectWaiter', 'clearWaiter', 'signIn', 'signOut', 'orderItems', 'getApplicationInfo', 'getMenu', 'moveOrder', 'openOrder', 'getTables']);
+  assert.deepEqual(Object.keys(api), ['testPrinting', 'operationalReports', 'transferCorrection', 'businessDays', 'financialVisibility', 'payment', 'bill', 'orderHistory', 'printJobs', 'employeeConfig', 'menuConfig', 'tableConfig', 'getWaiters', 'adminAccess', 'selectWaiter', 'clearWaiter', 'signIn', 'signOut', 'orderItems', 'getApplicationInfo', 'getMenu', 'moveOrder', 'openOrder', 'getTables']);
   assert.deepEqual(JSON.parse(JSON.stringify(await api.getApplicationInfo())), { ok: true, data: { name: 'Arra POS', mode: 'development' } });
   assert.deepEqual(handler({}, {}), { ok: false, error: 'Invalid request' });
   assert.deepEqual(handler(trusted, { unexpected: true }), { ok: false, error: 'Invalid request' });

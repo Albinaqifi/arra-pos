@@ -246,7 +246,45 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Reproduce the reported desktop flow with sample data; verify the free status after returning and restarting, and verify that leaving a table with pending or sent items still preserves the order and shows Taken. Check the relevant service and renderer behavior, including a failed save or cleanup if applicable.
 
+### S-055 — Return to waiter selection after sending or completing a bill
+**Goal:** After a waiter successfully sends an order or completes the final payment step of a bill, show the waiter selection screen so the next user can select their name.
+
+**Acceptance:** A confirmed successful Send Order returns to waiter selection; a confirmed successful final bill/payment action also returns there. The next user can select a waiter normally. Keep the existing send, printing, billing, payment, permissions and retry behavior unchanged; the navigation change must not cause another send or payment. Failed or uncertain actions retain their existing error and recovery flow rather than navigating away. Preserve any existing warnings, including pending items or print issues, so they remain visible and actionable.
+
+**Checks/review:** Verify both successful paths with sample data and waiter reselection; check failed and uncertain responses, a send with a print issue or remaining pending items, and retry behavior. Confirm no duplicate send or payment and no change to existing financial rules.
+
+### S-056 — Test kitchen, bar and bill printing on one printer
+
+**Goal:** Test actual output from the desktop app using sample orders and bills. Keep three separate logical destinations—kitchen, bar and bill—with independently changeable Windows printer queue identifiers. Initially map all three to `Arra Test Printer`; later they can be mapped to different printers without changing the order or bill workflows. This is a test-mode experiment, not fiscal integration or approval for live sales.
+
+**Depends on:** S-018 and S-023. This limited sample-only hardware test may proceed while S-033 remains blocked; it does not complete or replace S-033, S-034 or S-035.
+
+**Acceptance:**
+
+- Provide a clearly labeled test-mode configuration for each destination, persisted across restarts and validated in trusted application code. The three mappings can share a queue or be changed independently; the named queue is an initial test setting, not a hard-coded production assumption. Explain how to select or change the queues.
+- Sending a sample order produces separate kitchen and bar tickets using the existing item routing and the newly sent round only. Each ticket identifies its destination, table and round, and includes the relevant quantities, item names, modifiers and notes where available. A mixed order must not leak bar items onto the kitchen ticket or vice versa, even when both use the same physical printer.
+- Provide a clearly marked **test bill, not a fiscal receipt** print from an existing generated sample bill, with its saved lines, modifiers and total. Keep the bill destination separate from the preparation destinations. Printing or reprinting must never create a bill, payment, sale or charge, or change A/B classification; card remains A. Enforce existing permissions and financial visibility.
+- Record distinct print jobs and attempts, preserving existing order, ticket, bill and payment history. Send to the configured local Windows queue offline. A queue acceptance is not proof that paper was printed; expose failed and uncertain outcomes and an explicit operator check before retrying uncertain output. Retries refer to the original job and do not duplicate order or payment data. Handle missing queues, disconnected printers, paper issues and interrupted/restarted app without silently claiming a physical print succeeded.
+- Verify on the owner's connected Birch device using the `Arra Test Printer` Windows queue: a mixed sample order prints separate kitchen and bar tickets and a generated sample bill prints separately; inspect paper for routing, content and readability. Verify that changing one destination does not change the others, including a test with different queue identifiers or controlled fakes. Record the actual hardware results and any limitations; do not claim a separate-physical-printer test until those devices are available.
+
+**Checks/review:** Focused tests for routing, snapshots, permissions, bill/payment invariants, repeated requests, failures and uncertain recovery, plus an offline desktop and physical-printer test with sample data. Review persistence and safe failure handling. Document Windows setup, test mode, queue mappings and later separate-printer test steps. Actual fiscal output and provider/legal verification remain separate.
+
+### S-057 — Daily detailed turnover
+
+**Goal:** As an authorized administrator, I can review detailed turnover for a system day in Financial Information.
+
+**Depends on:** S-024, S-025, S-026, S-028 and S-030.
+
+**Acceptance:**
+
+- A system day runs from its start until an authorized admin closes it, with no fixed time limit; it can continue past midnight. Closing it automatically starts the next system day. Show running turnover for the open day and allow completed days to be reviewed with their start and close times. Before confirmation, show the authorized admin the day's scoped turnover and outstanding orders.
+- Base turnover on recorded paid bills. Show totals by payment method and permitted account, and a detailed payment list with time, table, waiter, amount and method. Allow inspection of the associated bill details within the user's scope.
+- Account A sees only A turnover; account B sees only B turnover; an authorized combined account sees A and B turnover and transfer details. Enforce the same scope for totals, lists, details and direct requests in trusted application code.
+- Show transfers/corrections to authorized combined users with their history. Count each payment once under its effective account; a transfer is not another payment. Preserve the original payment and correction history, and retain the rule that card belongs to A.
+- Work offline and preserve existing records. Clearly handle an empty day and unavailable data. Do not present the report as a fiscal or finalized accounting report; final accounting definitions remain subject to Q-15.
+
+**Checks/review:** Use sample data to verify a day spanning midnight, running and closed-day results, automatic next-day start, repeated close requests and failure recovery, cash and card, a B-to-A transfer, reconciliation to underlying payments, and direct-request denial for A and B across totals and details. Check persistence across restart and review financial and authorization behavior. Resolve any necessary historical-day handling before implementation.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
-

@@ -1,0 +1,118 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const {openDatabase} = require('../src/desktop/database');
+const {authorizedDatabase} = require('./support/authorized-database');
+const {seedTables} = require('../src/desktop/tables');
+const {seedMenu} = require('../src/desktop/menu');
+const {registerOrderItems} = require('../src/desktop/order-items');
+const {registerBills} = require('../src/desktop/bills');
+const printing = require('../src/desktop/test-printing');
+
+test('sample test jobs route only the new round, persist attempts and preserve bills and payments', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-print-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO user_permissions VALUES(1,'employees.change')");
+  db.exec("UPDATE menu_products SET destination='bar' WHERE id='espresso'; INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open')");
+  const event={}, session={currentUserId:()=>1,authenticatedUserId:()=>1}; let orders, jobs, bills;
+  const calls=[]; let resolvePrint;
+  const adapter=attempt=>{ calls.push(attempt); return new Promise(resolve=>{resolvePrint=resolve;}); };
+  registerOrderItems({handle:(_,fn)=>orders=fn},e=>e===event,db,session,{...printing,adapter});
+  printing.registerTestPrinting({handle:(_,fn)=>jobs=fn},e=>e===event,db,session,adapter,true);
+  registerBills({handle:(_,fn)=>bills=fn},e=>e===event,db,session);
+  assert.equal(jobs({}, {action:'list'}).ok,false);
+  assert.equal(jobs(event,{action:'configure',destination:'kitchen',queue:'Queue K'}).ok,true);
+  assert.deepEqual(jobs(event,{action:'list'}).data.queues.map(q=>q.queue),['Arra Test Printer','Arra Test Printer','Queue K']);
+  assert.equal(jobs(event,{action:'configure',destination:'bar',queue:' bad '}).ok,false);
+  orders(event,{action:'add',orderId:1,productId:'qebapa'}); orders(event,{action:'note',orderId:1,itemId:1,note:'sample note'});
+  orders(event,{action:'add',orderId:1,productId:'espresso'});
+  assert.equal(orders(event,{action:'send',orderId:1,requestId:'round-one'}).ok,true);
+  assert.equal(orders(event,{action:'send',orderId:1,requestId:'round-one'}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,2);
+  const kitchen=calls.find(c=>c.destination==='kitchen'), bar=calls.find(c=>c.destination==='bar');
+  assert.equal(kitchen.queue,'Queue K'); assert.equal(bar.queue,'Arra Test Printer');
+  assert.deepEqual(kitchen.snapshot.lines.map(l=>l.name),['Qebapa']); assert.equal(kitchen.snapshot.lines[0].note,'sample note');
+  assert.deepEqual(bar.snapshot.lines.map(l=>l.name),['Espresso']);
+  assert.equal(jobs(event,{action:'retry',jobId:1,requestId:'retry',checked:true}).ok,false); // in flight
+  resolvePrint('accepted'); await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(db.prepare('SELECT count(*) n FROM order_items').get().n,2);
+  const review=bills(event,{action:'review',orderId:1}); const bill=bills(event,{action:'generate',orderId:1,fingerprint:review.data.fingerprint});
+  assert.equal(jobs(event,{action:'bill',billId:bill.data.id,requestId:'bill-one'}).ok,true);
+  assert.equal(jobs(event,{action:'bill',billId:bill.data.id,requestId:'bill-one'}).ok,true);
+  assert.equal(db.prepare('SELECT count(*) n FROM bills').get().n,1); assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,0);
+  const saved=JSON.parse(db.prepare("SELECT snapshot FROM test_print_jobs WHERE destination='bill'").get().snapshot); assert.equal(saved.total,290); assert.equal(saved.lines.length,2);
+  assert.throws(()=>db.exec('DELETE FROM test_print_attempts'));
+  await new Promise(resolve=>setImmediate(resolve));
+  // Leave pending callbacks unresolved: after reopening their durable status is uncertain.
+  db.close(); db=authorizedDatabase(openDatabase(dir));
+  assert.ok(db.prepare('SELECT count(*) n FROM test_print_attempts a LEFT JOIN test_print_results r ON r.attempt_id=a.id WHERE r.attempt_id IS NULL').get().n>=1);
+  db.close();
+});
+
+test('direct requests enforce access, acknowledgement and safe idempotent retries after failure', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-retry-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open')");
+  const event={},session={currentUserId:()=>1,authenticatedUserId:()=>1}; let orders,jobs,disabled;
+  let calls=0; const adapter=async()=>{calls++; return 'failed';};
+  registerOrderItems({handle:(_,fn)=>orders=fn},e=>e===event,db,session,{...printing,adapter});
+  printing.registerTestPrinting({handle:(_,fn)=>jobs=fn},e=>e===event,db,session,adapter,true);
+  printing.registerTestPrinting({handle:(_,fn)=>disabled=fn},()=>true,db,session,adapter,false);
+  assert.equal(disabled(event,{action:'list'}).ok,false);
+  assert.equal(jobs(event,{action:'configure',destination:'bill',queue:'Other'}).ok,false);
+  orders(event,{action:'add',orderId:1,productId:'qebapa'}); orders(event,{action:'send',orderId:1,requestId:'one'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(jobs(event,{action:'list'}).data.jobs[0].result,'failed');
+  assert.equal(jobs(event,{action:'retry',jobId:1,requestId:'two',checked:false}).ok,false);
+  assert.equal(jobs(event,{action:'retry',jobId:1,requestId:'two',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(jobs(event,{action:'retry',jobId:1,requestId:'two',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,2); assert.equal(db.prepare('SELECT count(*) n FROM test_print_attempts').get().n,2);
+  db.exec("DELETE FROM user_permissions WHERE permission='orders.change'");
+  assert.equal(jobs(event,{action:'retry',jobId:1,requestId:'three',checked:true}).ok,false);
+  assert.equal(jobs(event,{action:'bill',billId:1,requestId:'three'}).ok,false);
+  assert.equal(db.prepare('SELECT count(*) n FROM orders').get().n,1); assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,0);
+  db.close();
+});
+
+test('paid bill printing follows effective financial scope and cannot mutate payment records', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-scope-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'a',x'00',x'00'),(3,'b',x'00',x'00'),(4,'combined',x'00',x'00');
+    INSERT INTO financial_scopes VALUES(2,'A'),(3,'B'),(4,'combined'); INSERT INTO user_permissions VALUES(2,'employees.view'),(3,'employees.view'),(4,'employees.view');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'sample');
+    INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,100,'cash','B');
+    UPDATE orders SET status='completed'; INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(1,1,3,'sample');`);
+  let current=2,call; const session={currentUserId:()=>current,authenticatedUserId:()=>current}; let calls=0;
+  printing.registerTestPrinting({handle:(_,fn)=>call=fn},()=>true,db,session,async()=>{calls++;return 'accepted';},true);
+  assert.equal(call({}, {action:'bill',billId:1,requestId:'first'}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(call({}, {action:'list'}).data.jobs.length,1);
+  current=3; assert.equal(call({}, {action:'list'}).data.jobs.length,0);
+  assert.equal(call({}, {action:'retry',jobId:1,requestId:'denied',checked:true}).ok,false);
+  current=1; assert.equal(call({}, {action:'list'}).data.jobs.length,0);
+  assert.equal(call({}, {action:'bill',billId:1,requestId:'denied'}).ok,false);
+  current=4; assert.equal(call({}, {action:'retry',jobId:1,requestId:'again',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,2); assert.deepEqual({...db.prepare('SELECT method,account,amount FROM payments WHERE id=1').get()},{method:'cash',account:'B',amount:100});
+  assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,1); assert.equal(db.prepare('SELECT count(*) n FROM payment_account_corrections').get().n,1);
+  db.close();
+});
+
+test('later rounds contain only newly sent items and preserve modifier snapshots', async t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-round-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO modifier_groups(id,product_id,name,required,active) VALUES('size','qebapa','Size',1,1); INSERT INTO modifier_options(id,group_id,name,adjustment,active) VALUES('large','size','Large',10,1)");
+  let orders; const session={currentUserId:()=>1,authenticatedUserId:()=>1};
+  const snapshots=[]; const adapter=async a=>{snapshots.push(a.snapshot);return 'accepted';};
+  registerOrderItems({handle:(_,fn)=>orders=fn},()=>true,db,session,{...printing,adapter});
+  orders({}, {action:'add',orderId:1,productId:'qebapa',optionIds:['large']}); orders({}, {action:'send',orderId:1,requestId:'one'});
+  orders({}, {action:'add',orderId:1,productId:'shopska'}); orders({}, {action:'send',orderId:1,requestId:'two'});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(snapshots.length,2); assert.equal(snapshots[0].round,1); assert.equal(snapshots[1].round,2);
+  assert.deepEqual(snapshots[0].lines.map(x=>x.name),['Qebapa']); assert.equal(snapshots[0].lines[0].modifiers[0].optionName,'Large');
+  assert.deepEqual(snapshots[1].lines.map(x=>x.name),['Shopska salad']);
+  db.close();
+});

@@ -67,3 +67,9 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** The product will not provide a refund workflow; retire S-029. This supersedes earlier refund planning.
 - **Why:** The owner confirmed that there will be no refunds.
 - **Revisit if:** The owner changes this direction or verified fiscal obligations require further consideration. The legal treatment of reversals remains to be verified under Q-07.
+
+## D-012 — System-day boundaries
+- **Origin:** Owner direction for daily detailed turnover, 2026-11-12.
+- **What:** A system day runs without a fixed time limit, including past midnight, until an authorized admin closes it. The next system day starts automatically on close. Before confirmation, show the admin the day's permitted turnover and outstanding orders.
+- **Why:** Match the restaurant's actual closing routine and keep the POS ready for the next day.
+- **Revisit if:** The owner changes the closing routine. Exceptional post-close correction authority remains open under Q-03.

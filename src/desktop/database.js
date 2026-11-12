@@ -225,6 +225,20 @@ const migrations = [
   { version: 25, sql: `ALTER TABLE orders ADD COLUMN retired_empty INTEGER NOT NULL DEFAULT 0 CHECK(retired_empty IN (0,1));
   DROP INDEX one_open_order_per_table;
   CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status = 'open' AND retired_empty = 0;` },
+  { version: 26, sql: `CREATE TABLE test_printer_queues (destination TEXT PRIMARY KEY CHECK(destination IN ('kitchen','bar','bill')), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
+  INSERT INTO test_printer_queues VALUES ('kitchen','Arra Test Printer'),('bar','Arra Test Printer'),('bill','Arra Test Printer');
+  CREATE TABLE test_print_jobs (id INTEGER PRIMARY KEY, destination TEXT NOT NULL CHECK(destination IN ('kitchen','bar','bill')), ticket_id INTEGER UNIQUE REFERENCES preparation_tickets(id), bill_id INTEGER UNIQUE REFERENCES bills(id), snapshot TEXT NOT NULL, created_at INTEGER NOT NULL, CHECK ((destination='bill' AND bill_id IS NOT NULL AND ticket_id IS NULL) OR (destination IN ('kitchen','bar') AND ticket_id IS NOT NULL AND bill_id IS NULL))) STRICT;
+  CREATE TABLE test_print_attempts (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES test_print_jobs(id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER NOT NULL REFERENCES local_users(id), queue TEXT NOT NULL, started_at INTEGER NOT NULL) STRICT;
+  CREATE TABLE test_print_results (attempt_id INTEGER PRIMARY KEY REFERENCES test_print_attempts(id), result TEXT NOT NULL CHECK(result IN ('failed','accepted')), occurred_at INTEGER NOT NULL) STRICT;
+  CREATE TRIGGER test_print_jobs_no_update BEFORE UPDATE ON test_print_jobs BEGIN SELECT RAISE(ABORT,'Print jobs are immutable'); END;
+  CREATE TRIGGER test_print_jobs_no_delete BEFORE DELETE ON test_print_jobs BEGIN SELECT RAISE(ABORT,'Print jobs are immutable'); END;
+  CREATE TRIGGER test_print_attempts_no_update BEFORE UPDATE ON test_print_attempts BEGIN SELECT RAISE(ABORT,'Print attempts are immutable'); END;
+  CREATE TRIGGER test_print_attempts_no_delete BEFORE DELETE ON test_print_attempts BEGIN SELECT RAISE(ABORT,'Print attempts are immutable'); END;
+  CREATE TRIGGER test_print_results_no_update BEFORE UPDATE ON test_print_results BEGIN SELECT RAISE(ABORT,'Print results are immutable'); END;
+  CREATE TRIGGER test_print_results_no_delete BEFORE DELETE ON test_print_results BEGIN SELECT RAISE(ABORT,'Print results are immutable'); END;
+  CREATE TRIGGER test_print_jobs_no_replace BEFORE INSERT ON test_print_jobs WHEN EXISTS(SELECT 1 FROM test_print_jobs WHERE id=NEW.id OR ticket_id=NEW.ticket_id OR bill_id=NEW.bill_id) BEGIN SELECT RAISE(ABORT,'Print jobs are immutable'); END;
+  CREATE TRIGGER test_print_attempts_no_replace BEFORE INSERT ON test_print_attempts WHEN EXISTS(SELECT 1 FROM test_print_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Print attempts are immutable'); END;
+  CREATE TRIGGER test_print_results_no_replace BEFORE INSERT ON test_print_results WHEN EXISTS(SELECT 1 FROM test_print_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Print results are immutable'); END;` },
 ];
 
 function migrate(db) {
