@@ -84,10 +84,10 @@ test('upgrade grants shared administration only to existing owners', t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-shared-upgrade-')); let db=openDatabase(dir);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
   createSampleAccounts(db,['sample 1','sample 2','sample 3','sample 4']);
-  db.exec("DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=27");
+  db.exec("DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27");
   db.close(); db=openDatabase(dir);
   for(const id of [2,3,4]) for(const permission of ['tables.change','menu.change','employees.view','employees.change']) assert.ok(db.prepare('SELECT 1 FROM user_permissions WHERE user_id=? AND permission=?').get(id,permission));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,29);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,30);
   assert.equal(db.prepare("SELECT count(*) n FROM user_permissions WHERE user_id IN (2,3) AND permission='business_days.close'").get().n,0);
 });
 
@@ -148,7 +148,7 @@ test('sample legacy Combined recovery authenticates and copies without changing 
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-legacy-source-')); let db=openDatabase(dir), copies=[];
   t.after(()=>{if(db)db.close();for(const copy of copies)fs.rmSync(copy,{recursive:true,force:true});fs.rmSync(dir,{recursive:true,force:true});});
   bootstrap(db,'legacy sample','sample legacy password');
-  db.exec("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,123,'open'); DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=27");
+  db.exec("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,123,'open'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27");
   db.close();db=null; const file=path.join(dir,'arra.sqlite');
   await assert.rejects(recoverSampleCombined(file,'legacy sample','sample legacy password'));
   fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');

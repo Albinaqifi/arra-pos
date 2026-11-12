@@ -102,5 +102,5 @@ test('failed version 18 migration leaves version 17 data intact', t => {
   assert.throws(()=>openDatabase(dir));
   const { DatabaseSync }=require('node:sqlite'); db=new DatabaseSync(path.join(dir,'arra.sqlite'));
   assert.equal(db.prepare('PRAGMA user_version').get().user_version,17); assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value,'kept'); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);
-  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version, 29); db.close();
+  db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30); db.close();
 });

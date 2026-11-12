@@ -2,9 +2,10 @@ const { BrowserWindow } = require('electron');
 function textForJob(job) {
   const s = job.snapshot;
   if (job.destination === 'turnover') {
-    const rows = ['NON-FISCAL DAILY TURNOVER REPORT', 'System day #' + s.dayId, 'Opened: ' + new Date(s.openedAt).toLocaleString(), 'Closed: ' + new Date(s.closedAt).toLocaleString(), '--------------------------------'];
+    if (!['A','B','combined'].includes(job.scope)) throw Error('Invalid report scope');
+    const rows = ['NON-FISCAL DAILY TURNOVER REPORT', job.scope === 'combined' ? 'FULL REPORT - ACCOUNTS A AND B' : 'ACCOUNT ' + job.scope + ' REPORT ONLY', 'System day #' + s.dayId, 'Opened: ' + new Date(s.openedAt).toLocaleString(), 'Closed: ' + new Date(s.closedAt).toLocaleString(), '--------------------------------'];
     for (const r of s.records) rows.push('Bill #' + r.billId + '  Table ' + r.tableId, new Date(r.paidAt).toLocaleString() + '  ' + r.account + ' ' + r.method + '  ' + r.amount + ' den');
-    if (!s.records.length) rows.push('No paid bills');
+    if (!s.records.length) rows.push(job.scope === 'combined' ? 'No paid bills for accounts A and B' : 'No paid bills for account ' + job.scope);
     rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den');
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }

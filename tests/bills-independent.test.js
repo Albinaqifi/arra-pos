@@ -46,7 +46,7 @@ test('version 19 upgrade preserves an open order and corrections for billing', t
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 29);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
     assert.equal(db.prepare('SELECT name FROM order_items WHERE id=1').get().name, 'Old snapshot');
     assert.equal(db.prepare('SELECT quantity FROM sent_item_corrections WHERE request_id=?').get('old-correction').quantity, 1);
     let handle;

@@ -23,7 +23,7 @@ async function recoverSampleCombined(sourceFile, username, password) {
   const source = new DatabaseSync(sourceFile, { readOnly:true }); let copy, directory, completed=false;
   try {
     const version = source.prepare('PRAGMA user_version').get().user_version;
-    if (version < 24 || version > 29) throw Error('Unsupported sample version');
+    if (version < 24 || version > 30) throw Error('Unsupported sample version');
     const sourceActor = authorizedWaiter(source, username, password);
     if (version >= 29 && source.prepare('SELECT 1 FROM pending_staff WHERE user_id=?').get(sourceActor)) throw Error('Sample administrator unavailable');
     directory=fs.mkdtempSync(path.join(os.tmpdir(),'arra-sample-combined-'));

@@ -30,7 +30,7 @@ test('version 10 upgrade retains orders and grants and protects moved open order
   db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 29);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);
