@@ -39,13 +39,13 @@ export class OrderHistory extends React.Component {
     const sequence=++this.sequence; this.setState({loading:true,error:'',data:null});
     try {
       const r=await window.arra.orderHistory(id); if(sequence!==this.sequence) return;
-      if(!r.ok) return this.setState({loading:false,error:'History unavailable. Access requires an authorized administrator signed in under their own name. Owner access is unavailable while shared-history policy is unresolved.',orders:[]});
+      if(!r.ok) return this.setState({loading:false,error:'History unavailable. Check your access and try again.',orders:[]});
       this.setState(id===null ? {orders:r.data.orders,data:null,loading:false} : {data:r.data,loading:false});
     } catch (_) { if(sequence===this.sequence) this.setState({loading:false,orders:[],error:'Could not load order history. Please try again.'}); }
   }
   render() {
     const {data,error,loading}=this.state;
-    return h('main',null,h('button',{onClick:this.props.onBack},'← Back to administration'),h('p',{className:'admin-eyebrow floor-eyebrow'},'ADMINISTRATION / ORDER HISTORY'),h('h1',null,'Order history'),h('p',{className:'admin-intro'},'Review operational activity across orders and moves.'),h('p',{className:'admin-access-note'},'Prices, payments and note text are excluded. Access is limited to authorized administrators signed in under their own name; owner access is unavailable while shared-history policy is unresolved.'),
+    return h('main',null,h('button',{onClick:this.props.onBack},'← Back to administration'),h('p',{className:'admin-eyebrow floor-eyebrow'},'ADMINISTRATION / ORDER HISTORY'),h('h1',null,'Order history'),h('p',{className:'admin-intro'},'Review operational activity across orders and moves.'),h('p',{className:'admin-access-note'},'Prices, payments and note text are excluded. Owner history is limited to permitted accounts, including connected orders after item moves.'),
       data && h('button',{onClick:()=>this.load(null)},'← All orders'),loading ? h('p',{role:'status',className:'admin-status'},'Loading order history…') : error ? h('div',null,h('p',{role:'alert'},error),h('button',{onClick:()=>this.load(null)},'Try again')) : data ? OrderDetail({data,open:id=>this.load(id)}) : OrderList({orders:this.state.orders,open:id=>this.load(id)}));
   }
 }

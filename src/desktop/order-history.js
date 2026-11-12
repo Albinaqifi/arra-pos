@@ -20,13 +20,39 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, req) => {
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Object.getPrototypeOf(req) !== Object.prototype || Reflect.ownKeys(req).length !== 1 || !Object.hasOwn(req, 'orderId') || !(req.orderId === null || (Number.isSafeInteger(req.orderId) && req.orderId > 0))) return { ok: false };
     if (!hasPermissions(db, session, 'employees.view')) return { ok: false };
-    // Moved-item timelines can cross orders and payment accounts. Keep them
-    // unavailable to owners until a complete shared-history policy exists.
     try {
-      if (db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope !== 'waiter') return { ok: false };
-    } catch (_) { return { ok: false }; }
-    try {
-      if (req.orderId === null) return { ok: true, data: { orders: db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders ORDER BY id DESC").all() } };
+      const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope;
+      if (!['waiter','A','B','combined'].includes(scope)) return { ok:false };
+      // A moved item's timeline can include events from several orders. An
+      // owner may see it only if every connected order is within their scope.
+      const links = new Map();
+      if (scope === 'A' || scope === 'B') {
+        for (const row of db.prepare("SELECT order_id, context FROM application_audit WHERE action='move_items' AND entity_type='order'").all()) {
+          const destination = JSON.parse(row.context).destinationOrderId;
+          if (!Number.isSafeInteger(row.order_id) || !Number.isSafeInteger(destination)) throw Error('Invalid move history');
+          for (const [from,to] of [[row.order_id,destination],[destination,row.order_id]]) {
+            if (!links.has(from)) links.set(from, []);
+            links.get(from).push(to);
+          }
+        }
+      }
+      const otherPayment = db.prepare(`SELECT 1 FROM bills b JOIN payments p ON p.bill_id=b.id
+        LEFT JOIN payment_account_corrections c ON c.payment_id=p.id
+        WHERE b.order_id=? AND COALESCE(CASE WHEN c.id IS NOT NULL THEN 'A' END,p.account)<>? LIMIT 1`);
+      const permitted = id => {
+        if (scope === 'waiter' || scope === 'combined') return true;
+        const seen = new Set(), pending = [id];
+        while (pending.length) {
+          const current = pending.pop();
+          if (seen.has(current)) continue;
+          seen.add(current);
+          if (otherPayment.get(current,scope)) return false;
+          pending.push(...(links.get(current) || []));
+        }
+        return true;
+      };
+      if (req.orderId === null) return { ok: true, data: { orders: db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders ORDER BY id DESC").all().filter(order => permitted(order.id)) } };
+      if (!permitted(req.orderId)) return { ok:false };
       const order = db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders WHERE id=?").get(req.orderId);
       if (!order) return { ok: false };
       const items = db.prepare('SELECT i.id, i.name, i.quantity, i.status, COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id), 0) AS correctedQuantity FROM order_items i WHERE i.order_id=? ORDER BY i.id').all(req.orderId);

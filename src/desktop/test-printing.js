@@ -27,7 +27,7 @@ function canPrintBill(db, session, billId) {
   const id=session.currentUserId();
   if (!id || session.authenticatedUserId() !== id || !hasPermissions(db,session,'employees.view')) return false;
   const scope=db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope;
-  return bill.paymentId ? (scope === 'combined' || scope === bill.account) : scope === 'combined';
+  return bill.paymentId ? (scope === 'combined' || scope === bill.account) : ['A','B','combined'].includes(scope);
 }
 
 function reserveAttempt(db, jobId, requestId, actorId) {
@@ -59,7 +59,7 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
       (req.action === 'retry' && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
     const operational = hasPermissions(db,session,'orders.view','orders.change');
     const financial = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && hasPermissions(db,session,'employees.view') && ['A','B','combined'].includes(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope);
-    if (req.action === 'configure' && !hasPermissions(db,session,'orders.view','employees.change')) return {ok:false};
+    if (req.action === 'configure' && !(hasPermissions(db,session,'orders.view','employees.change') || (financial && hasPermissions(db,session,'employees.change')))) return {ok:false};
     if (req.action === 'list' && !operational && !financial) return {ok:false};
     if (['bill','retry'].includes(req.action) && !operational && !financial) return {ok:false};
     try {

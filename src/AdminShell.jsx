@@ -25,6 +25,7 @@ export function AdminShell({ screen, user, navigate, back, switchUser, children 
           <p className="admin-intro">Choose an area to manage your restaurant or review its activity.</p>
           <p className="admin-access-note">Access depends on your signed-in account and selected identity. An area may be unavailable if you do not have permission.</p>
           <div className="admin-cards">{ADMIN_AREAS.map(a => <button key={a.id} className="admin-card" onClick={() => navigate(a.id)}><span className="admin-card-icon" aria-hidden={true}>↗</span><strong>{a.label}</strong><span>{a.description}</span><span className="admin-card-link">Open area →</span></button>)}</div>
+          {children}
         </main> : children}</div>
     </div>
   </div>;
