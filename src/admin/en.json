@@ -297,5 +297,7 @@
   "status.demo": "Browser demo — sample data and simulated actions only",
   "status.development": "Development",
   "waiter.Unknown destination": "Unknown destination",
-  "waiter.Bar": "Bar"
+  "waiter.Bar": "Bar",
+  "waiter.Loading bill…": "Loading bill…",
+  "waiter.Working…": "Working…"
 }

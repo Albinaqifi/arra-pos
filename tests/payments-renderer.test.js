@@ -56,3 +56,24 @@ test('a later definite failure does not discard an earlier uncertain payment sel
   assert.ok(calls.every(r => JSON.stringify(r) === JSON.stringify(calls[0])));
   assert.equal(calls[0].method, 'card'); assert.equal(calls[0].account, 'A');
 });
+
+test('bill dialog retains keyboard focus when busy disables controls and during uncertain recovery', async () => {
+  class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
+  let handler, resolvePayment;
+  const previous = { focus() { document.activeElement = this; } }, body = {}, record = { disabled: false }, retry = { disabled: false, focus() { document.activeElement = this; } };
+  const document = { activeElement: previous, addEventListener(type, fn) { if (type === 'focusin') handler = fn; }, removeEventListener(type, fn) { if (handler === fn) handler = null; } };
+  const dialog = { focus() { document.activeElement = this; }, contains(el) { return el === this || el === record || el === retry; }, querySelectorAll() { return [retry]; } };
+  const context = { React: { Component }, document, window: { arra: { bill: async () => ({ ok: true, data: { id: 9, lines: [], total: 1 } }), payment: () => new Promise(resolve => { resolvePayment = resolve; }) } } };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/DesktopBill.js'), 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  const bill = new context.Bill({ orderId: 1 }); bill.dialog = dialog; bill.componentDidMount(); await new Promise(setImmediate);
+  assert.equal(document.activeElement, dialog);
+  bill.setState({ method: 'card', account: 'A' }); document.activeElement = record;
+  const pending = bill.pay(); record.disabled = true; document.activeElement = body; bill.componentDidUpdate();
+  assert.equal(document.activeElement, dialog);
+  resolvePayment({ ok: false, uncertain: true, error: 'Payment result unknown. Retry the same selection.' }); await pending; bill.componentDidUpdate();
+  assert.equal(bill.state.uncertain, true);
+  let prevented = false; bill.onKeyDown({ key: 'Tab', shiftKey: true, preventDefault() { prevented = true; } });
+  assert.equal(prevented, true); assert.equal(document.activeElement, retry);
+  document.activeElement = previous; handler({ target: previous }); assert.equal(document.activeElement, dialog);
+  bill.componentWillUnmount(); assert.equal(handler, null); assert.equal(document.activeElement, previous);
+});

@@ -297,5 +297,7 @@
   "status.demo": "Demonstrim në shfletues — vetëm të dhëna shembull dhe veprime të simuluara",
   "status.development": "Zhvillim",
   "waiter.Unknown destination": "Destinacion i panjohur",
-  "waiter.Bar": "Bar"
+  "waiter.Bar": "Bar",
+  "waiter.Loading bill…": "Duke ngarkuar faturën…",
+  "waiter.Working…": "Duke punuar…"
 }

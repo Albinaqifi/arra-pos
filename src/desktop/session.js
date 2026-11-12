@@ -47,7 +47,7 @@ function createSession(db) {
     listWaiters() {
       if (!restaurantActive()) return { ok: false, error: 'Access denied' };
       try {
-        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Transfer Manager' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND NOT EXISTS (SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
+        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Duda' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND NOT EXISTS (SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
       } catch (_) { return { ok: false, error: 'Waiters unavailable' }; }
     },
     selectWaiter(request) {
