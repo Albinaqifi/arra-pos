@@ -58,7 +58,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-058 | In progress | Code review and focused tests passed; owner reports offline check passed. Windows queue and paper verification outstanding. |
 | S-059 | Done | Shared unpaid-bill slice reviewed and focused tests passed; PR #81 merged as `9af9306`. |
 | S-060 | In progress | Independent review and focused tests passed; PR pending. Unmarked legacy test databases unsupported. |
-| S-061 | In progress | Independent review and focused tests passed; interactive desktop and printer verification outstanding. |
+| S-061 | In progress | Independent review, focused tests and owner-reported desktop and printer checks passed; PR awaiting merge. |
 
 ## Current
 
