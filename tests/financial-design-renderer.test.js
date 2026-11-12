@@ -26,3 +26,11 @@ test('empty owner close preview describes permitted scope without asserting the 
  const data={scope:'A',queue:'sample',issues:{orders:[],printJobs:[]},days:[{id:1,openedAt:1,closedAt:null}]};
  const c=make({businessDays:async()=>({ok:true,data}),financialVisibility:async()=>({ok:true,data:{groups:[]}})}),d=new c.BusinessDays({});await d.load();await d.review(1);const text=JSON.stringify(expand(d.render()));assert.match(text,/No payments in this day for your permitted scope/);assert.doesNotMatch(text,/No payments in this day\./);
 });
+test('failed and uncertain report outcomes are visibly distinct and preserve retry guidance',async()=>{
+ const issues={orders:[],printJobs:[]}, data={scope:'combined',queue:'sample',issues,days:[{id:2,openedAt:2,closedAt:null},{id:1,openedAt:1,closedAt:2,closedBy:1,issues,reportId:1,printAttempts:1,printResult:'failed',otherPrints:[{scope:'A',printAttempts:1,printResult:'uncertain'}]}]};
+ const c=make({businessDays:async()=>({ok:true,data}),financialVisibility:async()=>({ok:true,data:{groups:[]}})}),d=new c.BusinessDays({});await d.load();const tree=expand(d.render());
+ const all=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat().flatMap(all)];const nodes=all(tree);
+ assert.ok(nodes.some(n=>n.props?.className==='day-print-error' && n.props.role==='alert' && JSON.stringify(n).includes('Printing failed')));
+ assert.ok(nodes.some(n=>n.props?.className==='day-print-warning' && n.props.role==='status' && JSON.stringify(n).includes('check the paper before retrying')));
+ assert.ok(nodes.some(n=>n.props?.className==='day-print-icon' && n.props['aria-hidden']==='true'));
+});

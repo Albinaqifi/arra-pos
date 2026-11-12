@@ -121,6 +121,9 @@ input { font-family: inherit; }
 .day-details summary { cursor: pointer; font-weight: 700; }
 .day-print-notice { margin: 16px 0; padding: 14px 16px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 12px; }
 .day-print-notice p { margin: 8px 0; }
+.day-print-error, .admin-content .day-print-error[role='alert'] { padding: 12px 14px; border: 1px solid #dc2626; border-left: 5px solid #b91c1c; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 700; }
+.day-print-warning { padding: 12px 14px; border: 1px solid #d97706; border-left: 5px solid #b45309; border-radius: 8px; background: #fffbeb; color: #78350f; font-weight: 700; }
+.day-print-icon { display: inline-block; margin-right: 8px; font-size: 1.2em; }
 @media (max-width: 540px) { .history-panel { padding: 16px; } .admin-shell .history-order { flex-wrap: wrap; } }
 /* Operational reports and restricted transfer workspace */
 .report-form { display:flex; flex-wrap:wrap; gap:14px; align-items:end; }
