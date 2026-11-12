@@ -19,6 +19,7 @@ const { registerOrderItems } = require('./order-items');
 const { registerOrderHistory } = require('./order-history');
 const { registerPrintJobs } = require('./print-jobs');
 const { registerSession } = require('./session');
+const { registerLanguage } = require('./language');
 const { registerEmployeeConfig } = require('./employee-config');
 const testPrinting = require('./test-printing');
 const { printTestJob } = require('./windows-test-printer');
@@ -60,6 +61,7 @@ app.whenReady().then(() => {
       event.senderFrame === mainWindow.webContents.mainFrame);
   session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
+  registerLanguage(require('electron').ipcMain, isAllowedSender, database, session);
   registerEmployeeConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);

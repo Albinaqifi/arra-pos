@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async language(request) {
+    try { return await ipcRenderer.invoke('arra:language', request); } catch (_) { return { ok: false }; }
+  },
   async testPrinting(request) {
     try { return await ipcRenderer.invoke('arra:test-printing', request); } catch (_) { return {ok:false, error:'Test print status unknown. Check paper before retrying.'}; }
   },
