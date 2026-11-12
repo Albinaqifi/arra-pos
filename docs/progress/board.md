@@ -60,6 +60,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-060 | In progress | Independent review and focused tests passed; PR pending. Unmarked legacy test databases unsupported. |
 | S-061 | In progress | Independent review, focused tests and owner-reported desktop and printer checks passed; PR awaiting merge. |
 | S-062 | In progress | Independent review and focused tests passed; desktop and offline printer verification outstanding. |
+| S-063 | In progress | Independent review, focused tests and owner-reported desktop, restart and offline checks passed; PR pending. |
 
 ## Current
 

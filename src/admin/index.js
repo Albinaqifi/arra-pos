@@ -10,3 +10,5 @@ export { MenuConfig } from './MenuConfig.js';
 
 export { SentItemCorrection, installCorrectionFocus } from '../waiter/SentItemCorrection.js';
 export { TransferCorrection } from '../TransferCorrection.js';
+export { LanguageSetting } from './LanguageSetting.jsx';
+export { translate } from './i18n.js';

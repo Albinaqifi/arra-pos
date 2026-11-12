@@ -1,0 +1,9 @@
+{
+  "language.title": "Gjuha e aplikacionit",
+  "language.description": "Zgjidhni gjuhën për të gjithë përdoruesit e këtij kompjuteri.",
+  "language.label": "Gjuha",
+  "language.saved": "Gjuha u ruajt: {language}.",
+  "language.failed": "Gjuha nuk u ruajt. Kontrolloni lejen tuaj dhe provoni përsëri.",
+  "language.loading": "Duke ruajtur…"
+}
+

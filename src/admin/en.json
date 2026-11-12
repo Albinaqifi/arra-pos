@@ -1,0 +1,9 @@
+{
+  "language.title": "App language",
+  "language.description": "Choose the language for everyone using this PC.",
+  "language.label": "Language",
+  "language.saved": "Language saved: {language}.",
+  "language.failed": "Language could not be saved. Check your permission and try again.",
+  "language.loading": "Saving…"
+}
+
