@@ -12,6 +12,35 @@ function style(text) {
   return result;
 }
 
+class TestPrintJobs extends React.Component {
+  constructor(props) { super(props); this.state = { data:null, error:'', busy:false }; this.tokens = {}; }
+  componentDidMount() { this.load(); }
+  componentDidUpdate(prev) { if (prev.revision !== this.props.revision) this.load(); }
+  async load() {
+    if (!desktopBridge.testPrinting) return;
+    try { const r = await desktopBridge.testPrinting({action:'list'}); if (r.disabled) this.setState({disabled:true}); else if (r.ok) this.setState({data:r.data,error:'',disabled:false}); else this.setState({error:'Test print status unavailable. Displayed jobs may be stale; check the printer and refresh.'}); }
+    catch (_) { this.setState({error:'Test print status unavailable. Displayed jobs may be stale; check the printer and refresh.'}); }
+  }
+  async change(request) {
+    if (this.state.busy) return;
+    this.setState({busy:true,error:''});
+    const r = await desktopBridge.testPrinting(request);
+    if (r.ok) { if (request.action === 'retry') delete this.tokens[request.jobId]; this.setState({data:r.data,busy:false}); }
+    else this.setState({busy:false,error:r.error || 'Unable to change test printing. Check permission and output before trying again.'});
+  }
+  render() {
+    const h=React.createElement, d=this.state.data;
+    if (this.state.disabled || (!d && !this.state.error)) return null;
+    return h('section',{style:{padding:12,background:'#fff7ed'}},h('strong',null,'TEST MODE: Windows printer queues'),
+      h('p',null,'Queue acceptance does not confirm paper. Inspect the printer and paper before retrying.'),
+      this.state.error && h('p',{role:'alert'},this.state.error),
+      (d?.queues || []).map(q=>h('div',{key:q.destination},h('label',null,q.destination+' queue ',h('input',{defaultValue:q.queue,id:'test-queue-'+q.destination,maxLength:255})),h('button',{disabled:this.state.busy,onClick:()=>this.change({action:'configure',destination:q.destination,queue:document.getElementById('test-queue-'+q.destination).value})},'Save queue'))),
+      h('p',null,'Changing queues requires employee management permission.'),
+      h('button',{disabled:this.state.busy,onClick:()=>this.load()},'Refresh test jobs'),
+      (d?.jobs || []).map(j=>h('div',{key:j.id},j.destination+' job #'+j.id+(j.ticketId ? ' · Table '+j.tableId+' · Round '+j.round : ' · Bill #'+j.billId)+' · '+j.attempts+' attempt(s) · '+j.queue+' · '+(j.result==='accepted'?'Accepted by Windows; check paper':j.result==='failed'?'Queue missing':'Output uncertain; check paper'),
+        h('button',{disabled:this.state.busy,onClick:()=>{if (!window.confirm('Have you checked the printer and paper? Retrying may print a duplicate.')) return; const requestId=this.tokens[j.id] || (this.tokens[j.id]=crypto.randomUUID()); this.change({action:'retry',jobId:j.id,requestId,checked:true});}},'Retry after checking'))));
+  }
+}
 class PrintJobs extends React.Component {
   constructor(props) { super(props); this.state = { jobs: [], printers: [], error: '', busy: false }; this.tokens = props.tokens || {}; }
   componentDidMount() { this.load(); }
@@ -37,7 +66,7 @@ class PrintJobs extends React.Component {
   render() {
     const h = React.createElement;
     return h('section', { style: { padding: '10px 20px', background: '#fff7ed', maxHeight: 220, overflow: 'auto' } },
-      h('strong', null, 'Simulated preparation printing — no physical printer is connected'),
+      h('strong', null, 'Simulated preparation print history'),
       this.state.error && h('p', { role: 'alert' }, this.state.error),
       h('div', null, this.state.printers.map(p => h('label', { key: p.destination, style: { marginRight: 16 } }, p.destination + ' simulated result ',
         h('select', { value: p.result, disabled: this.state.busy, onChange: e => this.change({ action: 'simulate', destination: p.destination, result: e.target.value }) },
@@ -45,7 +74,7 @@ class PrintJobs extends React.Component {
       this.state.jobs.map(j => h('div', { key: j.id }, `${j.destination} · Table ${j.tableId} · Round ${j.round} · ${j.attempts} attempt(s) · `,
         j.result === 'uncertain' ? 'Output uncertain; check before retrying.' : j.result === 'failed' ? 'Simulated failure.' : 'Simulated success.',
         j.hadUncertain && j.result !== 'uncertain' && ' An earlier attempt was uncertain; duplicate output is possible.',
-        j.result !== 'success' && h('button', { disabled: this.state.busy, onClick: () => this.retry(j.id), style: { marginLeft: 10 } }, 'Retry simulated job'))));
+        j.result !== 'success' && h('button', { disabled: this.state.busy, onClick: () => this.retry(j.id), style: { marginLeft: 10 } }, 'Retry simulated job'))), h(TestPrintJobs,{revision:this.props?.revision}));
   }
 }
 
@@ -522,7 +551,8 @@ class WaiterDemo extends React.Component {
           else if (jobs.data.jobs.some(job => job.result !== 'success' || job.hadUncertain)) printNotice = 'A print job needs attention or had uncertain output. Select a waiter to review it and retry if needed.';
         } catch (_) { printNotice = 'Print status unavailable. Select a waiter and check print jobs.'; }
         if (!this._mounted) return;
-        const notice = [pending ? 'Table ' + tableId + ' has new items still pending. Select a waiter, reopen the table and send again.' : '', printNotice, 'No physical ticket was printed.'].filter(Boolean).join(' ');
+        const physicalNotice = data.testPrintEnabled ? 'Test print output is not confirmed. Check the printer and paper.' : 'No physical ticket was printed.';
+        const notice = [pending ? 'Table ' + tableId + ' has new items still pending. Select a waiter, reopen the table and send again.' : '', printNotice, physicalNotice].filter(Boolean).join(' ');
         await this.switchWaiter(notice, true);
       }).finally(() => { this._handoffInProgress = false; });
     }

@@ -18,17 +18,26 @@ class DesktopBill extends React.Component {
     if (r.ok) this.props.onPaid();
     else this.setState({ busy: false, uncertain: this.state.uncertain || !!r.uncertain, error: r.error || 'Payment unavailable. Retry the same selection.' });
   }
+  async printTestBill() {
+    if (this.state.busy || !this.state.data?.id || !window.arra.testPrinting) return;
+    this.printToken = this.printToken || crypto.randomUUID();
+    this.setState({busy:true,error:''});
+    const r = await window.arra.testPrinting({action:'bill',billId:this.state.data.id,requestId:this.printToken});
+    this.setState({busy:false, printNotice:r.ok ? 'Test print submitted. Check the printer and paper; queue acceptance is not proof of printing. Use the test jobs list to retry.' : 'Test print status unavailable. Check paper and the test jobs list before retrying.'});
+  }
   render() {
     const h = React.createElement, d = this.state.data;
     const money = value => Math.round(value).toLocaleString('en-US') + ' den';
     return h('div', { role: 'dialog', 'aria-label': 'Bill review', style: { position: 'fixed', inset: 0, zIndex: 1000, background: '#0008', display: 'flex', justifyContent: 'center', alignItems: 'center' } },
       h('div', { style: { background: 'white', padding: 28, borderRadius: 20, maxHeight: '90vh', overflow: 'auto', width: 600 } },
         h('h2', null, d?.id ? 'Bill generated #' + d.id : 'Review bill'),
-        h('p', null, d?.id ? 'Test mode only. No bill is printed and no card terminal is connected. Confirm the separate payment before recording it.' : 'Check the items before generating the bill.'),
+        h('p', null, d?.id ? 'Test mode only. No card terminal is connected. Confirm the separate payment before recording it.' : 'Check the items before generating the bill.'),
         this.state.error && h('p', { role: 'alert' }, this.state.error),
         this.state.uncertain && h('p', null, 'The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.'),
         d && h(React.Fragment, null, h('ul', null, d.lines.map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.modifiers.length > 0 && h('div', null, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))), h('strong', null, 'Total: ' + money(d.total))),
         d?.id && h('div', null,
+          h('button',{disabled:this.state.busy || !window.arra.testPrinting,onClick:()=>this.printTestBill()},'Print test bill — not a fiscal receipt'),
+          this.state.printNotice && h('p',{role:'status'},this.state.printNotice),
           h('p', null, 'Choose payment method and account:'),
           h('button', { disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ method: 'cash', account: '' }) }, 'Cash'), ' ',
           h('button', { disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ method: 'card', account: 'A' }) }, 'Card (Account A)'),

@@ -27,9 +27,9 @@ test('upgraded data, restricted requests, failure rollback and account visibilit
     UPDATE orders SET status='completed';
     DROP TRIGGER payment_corrections_no_replace; DROP TRIGGER payment_corrections_no_delete;
     DROP TRIGGER payment_corrections_no_update; DROP TRIGGER payment_correction_validate;
-    DROP TABLE payment_account_corrections; DROP TABLE transfer_managers; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); PRAGMA user_version=23;`);
+    DROP TABLE payment_account_corrections; DROP TABLE transfer_managers; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; PRAGMA user_version=23;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 25);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 26);
   assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 3);
   db.prepare('INSERT INTO transfer_managers VALUES(1)').run();
   let current = 1, authenticated = 2, transfer, financial;

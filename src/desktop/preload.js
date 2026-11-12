@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async testPrinting(request) {
+    try { return await ipcRenderer.invoke('arra:test-printing', request); } catch (_) { return {ok:false, error:'Test print status unknown. Check paper before retrying.'}; }
+  },
   async operationalReports(request) {
     try { return await ipcRenderer.invoke('arra:operational-reports', request); } catch (_) { return { ok: false }; }
   },
@@ -106,7 +109,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
             i && Number.isSafeInteger(i.id) && i.id > 0 && typeof i.productId === 'string' &&
             typeof i.name === 'string' && i.name.trim() && Number.isSafeInteger(i.unitPrice) && i.unitPrice >= 0 &&
             Number.isSafeInteger(i.quantity) && i.quantity > 0 && typeof i.note === 'string')) {
-        return { ok: true, data: { total: data.total, items: data.items.map(i => ({
+        return { ok: true, data: { total: data.total, testPrintEnabled: data.testPrintEnabled === true, items: data.items.map(i => ({
           id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, status: i.status, round: i.round, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, modifiers: i.modifiers || [], correctedQuantity: i.correctedQuantity || 0, corrections: i.corrections || []
         })) } };
       }
