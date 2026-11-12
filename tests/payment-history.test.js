@@ -22,10 +22,9 @@ test('history links immutable correction and bill records while enforcing effect
   registerFinancialVisibility({handle:(_, fn) => {handler=fn;}}, e => e.allowed, db, {currentUserId:()=>user, authenticatedUserId:()=>auth});
   const call = req => handler({allowed:true}, req);
   const detail = call({action:'detail',paymentId:1}).data;
-  assert.equal(detail.payment.originalAccount,'B'); assert.equal(detail.payment.account,'A');
+  assert.equal(Object.hasOwn(detail.payment,'originalAccount'),false); assert.equal(detail.payment.account,'A'); assert.equal(detail.corrections,null);
   assert.equal(detail.payment.actorId,2); assert.equal(detail.payment.paidAt,30);
   assert.equal(detail.bill.orderId,1); assert.equal(detail.bill.actorId,1); assert.equal(detail.bill.generatedAt,20);
-  assert.equal(detail.corrections[0].actorId,3); assert.equal(detail.corrections[0].occurredAt,40); assert.equal(detail.corrections[0].reason,'sample reason');
   assert.equal(call({action:'detail',paymentId:2}).ok,false);
   assert.equal(call({action:'unpaid'}).data,null); assert.equal(call({action:'unpaidDetail',billId:3}).ok,false);
   assert.deepEqual({...call({action:'aggregate',account:null}).data},{count:1,total:100});
@@ -34,6 +33,8 @@ test('history links immutable correction and bill records while enforcing effect
   assert.deepEqual(call({action:'search',account:null}).data.map(x=>x.id),[2]);
   assert.deepEqual({...call({action:'aggregate',account:null}).data},{count:1,total:200});
   user=auth=3;
+  const combinedDetail=call({action:'detail',paymentId:1}).data;
+  assert.equal(combinedDetail.payment.originalAccount,'B'); assert.equal(combinedDetail.corrections[0].actorId,3); assert.equal(combinedDetail.corrections[0].occurredAt,40); assert.equal(combinedDetail.corrections[0].reason,'sample reason');
   assert.deepEqual({...call({action:'aggregate',account:null}).data},{count:2,total:300});
   assert.deepEqual(call({action:'search',account:null}).data.map(x=>x.id),[2,1]);
   assert.deepEqual(call({action:'unpaid'}).data.map(x=>x.id),[3]);
