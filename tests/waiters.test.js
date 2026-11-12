@@ -8,7 +8,7 @@ const { registerTables, seedTables } = require('../src/desktop/tables');
 test('selection enforces active identities, optional PIN and selected grants at the service boundary', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-waiters-'));
   const db = openDatabase(dir); t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  bootstrap(db, 'restaurant', 'example password'); seedTables(db);
+  bootstrap(db, 'restaurant', 'example password'); db.exec("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; DELETE FROM user_permissions WHERE user_id=1 AND permission='business_days.close'"); seedTables(db);
   const pin = String(randomBytes(2).readUInt16BE() % 10000).padStart(4, '0');
   const wrongPin = String((Number(pin) + 1) % 10000).padStart(4, '0');
   const salt = randomBytes(16), hash = scryptSync(pin, salt, 32, { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });

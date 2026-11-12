@@ -80,3 +80,15 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **Shared administration:** Both owners may manage shared menu, prices, tables and staff; changes affect the whole restaurant and must be attributable. Only Combined may create or change owner accounts or financial access; this protects the A/B boundary. Both owners may see unpaid bills as shared operational information because the payment account is not assigned yet.
 - **Transfers:** A B-to-A correction counts once in A turnover and no longer in B turnover. Only Combined sees the transfer history and original B account; A sees the payment as A turnover.
 - **Revisit if:** The owner changes these rules. Preserve card-to-A and existing correction and financial-history rules.
+
+## D-014 — Staff credentials and operational permissions
+- **Origin:** Owner direction during S-060, 2026-11-12; clarifies D-013.
+- **What:** Keep staff credential and operational-permission actions for Combined only. Owner A and Owner B may manage shared staff details within that boundary.
+- **Why:** Prevent an owner from obtaining restricted staff access by setting a staff credential and permissions.
+- **Revisit if:** The owner changes this boundary or a future identity design safely supports broader delegation.
+
+## D-015 — Legacy test-database provisioning
+- **Origin:** Owner direction during S-060, 2026-11-12.
+- **What:** An authenticated one-time Combined setup may be provided for older waiter-only test databases; unsupported older test databases may be left as they are if recovery is not straightforward.
+- **Why:** The existing databases were used for testing and do not require a comprehensive recovery feature.
+- **Revisit if:** A production provisioning or recovery process is designed.

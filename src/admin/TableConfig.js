@@ -58,6 +58,7 @@ export class TableConfig extends React.Component {
       h('p', { className: 'admin-eyebrow floor-eyebrow' }, 'ADMINISTRATION / FLOOR'),
       h('h1', null, 'Areas and tables'),
       h('p', { className: 'admin-intro' }, 'Organize the dining floor and set capacity for each table.'),
+      h('p', { className: 'admin-access-note' }, 'Changes here affect the whole restaurant and are recorded under your account.'),
       h('div', { className: 'floor-note' }, h('strong', null, 'Deactivation and open orders'), h('p', null, 'An area or table with an open order cannot be deactivated. Inactive areas and tables are hidden from the waiter grid; their history is kept.')),
       s.notice && h('p', { role: 'status', className: 'floor-success' }, s.notice),
       s.error && h('p', { role: 'alert' }, s.error),

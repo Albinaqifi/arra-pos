@@ -9,7 +9,7 @@ const configurationTables = {
   area: ['dining_areas', 'id, name, active'],
   table: ['dining_tables', 'id, area_id, capacity, active'],
   category: ['menu_categories', 'id, name, active, parent_id, sort_order'],
-  product: ['menu_products', 'id, category_id, name, price, active, sort_order'],
+  product: ['menu_products', 'id, category_id, name, price, active, sort_order, destination'],
   group: ['modifier_groups', 'id, product_id, name, required, active'],
   option: ['modifier_options', 'id, group_id, name, adjustment, active'],
 };

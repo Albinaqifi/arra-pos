@@ -25,12 +25,12 @@ test('version 10 upgrade retains orders and grants and protects moved open order
     INSERT INTO orders(id,table_id,opened_at,status) VALUES (7, 12, 123, 'open'), (8, 19, 100, 'completed');
     INSERT INTO local_users (id, username, salt, password_hash) VALUES (3, 'sample-admin', x'00', x'00'), (4, 'sample-waiter', x'00', x'00');
     INSERT INTO user_permissions VALUES (3, 'tables.view'), (3, 'orders.view'), (3, 'orders.change'), (4, 'tables.view');
-    DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; PRAGMA user_version = 10;`);
+    DROP TABLE IF EXISTS sent_item_corrections; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version = 10;`);
   db.close();
   db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 27);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 29);
   assert.deepEqual(db.prepare('SELECT id, table_id, status FROM orders ORDER BY id').all().map(x => ({...x})), [
     {id: 7, table_id: 12, status: 'open'}, {id: 8, table_id: 19, status: 'completed'}
   ]);

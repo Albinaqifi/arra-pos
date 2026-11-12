@@ -1,6 +1,6 @@
 const { untouchedOrder } = require('./untouched-order');
 const { auditConfiguration } = require('./audit');
-const { hasPermissions } = require('./permissions');
+const { hasTableConfigPermission } = require('./permissions');
 const CHANNEL = 'arra:table-config';
 const id = x => Number.isSafeInteger(x) && x > 0;
 const name = x => typeof x === 'string' && x === x.trim() && x.length > 0 && x.length <= 100;
@@ -9,7 +9,7 @@ const keys = (x, expected) => Reflect.ownKeys(x).length === expected.length && e
 function registerTableConfig(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, req) => {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
-    if (!hasPermissions(db, session, 'tables.change')) return { ok: false, error: 'Access denied' };
+    if (!hasTableConfigPermission(db, session)) return { ok: false, error: 'Access denied' };
     try {
       const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
