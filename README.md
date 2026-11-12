@@ -90,6 +90,20 @@ Upgraded accounts receive no financial scope automatically and cannot access pro
 
 For sample-only transfer testing, close the app and run `node src/desktop/create-sample-transfer-manager.js "<absolute-sample-directory>"` interactively. Choose a four-digit sample PIN; it is stored hashed and is not displayed. Sign in with a sample restaurant account and select Transfer Manager at the end of the user list. This helper modifies only the marked sample database; it is not production provisioning. Reasons are optional pending Q-08, and the open manual business period is the provisional filter.
 
+To prepare order and payment scenarios for the turnover report, first create the isolated sample accounts above and copy the displayed directory path. With the desktop app closed, run these PowerShell commands, replacing the example path with that directory:
+
+```powershell
+$sample = 'C:\path\to\arra-sample-directory'
+node src/desktop/seed-tables.js $sample
+node src/desktop/seed-menu.js $sample
+node src/desktop/create-sample-transfer-manager.js $sample
+node src/desktop/seed-sample-scenarios.js $sample
+npm run build
+npx electron . --sample-data-directory="$sample"
+```
+
+The scenario command requires a marked sample database with no existing orders or payments and refuses to run twice. Tables 1–4 have paid bills: cash A, cash B, card A, and cash B transferred to A. Table 5 has an unpaid bill, table 6 has an unsent order, and table 7 has a sent item cancelled through a recorded correction; the app has no cancelled-order status. The sample setup uses simulated preparation printing and does not print those tickets. If an operation fails partway through, create a fresh sample database; the command does not delete existing records.
+
 ## Backup and recovery
 
 See [backup and recovery procedure](docs/backup-recovery.md) for the offline encrypted backup command, isolated restore, verification and limitations. Use sample data only until readiness.
