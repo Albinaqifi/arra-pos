@@ -70,14 +70,14 @@ test('sample recovery snapshots populated old database, authenticates and preser
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-old-sample-')); let copied;
   t.after(()=>{ if(copied) fs.rmSync(copied,{recursive:true,force:true}); fs.rmSync(dir,{recursive:true,force:true}); });
   let db=openDatabase(dir); bootstrap(db,'sample-legacy','sample-legacy-password');
-  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER IF EXISTS payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; PRAGMA user_version=21;"); db.close();
+  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER IF EXISTS payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; PRAGMA user_version=21;"); db.close();
   const source=path.join(dir,'arra.sqlite'), original=fs.readFileSync(source);
   await assert.rejects(recoverSample(source,'sample-legacy','wrong-sample-password'));
   assert.deepEqual(fs.readFileSync(source),original);
   copied=await recoverSample(source,'sample-legacy','sample-legacy-password');
   assert.notEqual(copied,dir); assert.deepEqual(fs.readFileSync(source),original);
   db=openDatabase(copied);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 26);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 27);
   assert.equal(db.prepare('SELECT count(*) n FROM orders').get().n,1);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope,'waiter');
   assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE action='sample_waiter_setup'").get().n,1);

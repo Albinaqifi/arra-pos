@@ -55,6 +55,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-055 | Done | Independent review and focused tests passed; PR #74 merged as `f41a24f`. |
 | S-056 | Done | Marked complete by owner; PR #76 merged. Paper and offline desktop verification remain outstanding. |
 | S-057 | Done | Review and focused tests passed; PR #75 merged as `d0759ee`. |
+| S-058 | In progress | Code review and focused tests passed; Windows queue, offline desktop and paper verification outstanding. |
 
 ## Current
 

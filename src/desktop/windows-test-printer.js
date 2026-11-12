@@ -1,6 +1,13 @@
 const { BrowserWindow } = require('electron');
 function textForJob(job) {
   const s = job.snapshot;
+  if (job.destination === 'turnover') {
+    const rows = ['NON-FISCAL DAILY TURNOVER REPORT', 'System day #' + s.dayId, 'Opened: ' + new Date(s.openedAt).toLocaleString(), 'Closed: ' + new Date(s.closedAt).toLocaleString(), '--------------------------------'];
+    for (const r of s.records) rows.push('Bill #' + r.billId + '  Table ' + r.tableId, new Date(r.paidAt).toLocaleString() + '  ' + r.account + ' ' + r.method + '  ' + r.amount + ' den');
+    if (!s.records.length) rows.push('No paid bills');
+    rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den');
+    return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
+  }
   const rows = job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + job.destination.toUpperCase() + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
   rows.push('--------------------------------');
   for (const l of s.lines) {

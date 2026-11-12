@@ -8,6 +8,8 @@ Windows sample-only printing is an experiment, not fiscal integration or permiss
 
 Queue acceptance is not proof of paper output. Check the printer and paper for every job; a missing queue is shown as failed and a driver failure, interruption or unknown callback remains uncertain. Refresh the test job list, check the paper and acknowledge that a duplicate is possible before retrying. A restart never automatically resubmits an uncertain job. Retrying uses its saved snapshot and does not send the order or record a payment again. For the Birch experiment use the owner's `Arra Test Printer` queue and inspect separate mixed-order tickets and the test bill for content and readability. When additional physical printers become available, map each destination to its own Windows queue and repeat the same sample checks. This does not resolve provider, legal or fiscal verification.
 
+Closing a system day also creates a non-fiscal turnover report and attempts to print it on Windows. An authorized combined-account day closer can set its dedicated queue in the close-day screen; it is initially copied from the bill queue and can then be changed independently. The saved report and print status remain available after closing. Refresh the status and check the paper before retrying an uncertain result. Queue acceptance does not confirm paper output. Verify this flow with sample data before relying on the printer.
+
 ## Desktop window
 
 Install Node.js 22.12 or later and run the following once while connected to the internet, from this directory:
@@ -87,6 +89,22 @@ For an isolated sample database with separately authenticated waiter, A, B, and 
 Upgraded accounts receive no financial scope automatically and cannot access protected operations. To recover existing sample data, use Node.js 23.8 or later and run `node src/desktop/recover-sample.js "<absolute-path-to-arra.sqlite>"` with the app closed and enter an existing sample username and password. The command takes a database-safe snapshot into a new temporary directory, migrates only that copy, and assigns only the authenticated account a waiter scope; it refuses databases containing owner scopes. The original is not modified. Use the printed launch command to open the copy. The normal development bootstrap creates a waiter-scoped account only in an empty database. This sample setup does not decide Q-01 or provide a production account recovery or cross-owner grant mechanism. Keep the existing database intact.
 
 For sample-only transfer testing, close the app and run `node src/desktop/create-sample-transfer-manager.js "<absolute-sample-directory>"` interactively. Choose a four-digit sample PIN; it is stored hashed and is not displayed. Sign in with a sample restaurant account and select Transfer Manager at the end of the user list. This helper modifies only the marked sample database; it is not production provisioning. Reasons are optional pending Q-08, and the open manual business period is the provisional filter.
+
+To create a fresh isolated sample database with accounts, a transfer manager, tables, menu and order/payment scenarios in one step, close the desktop app and run `node src/desktop/create-sample-scenarios.js` interactively. Choose four distinct sample passwords and a transfer manager PIN. Run `npm run build` and then the launch command it prints; sign in and select `sample-combined` to review all turnover.
+
+To add the scenarios to an already-created, fresh sample database instead, copy its directory path. With the desktop app closed, run these PowerShell commands, replacing the example path with that directory:
+
+```powershell
+$sample = 'C:\path\to\arra-sample-directory'
+node src/desktop/seed-tables.js $sample
+node src/desktop/seed-menu.js $sample
+node src/desktop/create-sample-transfer-manager.js $sample
+node src/desktop/seed-sample-scenarios.js $sample
+npm run build
+npx electron . --sample-data-directory="$sample"
+```
+
+The scenario command requires a marked sample database with no existing orders or payments and refuses to run twice. Tables 1–4 have paid bills: cash A, cash B, card A, and cash B transferred to A. Table 5 has an unpaid bill, table 6 has an unsent order, and table 7 has a sent item cancelled through a recorded correction; the app has no cancelled-order status. The sample setup uses simulated preparation printing and does not print those tickets. If an operation fails partway through, create a fresh sample database; the command does not delete existing records.
 
 ## Backup and recovery
 

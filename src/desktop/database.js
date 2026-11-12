@@ -239,6 +239,20 @@ const migrations = [
   CREATE TRIGGER test_print_jobs_no_replace BEFORE INSERT ON test_print_jobs WHEN EXISTS(SELECT 1 FROM test_print_jobs WHERE id=NEW.id OR ticket_id=NEW.ticket_id OR bill_id=NEW.bill_id) BEGIN SELECT RAISE(ABORT,'Print jobs are immutable'); END;
   CREATE TRIGGER test_print_attempts_no_replace BEFORE INSERT ON test_print_attempts WHEN EXISTS(SELECT 1 FROM test_print_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Print attempts are immutable'); END;
   CREATE TRIGGER test_print_results_no_replace BEFORE INSERT ON test_print_results WHEN EXISTS(SELECT 1 FROM test_print_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Print results are immutable'); END;` },
+  { version: 27, sql: `CREATE TABLE day_print_settings (id INTEGER PRIMARY KEY CHECK(id=1), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
+  INSERT INTO day_print_settings SELECT 1,queue FROM test_printer_queues WHERE destination='bill';
+  CREATE TABLE day_print_jobs (id INTEGER PRIMARY KEY, day_id INTEGER NOT NULL UNIQUE REFERENCES business_days(id), snapshot TEXT NOT NULL, created_at INTEGER NOT NULL) STRICT;
+  CREATE TABLE day_print_attempts (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES day_print_jobs(id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER NOT NULL REFERENCES local_users(id), queue TEXT NOT NULL, started_at INTEGER NOT NULL) STRICT;
+  CREATE TABLE day_print_results (attempt_id INTEGER PRIMARY KEY REFERENCES day_print_attempts(id), result TEXT NOT NULL CHECK(result IN ('failed','accepted')), occurred_at INTEGER NOT NULL) STRICT;
+  CREATE TRIGGER day_jobs_no_update BEFORE UPDATE ON day_print_jobs BEGIN SELECT RAISE(ABORT,'Reports are immutable'); END;
+  CREATE TRIGGER day_jobs_no_delete BEFORE DELETE ON day_print_jobs BEGIN SELECT RAISE(ABORT,'Reports are immutable'); END;
+  CREATE TRIGGER day_attempts_no_update BEFORE UPDATE ON day_print_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER day_attempts_no_delete BEFORE DELETE ON day_print_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER day_results_no_update BEFORE UPDATE ON day_print_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+  CREATE TRIGGER day_results_no_delete BEFORE DELETE ON day_print_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+  CREATE TRIGGER day_jobs_no_replace BEFORE INSERT ON day_print_jobs WHEN EXISTS(SELECT 1 FROM day_print_jobs WHERE id=NEW.id OR day_id=NEW.day_id) BEGIN SELECT RAISE(ABORT,'Reports are immutable'); END;
+  CREATE TRIGGER day_attempts_no_replace BEFORE INSERT ON day_print_attempts WHEN EXISTS(SELECT 1 FROM day_print_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER day_results_no_replace BEFORE INSERT ON day_print_results WHEN EXISTS(SELECT 1 FROM day_print_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
 ];
 
 function migrate(db) {
