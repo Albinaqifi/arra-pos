@@ -335,5 +335,17 @@
   "Could not save menu": "Menyja nuk mund të ruhet",
   "Access denied. Sign in as the administrator and select the same name.": "Qasja u refuzua. Hyni si administrator dhe zgjidhni të njëjtin emër.",
   "Account unavailable": "Llogaria nuk është e disponueshme",
-  "Could not save employee configuration. Check the account, permissions, and that an administrator remains active.": "Konfigurimi i punonjësit nuk mund të ruhet. Kontrolloni llogarinë, lejet dhe që një administrator të mbetet aktiv."
+  "Could not save employee configuration. Check the account, permissions, and that an administrator remains active.": "Konfigurimi i punonjësit nuk mund të ruhet. Kontrolloni llogarinë, lejet dhe që një administrator të mbetet aktiv.",
+  "Discard unsaved changes?": "Të hidhen poshtë ndryshimet e paruajtura?",
+  "Find an area or table": "Gjej një zonë ose tavolinë",
+  "Add table to ": "Shto tavolinë në ",
+  "An open order must be completed before deactivation.": "Një porosi e hapur duhet të përfundohet para çaktivizimit.",
+  "No matching areas or tables.": "Nuk u gjetën zona ose tavolina.",
+  "Refresh floor before retrying": "Rifresko sallën para se të provosh përsëri",
+  "Check the refreshed list for the area before saving again.": "Kontrolloni zonën në listën e rifreskuar para se të ruani përsëri.",
+  "Floor overview": "Përmbledhje e sallës",
+  "Areas": "Zonat",
+  "Open orders": "Porosi të hapura",
+  "Select an area or table to make changes.": "Zgjidhni një zonë ose tavolinë për të bërë ndryshime.",
+  "No matching tables in this area.": "Nuk u gjetën tavolina në këtë zonë."
 }

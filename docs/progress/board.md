@@ -69,3 +69,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 ## Current
 
 The S-052 local recovery exercise worked and no longer blocks local verification; story completion and PR remain. The owner cannot test on another machine now. S-032's separate protected copy and separate-device recovery remain unverified and a prerequisite for S-036 and live use, but do not hold up S-041–S-043 or S-037. S-037 remains blocked pending its own desktop verification on the available machine; the owner authorized S-041–S-043 to proceed and will finish S-037 later. Do not mark S-037 Done without its required evidence and workflow completion.
+
+| S-067 | In progress | Code review and focused tests passed; rendered visual review and desktop verification outstanding. |
+
+| S-068 | In progress | Code review and focused checks passed; owner reports desktop redesign works. Detailed keyboard, resizing and offline evidence outstanding; PR #92 open. |

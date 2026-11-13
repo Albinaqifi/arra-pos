@@ -339,6 +339,102 @@ The rationale, priority order, readiness work and owner decisions are in [the ap
 
 **Checks/review:** Test all three identities using UI and direct requests, financial and authorization review, relevant recovery and migration paths, and appropriate offline printer verification. Record any hardware limitations.
 
+## App language
+
+These stories add one app-wide English/Albanian selection for the shared PC. They are separate sessions; complete and verify each before starting the next. The selection applies to every user, works offline and persists after restart. Restaurant-entered names and existing historical records remain as entered.
+
+### S-063 — Language foundation and admin switch
+
+**Goal:** Establish local English and Albanian JSON translations and let an authorized administrator choose the language for the whole app.
+
+**Acceptance:** Bundle both dictionaries with the desktop app and provide a reusable translation helper for text and dynamic values. An authorized administrator can select English or Shqip; the selection takes effect for all users and persists across restart, including before sign-in. Enforce change permission in trusted application code and reject unauthorized direct requests. Default existing installations safely to English without losing data. The app and language selection work offline. Make the switch and its own feedback available in both languages; remaining screens are translated in the following stories.
+
+**Checks/review:** Verify both selections, immediate update, restart and sign-in behavior, offline operation, invalid values and denied direct requests. Check the local build and any persistence or migration for existing data.
+
+### S-064 — Translate sign-in and waiter screens
+
+**Goal:** Make the sign-in, identity selection and waiter experience available in English and Albanian using the selected app language. **Depends on:** S-063.
+
+**Acceptance:** Translate visible labels, navigation, accessible names, confirmations, validation, status and error messages for sign-in, waiter selection, tables, orders, bills and payment flows. Translate dynamic values with appropriate placeholders and quantity wording. Switching languages updates these screens while preserving entered restaurant names and existing order, payment and print history. Keep existing authorization, financial rules and retry behavior unchanged.
+
+**Checks/review:** Exercise representative sign-in, table, order, send, bill and payment flows in both languages with sample data, including failure and confirmation states, restart and offline use. Check that switching does not repeat a send or payment.
+
+### S-065 — Translate administration and transfer screens
+
+**Goal:** Make administration and the restricted transfer-manager experience available in English and Albanian. **Depends on:** S-063 and S-064.
+
+**Acceptance:** Translate administration navigation, configuration, staff, order and financial history, business-day and report screens, and the transfer-manager flow. Include accessible names, dynamic values, confirmations, denied access, validation and status messages. Respect the single selected app language and retain restaurant-entered names and historical data. Preserve all existing authorization, financial scope and correction behavior.
+
+**Checks/review:** Exercise representative administrator and transfer-manager flows in both languages with sample identities, including denied access and scoped financial views. Verify offline use and that translations do not change the meaning of financial or correction actions.
+
+### S-066 — Complete messages and verify both languages
+
+**Goal:** Finish remaining user-facing translations and verify the English and Albanian experience across the app. **Depends on:** S-064 and S-065.
+
+**Acceptance:** Inventory and translate remaining user-facing messages, including desktop service errors, startup and print-status messages, without relying on raw English error text. Preserve stable service behavior and permission checks. Detect missing dictionary keys and placeholders, provide a safe fallback, and verify that neither language exposes translation keys in normal flows. Review Albanian restaurant and financial wording with a fluent speaker and record any review limitation. Existing printed snapshots and restaurant-entered content remain unchanged; changing the language of printed output is outside this story.
+
+**Checks/review:** Check dictionary key and placeholder consistency, representative errors and dynamic messages, app-wide switching, restart and offline startup. Exercise both languages across waiter, administrator and transfer-manager flows with sample data, and check text fit and Albanian characters. Record the actual language-review and desktop verification results.
+
+## Billing presentation
+
+### S-067 — Design the billing modal
+
+**Goal:** Give the desktop billing modal a polished, cohesive design that fits the app and makes reviewing a bill and recording payment clear for waiters.
+
+**Depends on:** S-047 and S-064.
+
+**Acceptance:**
+
+- Replace the plain default presentation in the desktop billing modal with a consistent visual hierarchy, spacing, typography, styled controls and clear selected, disabled, loading, error and status states. Keep bill lines, modifiers and the total easy to read, and make the primary and secondary actions clear throughout the flow.
+- Place the app logo at the top right of the modal. Use locally bundled app branding so it works offline; if no reusable logo asset exists, create a suitable local representation consistent with the app. The logo must not obscure the title, content or controls.
+- The modal remains usable at the supported desktop window sizes, including with long item names and enough lines to require scrolling. Provide accessible dialog labeling, keyboard access, visible focus and readable contrast. English and Albanian text must fit and remain understandable.
+- Preserve the existing bill generation, payment, test printing, permissions, warnings and recovery behavior. Card remains Account A; an uncertain payment must retain the same selection and recovery path without triggering another terminal payment or duplicate POS payment. Keep test printing clearly identified as non-fiscal.
+
+**Checks/review:** Exercise bill review, generation, cash and card selection, test printing, payment and close with sample data in both languages. Check long content, resizing, keyboard navigation, busy, error and uncertain states, and offline rendering of the logo. Verify existing billing and payment tests and review that presentation changes do not alter financial or retry behavior.
+
+## Administration usability improvements
+
+These are three separate, unstarted stories. Improve the actual workflows using the current screens and sample data; choose a cohesive design that fits the administration shell. Split a story before implementation if its final scope cannot be verified in one session.
+
+### S-068 — Make areas and tables easier to manage
+
+**Goal:** Help an administrator understand the floor at a glance and create or change an area or table without losing context. **Depends on:** S-038 and S-065.
+
+**Acceptance:**
+
+- Present areas and their tables as a clear, scannable hierarchy, including table numbers, capacity, active state and open-order indicators. Make it easy to locate a table as the floor grows, while keeping inactive entries identifiable and available for editing.
+- Provide contextual actions to add a table to an area and edit an area or table; make the current selection and destination clear. Keep the relevant area and table in view after saving or cancelling. Handle an empty floor and areas without tables with useful next actions.
+- Make validation and save feedback easy to associate with the affected field or item. Explain the effect of deactivation and an open-order refusal at the point of action; preserve entered values on a recoverable error and avoid silently discarding unsaved changes when switching context.
+- Keep the screen usable with keyboard and visible focus, at supported desktop sizes, and in English and Albanian. Preserve offline use, stable table identities, historical references, trusted authorization and the existing open-order restrictions.
+
+**Checks/review:** With sample data, exercise create, edit, move between areas, deactivate and reactivate, empty and larger lists, validation, open-order refusal, cancellation and save failure. Verify denied direct requests, persistence, the waiter table grid, both languages and keyboard/resizing behavior.
+
+### S-069 — Make menu setup easier to navigate and edit
+
+**Goal:** Help an administrator find and maintain products and choices without navigating a long, fully expanded menu. **Depends on:** S-039 and S-065.
+
+**Acceptance:**
+
+- Deliver a noticeable, cohesive redesign of the menu management screen, not just additional controls on the existing layout. Rework the visual hierarchy and interaction flow so finding a product, understanding its category and choices, and editing it take less scanning and preserve context. Use the improved areas-and-tables experience as a quality reference while designing for the menu's own complexity.
+- Provide a scannable category and subcategory structure with a way to find products by name and narrow or expand the relevant details. Show product price, preparation destination and active state, and make the relationship between product, choice group and options clear. Inactive or parent-hidden items must remain identifiable and manageable.
+- Offer contextual create and edit actions for categories, products, groups and options, retaining the selected context after save or cancel. Clearly explain price and adjustment, display order, required choices and the effect of deactivation where those decisions are made. Provide useful empty states and actionable validation and save feedback; protect unsaved input when changing context.
+- Preserve the existing menu rules, kitchen/bar routing, historical order snapshots, trusted permissions, offline behavior and uncertain-save reconciliation. Do not retry an unconfirmed creation automatically. Support keyboard use, visible focus, supported desktop sizes and English and Albanian.
+
+**Checks/review:** Inspect the rendered redesign and assess whether the layout and workflow are materially clearer than the previous screen, including a representative large menu and empty, selected and error states. Use sample categories, subcategories, products and choices to exercise finding, creating, editing, deactivating and reactivating items, invalid input and unconfirmed save recovery. Verify routing, existing snapshots, denied direct requests, restart, both languages and keyboard/resizing behavior. Record actual visual and desktop evidence and any limitations.
+
+### S-070 — Make employee and access management understandable
+
+**Goal:** Help an authorized administrator find an employee, understand their account status and safely manage the actions available to that administrator. **Depends on:** S-040, S-060 and S-065.
+
+**Acceptance:**
+
+- Deliver a noticeable, cohesive redesign of employee and access management, not just additional controls on the existing layout. Rework the visual hierarchy and interaction flow so administrators can find a person, understand their status and available actions, and make changes with clear context and consequences. Use the improved areas-and-tables experience as a quality reference while designing for the sensitivity and complexity of access management.
+- Present a scannable staff list with name, account type and active or pending status, and a clear selected-person view. Organize account, credentials, operational permissions, financial access and relevant history so the available actions and their consequences are easy to find without overwhelming the page. Handle empty lists and pending provisioning clearly.
+- Guide creation and editing according to the signed-in administrator's existing authority. Explain when Combined must complete provisioning, which changes end a session, and the consequences of deactivation or changing access. Provide clear confirmations for consequential actions, field-level validation and save, failure and unconfirmed-save feedback. Avoid accidental loss of unsaved edits when changing employee or section; never display saved passwords or PINs.
+- Keep permissions and financial scope understandable without implying a user can grant access they do not hold. Preserve all trusted-code restrictions, owner and Combined boundaries, session protections, audit history and recovery behavior. Support keyboard use, visible focus, supported desktop sizes, English and Albanian, and offline operation.
+
+**Checks/review:** Inspect the rendered redesign and assess whether the layout and workflow are materially clearer than the previous screen, including a representative staff list and empty, selected, denied and error states. Exercise Combined, Owner A and Owner B with sample identities: create or provision staff, edit accounts, reset credentials, change permitted grants and inspect history. Verify pending, denied, invalid, deactivation, session-ending and uncertain-save cases, including unauthorized direct requests and self-escalation attempts. Check both languages and keyboard/resizing behavior; record actual visual and desktop evidence and any limitations. Do not record credentials in evidence.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.

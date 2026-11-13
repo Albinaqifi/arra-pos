@@ -46,9 +46,11 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
       const r = await ipcRenderer.invoke('arra:table-config', request);
       if (r?.ok && request?.action === 'list' && Array.isArray(r.data?.areas) && Array.isArray(r.data?.tables))
         return { ok: true, data: { areas: r.data.areas.map(a => ({ id: a.id, name: a.name, active: a.active })), tables: r.data.tables.map(t => ({ id: t.id, areaId: t.areaId, capacity: t.capacity, active: t.active, hasOrder: t.hasOrder })) } };
+      if (r?.ok && request?.action === 'area' && request.id === null)
+        return Number.isSafeInteger(r.id) && r.id > 0 ? { ok: true, id: r.id } : { ok: false, uncertain: true, error: 'Configuration unavailable' };
       if (r?.ok && request?.action !== 'list') return { ok: true };
       return { ok: false, error: typeof r?.error === 'string' ? r.error : 'Configuration unavailable' };
-    } catch (_) { return { ok: false, error: 'Configuration unavailable' }; }
+    } catch (_) { return { ok: false, uncertain: request?.action === 'area' && request.id === null, error: 'Configuration unavailable' }; }
   },
   async getWaiters() {
     try {

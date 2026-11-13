@@ -17,7 +17,10 @@ function registerTableConfig(ipcMain, isAllowedSender, db, session) {
         tables: db.prepare(`SELECT t.id, t.area_id AS areaId, t.capacity, t.active, EXISTS(SELECT 1 FROM orders o WHERE o.table_id = t.id AND o.status = 'open' AND o.retired_empty = 0 AND NOT (${untouchedOrder('o')})) AS hasOrder FROM dining_tables t ORDER BY t.id`).all()
       } };
       if (req.action === 'area' && keys(req, ['action', 'id', 'name', 'active']) && (req.id === null || id(req.id)) && name(req.name) && typeof req.active === 'boolean') {
-        if (req.id === null) db.prepare('INSERT INTO dining_areas (name, active) VALUES (?, ?)').run(req.name, Number(req.active));
+        if (req.id === null) {
+          const result = db.prepare('INSERT INTO dining_areas (name, active) VALUES (?, ?)').run(req.name, Number(req.active));
+          return { ok: true, id: Number(result.lastInsertRowid) };
+        }
         else {
           if (!req.active && db.prepare(`SELECT 1 FROM dining_tables t JOIN orders o ON o.table_id = t.id AND o.status = 'open' AND o.retired_empty = 0 AND NOT (${untouchedOrder('o')}) WHERE t.area_id = ? LIMIT 1`).get(req.id)) return { ok: false, error: 'Area has an open order' };
           if (!db.prepare('UPDATE dining_areas SET name = ?, active = ? WHERE id = ?').run(req.name, Number(req.active), req.id).changes) return { ok: false, error: 'Area unavailable' };
