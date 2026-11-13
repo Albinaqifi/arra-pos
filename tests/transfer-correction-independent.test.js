@@ -9,6 +9,7 @@ const { registerFinancialVisibility } = require('../src/desktop/financial-visibi
 const { registerBusinessDays } = require('../src/desktop/business-days');
 const { bootstrap, createSession } = require('../src/desktop/session');
 const { createSampleTransferManager } = require('../src/desktop/sample-transfer-manager');
+const { seedSampleIdentities } = require('../src/desktop/sample-accounts');
 const { hasPermissions } = require('../src/desktop/permissions');
 const { randomBytes, randomInt } = require('node:crypto');
 
@@ -16,7 +17,7 @@ test('upgraded data, restricted requests, failure rollback and account visibilit
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-transfer-independent-'));
   let db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  db.exec(`INSERT INTO local_users(id,username,salt,password_hash,pin_salt,pin_hash) VALUES
+  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO local_users(id,username,salt,password_hash,pin_salt,pin_hash) VALUES
     (1,'manager',x'01',x'01',x'01',x'01'), (2,'admin',x'01',x'01',NULL,NULL);
     INSERT INTO financial_scopes VALUES(2,'combined');
     INSERT INTO user_permissions VALUES(2,'employees.view');
@@ -29,7 +30,7 @@ test('upgraded data, restricted requests, failure rollback and account visibilit
     DROP TRIGGER payment_corrections_no_update; DROP TRIGGER payment_correction_validate;
     DROP TABLE payment_account_corrections; DROP TABLE transfer_managers; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=23;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 31);
   assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 3);
   db.prepare('INSERT INTO transfer_managers VALUES(1)').run();
   let current = 1, authenticated = 2, transfer, financial;
@@ -71,10 +72,12 @@ test('real close prevents later corrections and manager is isolated after separa
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const password = randomBytes(24).toString('hex');
-  const pin = String(randomInt(10000)).padStart(4, '0');
+  const pin = String(randomInt(1000000)).padStart(6, '0');
+  const sharedPassword = randomBytes(24).toString('hex');
   bootstrap(db, 'sample-admin', password);
   db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1; INSERT OR IGNORE INTO user_permissions VALUES(1,'business_days.close');");
-  const manager = createSampleTransferManager(db, pin);
+  seedSampleIdentities(db, [sharedPassword, ...Array.from({length:3}, () => randomBytes(24).toString('hex'))], String(randomInt(10000)).padStart(4, '0'), pin);
+  const manager = db.prepare('SELECT user_id id FROM transfer_managers').get().id;
   db.exec(`INSERT INTO dining_tables(id,area) VALUES(1,'sample');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'a');
@@ -84,17 +87,18 @@ test('real close prevents later corrections and manager is isolated after separa
   registerTransferCorrection({handle: (_, fn) => transfer = fn}, () => true, db, session);
   registerBusinessDays({handle: (_, fn) => days = fn}, () => true, db, session);
   assert.equal(transfer({}, {action:'list'}).ok, false);
-  assert.equal(session.signIn({username:'sample-admin',password}).ok, true);
-  const wrong = String((Number(pin)+1)%10000).padStart(4,'0');
+  assert.equal(session.signIn({username:'sample-restaurant',password:sharedPassword}).ok, true);
+  const wrong = String((Number(pin)+1)%1000000).padStart(6,'0');
   assert.equal(session.selectWaiter({id:manager,pin:wrong}).ok, false);
   assert.equal(transfer({}, {action:'list'}).ok, false);
   assert.equal(session.selectWaiter({id:manager,pin}).ok, true);
   assert.deepEqual(transfer({}, {action:'list'}).data.payments.map(p => p.id), [1]);
   for (const permission of ['tables.view','orders.change','employees.view','employees.change','business_days.close']) assert.equal(hasPermissions(db,session,permission), false);
   assert.equal(days({}, {action:'list'}).ok, false);
-  assert.equal(session.selectWaiter({id:1,pin:''}).ok, true);
+  assert.equal(session.signIn({username:'sample-admin',password}).ok, true);
   const dayId = days({}, {action:'list'}).data.days[0].id;
   assert.equal(days({}, {action:'close',dayId}).ok, true);
+  assert.equal(session.signIn({username:'sample-restaurant',password:sharedPassword}).ok, true);
   assert.equal(session.selectWaiter({id:manager,pin}).ok, true);
   assert.deepEqual(transfer({}, {action:'list'}).data.payments, []);
   assert.equal(transfer({}, {action:'correct',paymentId:1,reason:'sample'}).ok, false);

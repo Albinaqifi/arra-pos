@@ -259,6 +259,7 @@ const migrations = [
     WHERE scope IN ('A','B','combined');` },
   { version: 29, sql: `CREATE TABLE pending_staff (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;` },
   { version: 30, sql: `ALTER TABLE day_print_attempts ADD COLUMN scope TEXT NOT NULL DEFAULT 'combined' CHECK(scope IN ('A','B','combined'));` },
+  { version: 31, sql: `CREATE TABLE restaurant_accounts (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;` },
 ];
 
 function migrate(db) {

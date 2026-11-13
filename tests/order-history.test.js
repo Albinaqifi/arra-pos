@@ -55,7 +55,7 @@ test('owner history protects effective account across moved-item timelines', t =
     INSERT INTO user_permissions VALUES(1,'employees.view'),(2,'employees.view'),(3,'employees.view');
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample'),(4,'sample');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'),(4,4,1,'open');
-    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'a'),(2,2,1,1,200,'b');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'a'),(2,2,1,1,200,'b'),(3,3,1,1,0,'c'),(4,4,1,1,0,'d');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,100,'card','A'),(2,2,1,2,200,'cash','B');`);
   recordAudit(db,1,'move_items','order',2,2,{sourceId:2,destinationId:3,destinationOrderId:3,itemIds:[99]});
   let actor=1, handler; registerOrderHistory({handle:(_,fn)=>handler=fn},()=>true,db,{currentUserId:()=>actor,authenticatedUserId:()=>actor});

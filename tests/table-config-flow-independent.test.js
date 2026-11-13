@@ -8,12 +8,14 @@ const { openDatabase } = require('../src/desktop/database');
 const { registerTableConfig } = require('../src/desktop/table-config');
 const { registerOrders } = require('../src/desktop/orders');
 const { registerTables } = require('../src/desktop/tables');
+const { seedMenu } = require('../src/desktop/menu');
 
 test('floor editor and local services preserve orders and update the waiter grid', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-floor-flow-'));
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   db.exec("INSERT INTO local_users (id, username, salt, password_hash) VALUES (1, 'sample-admin', x'00', x'00'), (2, 'sample-waiter', x'00', x'00'); INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users; INSERT INTO user_permissions VALUES (1, 'tables.change'), (1, 'tables.view'), (1, 'orders.view'), (1, 'orders.change'), (2, 'tables.view');");
+  seedMenu(db);
   let user = 1;
   const trusted = {}, handlers = {}, ipc = { handle: (name, fn) => { handlers[name] = fn; } };
   const session = { currentUserId: () => user, authenticatedUserId: () => user };
@@ -34,6 +36,7 @@ test('floor editor and local services preserve orders and update the waiter grid
   screen.editTable(table); screen.setState({ editor: { ...screen.state.editor, capacity: '8' } }); await screen.save();
   assert.equal(invoke('arra:tables', {}).data[0].area, 'Garden');
   assert.equal(invoke('arra:open-order', { tableId: 23 }).ok, true);
+  db.exec("INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',1,1,'pending')");
   await screen.load(); table = screen.state.tables[0]; assert.equal(table.hasOrder, 1);
   screen.editTable(table); screen.setState({ editor: { ...screen.state.editor, active: false } }); await screen.save();
   assert.equal(screen.state.error, 'Table has an open order');

@@ -39,6 +39,7 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
       const otherPayment = db.prepare(`SELECT 1 FROM bills b JOIN payments p ON p.bill_id=b.id
         LEFT JOIN payment_account_corrections c ON c.payment_id=p.id
         WHERE b.order_id=? AND COALESCE(CASE WHEN c.id IS NOT NULL THEN 'A' END,p.account)<>? LIMIT 1`);
+      const hasBill = db.prepare('SELECT 1 FROM bills WHERE order_id=?');
       const permitted = id => {
         if (scope === 'waiter' || scope === 'combined') return true;
         const seen = new Set(), pending = [id];
@@ -46,7 +47,7 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
           const current = pending.pop();
           if (seen.has(current)) continue;
           seen.add(current);
-          if (otherPayment.get(current,scope)) return false;
+          if (!hasBill.get(current) || otherPayment.get(current,scope)) return false;
           pending.push(...(links.get(current) || []));
         }
         return true;

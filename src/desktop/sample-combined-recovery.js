@@ -5,12 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { DatabaseSync, backup } = require('node:sqlite');
 const { openDatabase } = require('./database');
-const { createSession } = require('./session');
+const { verifyLocalAccount } = require('./session');
 const { recordAudit } = require('./audit');
 function authorizedWaiter(db, username, password) {
-  const session = createSession(db);
-  if (!session.signIn({ username, password }).ok) throw Error('Sample administrator unavailable');
-  const id = session.authenticatedUserId();
+  const id = verifyLocalAccount(db, username, password);
+  if (!id) throw Error('Sample administrator unavailable');
   if (db.prepare("SELECT 1 FROM financial_scopes WHERE scope <> 'waiter' LIMIT 1").get() ||
       db.prepare('SELECT 1 FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id WHERE f.user_id IS NULL LIMIT 1').get() ||
       db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(id) ||
@@ -23,7 +22,7 @@ async function recoverSampleCombined(sourceFile, username, password) {
   const source = new DatabaseSync(sourceFile, { readOnly:true }); let copy, directory, completed=false;
   try {
     const version = source.prepare('PRAGMA user_version').get().user_version;
-    if (version < 24 || version > 30) throw Error('Unsupported sample version');
+    if (version < 24 || version > 31) throw Error('Unsupported sample version');
     const sourceActor = authorizedWaiter(source, username, password);
     if (version >= 29 && source.prepare('SELECT 1 FROM pending_staff WHERE user_id=?').get(sourceActor)) throw Error('Sample administrator unavailable');
     directory=fs.mkdtempSync(path.join(os.tmpdir(),'arra-sample-combined-'));

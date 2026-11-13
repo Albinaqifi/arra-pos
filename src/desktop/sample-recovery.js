@@ -4,13 +4,12 @@ const os = require('node:os');
 const path = require('node:path');
 const { DatabaseSync, backup } = require('node:sqlite');
 const { openDatabase } = require('./database');
-const { createSession } = require('./session');
+const { verifyLocalAccount } = require('./session');
 const { recordAudit } = require('./audit');
 
 function provisionSampleWaiter(db, username, password) {
-  const session = createSession(db);
-  if (!session.signIn({ username, password }).ok) throw new Error('Sample account unavailable');
-  const actor = session.authenticatedUserId();
+  const actor = verifyLocalAccount(db, username, password);
+  if (!actor) throw new Error('Sample account unavailable');
   db.exec('BEGIN IMMEDIATE');
   try {
     if (db.prepare("SELECT 1 FROM financial_scopes WHERE scope IN ('A','B','combined') LIMIT 1").get()) throw new Error('Scoped owners exist');
@@ -25,7 +24,7 @@ async function recoverSample(sourceFile, username, password) {
   const source = new DatabaseSync(sourceFile, { readOnly: true });
   let directory, copy;
   try {
-    if (!createSession(source).signIn({ username, password }).ok) throw new Error('Sample account unavailable');
+    if (!verifyLocalAccount(source, username, password)) throw new Error('Sample account unavailable');
     directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-sample-recovery-'));
     await backup(source, path.join(directory, 'arra.sqlite'));
     source.close();

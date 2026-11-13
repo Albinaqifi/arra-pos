@@ -2,7 +2,7 @@
 const { randomBytes } = require('node:crypto');
 const { hashPassword } = require('./session');
 function createSampleTransferManager(db, pin) {
-  if (!/^\d{4}$/.test(pin)) throw new Error('A four-digit sample PIN is required');
+  if (!/^\d{6}$/.test(pin)) throw new Error('A six-digit sample PIN is required');
   const salt = randomBytes(16), pinSalt = randomBytes(16), password = randomBytes(32).toString('hex');
   db.exec('BEGIN IMMEDIATE');
   try {

@@ -1,0 +1,36 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const { randomBytes, randomInt, randomUUID } = require('node:crypto');
+const { openDatabase } = require('../src/desktop/database');
+const { seedSampleIdentities } = require('../src/desktop/sample-accounts');
+const { seedTables } = require('../src/desktop/tables');
+const { seedMenu } = require('../src/desktop/menu');
+const { seedScenarios } = require('../src/desktop/seed-sample-scenarios');
+const { registerSession } = require('../src/desktop/session');
+const { registerAdminSentCorrection } = require('../src/desktop/admin-sent-correction');
+
+test('Combined correction rolls back audit failure and rejects billed orders through the direct boundary', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-correction-failure-'));
+  const db = openDatabase(dir);
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const passwords = Array.from({ length: 4 }, () => randomBytes(24).toString('hex'));
+  seedSampleIdentities(db, passwords, String(randomInt(10000)).padStart(4, '0'), String(randomInt(1000000)).padStart(6, '0'));
+  seedTables(db); seedMenu(db); seedScenarios(db);
+  const handlers = {}, event = {}, ipc = { handle: (name, fn) => { handlers[name] = fn; } };
+  const session = registerSession(ipc, e => e === event, db);
+  registerAdminSentCorrection(ipc, e => e === event, db, session);
+  assert.equal(handlers['arra:sign-in'](event, { username: 'sample-combined', password: passwords[3] }).ok, true);
+  const call = req => handlers['arra:admin-sent-correction'](event, req);
+  const item = call({ action: 'list' }).data.items[0];
+  assert.ok(item);
+  const request = { action: 'correct', orderId: item.orderId, itemId: item.itemId, quantity: 1, reason: 'sample', requestId: randomUUID() };
+  db.exec("CREATE TRIGGER reject_correction_audit BEFORE INSERT ON application_audit WHEN NEW.action='correct_sent' BEGIN SELECT RAISE(ABORT,'injected'); END");
+  assert.equal(call(request).ok, false);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM sent_item_corrections WHERE request_id=?').get(request.requestId).n, 0);
+  db.exec('DROP TRIGGER reject_correction_audit');
+  db.prepare('INSERT INTO bills(order_id,actor_id,generated_at,total,fingerprint) VALUES(?,?,?,?,?)').run(item.orderId, session.currentUserId(), Date.now(), 0, 'sample');
+  assert.equal(call({ action: 'list' }).data.items.some(row => row.orderId === item.orderId), false);
+  assert.equal(call(request).ok, false);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM sent_item_corrections WHERE request_id=?').get(request.requestId).n, 0);
+});

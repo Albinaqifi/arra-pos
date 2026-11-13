@@ -42,7 +42,7 @@ test('manual close is authorized, atomic, persistent and retains outstanding iss
 test('migration assigns existing payments and new payments to the current manual period', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-day-migrate-')); let db=openDatabase(dir);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'sample',x'00',x'00');
+  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'sample',x'00',x'00');
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,2,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'a'),(2,2,1,2,20,'b');
@@ -55,18 +55,21 @@ test('migration assigns existing payments and new payments to the current manual
   assert.throws(()=>db.exec('UPDATE payment_business_days SET business_day_id=2 WHERE payment_id=1'));
 });
 test('provisioned owners can access close while waiter and revoked combined grant cannot', t => {
-  const { createSampleAccounts } = require('../src/desktop/sample-accounts');
+  const { seedSampleIdentities } = require('../src/desktop/sample-accounts');
   const { createSession } = require('../src/desktop/session');
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-day-roles-')); const db=openDatabase(dir);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  const passwords=['sample-1','sample-2','sample-3','sample-4']; createSampleAccounts(db,passwords);
+  const passwords=Array.from({length:4},()=>require('node:crypto').randomBytes(24).toString('hex'));
+  const waiterPin=String(require('node:crypto').randomInt(10000)).padStart(4,'0');
+  const transferPin=String(require('node:crypto').randomInt(1000000)).padStart(6,'0');
+  seedSampleIdentities(db,passwords,waiterPin,transferPin);
   const session=createSession(db); let handler;
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session);
   const call=req=>handler({},req);
   for (const [index,name] of ['sample-waiter','sample-owner-a','sample-owner-b','sample-combined'].entries()) {
-    assert.equal(session.signIn({username:name,password:passwords[index]}).ok,true);
+    assert.equal(session.signIn({username:index===0?'sample-restaurant':name,password:passwords[index]}).ok,true);
     const id=db.prepare('SELECT id FROM local_users WHERE username=?').get(name).id;
-    assert.equal(session.selectWaiter({id,pin:''}).ok,true);
+    if(index===0) assert.equal(session.selectWaiter({id,pin:waiterPin}).ok,true);
     const list=call({action:'list'});
     if(index===0) assert.equal(list.ok,false);
     else if(index<3) assert.equal(list.ok,true);
@@ -86,7 +89,7 @@ test('controlled sample upgrade preserves v22 history and grants only the authen
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-day-v22-')); let db=openDatabase(dir); let upgraded;
   t.after(()=>{if(db)db.close(); fs.rmSync(dir,{recursive:true,force:true}); if(upgraded)fs.rmSync(upgraded,{recursive:true,force:true});});
   const passwords=['sample-1','sample-2','sample-3','sample-4']; createSampleAccounts(db,passwords);
-  db.exec(`INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'saved');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
     DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
@@ -115,12 +118,12 @@ test('sample close-grant upgrade accepts a normally migrated v23 copy and reject
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-day-v23-')); let db=openDatabase(dir), upgraded;
   t.after(()=>{if(db)db.close(); fs.rmSync(dir,{recursive:true,force:true}); if(upgraded)fs.rmSync(upgraded,{recursive:true,force:true});});
   const passwords=['sample-1','sample-2','sample-3','sample-4']; createSampleAccounts(db,passwords);
-  db.exec(`INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'saved');
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
     DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
     DELETE FROM user_permissions WHERE permission='business_days.close'; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=22;`);
-  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,30);
+  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,31);
   const assigned=db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=1').get().business_day_id;
   db.close(); db=null; fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');
   upgraded=await upgradeSampleBusinessDays(path.join(dir,'arra.sqlite'),'sample-combined',passwords[3]);

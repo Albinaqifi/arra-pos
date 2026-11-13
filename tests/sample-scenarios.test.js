@@ -18,7 +18,7 @@ test('sample scenarios preserve financial rules and refuse a repeat', t => {
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   createSampleAccounts(db, Array.from({ length: 4 }, () => randomBytes(20).toString('hex')));
-  createSampleTransferManager(db, String(randomInt(10000)).padStart(4, '0'));
+  createSampleTransferManager(db, String(randomInt(1000000)).padStart(6, '0'));
   seedTables(db); seedMenu(db); seedScenarios(db);
   assert.deepEqual(db.prepare('SELECT method, account FROM payments ORDER BY id').all().map(x => [x.method, x.account]), [['cash', 'A'], ['cash', 'B'], ['card', 'A'], ['cash', 'B']]);
   assert.equal(db.prepare('SELECT count(*) AS n FROM payment_account_corrections').get().n, 1);
@@ -30,7 +30,7 @@ test('sample scenarios preserve financial rules and refuse a repeat', t => {
 });
 
 test('fresh setup creates a marked database with current-day scoped payments', t => {
-  const dir = createSampleScenarios(Array.from({ length: 4 }, () => randomBytes(20).toString('hex')), String(randomInt(10000)).padStart(4, '0'));
+  const dir = createSampleScenarios(Array.from({ length: 4 }, () => randomBytes(20).toString('hex')), String(randomInt(10000)).padStart(4, '0'), String(randomInt(1000000)).padStart(6, '0'));
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   assert.ok(fs.existsSync(path.join(dir, 'SAMPLE-DATA-ONLY')));

@@ -10,6 +10,7 @@ const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
 const { registerOperationalReports } = require('./operational-reports');
 const { registerTransferCorrection } = require('./transfer-correction');
+const { registerAdminSentCorrection } = require('./admin-sent-correction');
 const { registerBusinessDays } = require('./business-days');
 const { registerFinancialVisibility } = require('./financial-visibility');
 const { registerMoveOrder } = require('./move-order');
@@ -69,6 +70,7 @@ app.whenReady().then(() => {
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
+  registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session);
   const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);

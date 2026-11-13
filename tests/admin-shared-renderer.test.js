@@ -26,10 +26,10 @@ function find(node, predicate) {
 }
 
 test('configuration screens retain loading, denied and back controls', async () => {
-  for (const [component, method, title, loading, guidance] of [
-    ['TableConfig', 'tableConfig', 'Areas and tables', 'Loading areas and tables…', ' Check your access or sign in and select your own name.'],
-    ['MenuConfig', 'menuConfig', 'Menu management', 'Loading menu…', ' Check your access or sign in and select your own name.'],
-    ['EmployeeConfig', 'employeeConfig', 'Employees and permissions', 'Loading employees…', ' Sign in with your own administrator account and select your own name.'],
+  for (const [component, method, title, loading, guidance, error] of [
+    ['TableConfig', 'tableConfig', 'Areas and tables', 'Loading areas and tables…', ' Check your access or sign in and select your own name.', 'Areas and tables unavailable.'],
+    ['MenuConfig', 'menuConfig', 'Menu management', 'Loading menu…', ' Check your access or sign in and select your own name.', 'Menu unavailable.'],
+    ['EmployeeConfig', 'employeeConfig', 'Employees and permissions', 'Loading employees…', ' Sign in with your own administrator account and select your own name.', 'Employees unavailable.'],
   ]) {
     let back = 0;
     const components = setup({ [method]: async () => ({ ok: false, error: 'Denied.' }) });
@@ -41,7 +41,7 @@ test('configuration screens retain loading, denied and back controls', async () 
     assert.equal(back, 1);
     await page.load();
     tree = page.render();
-    assert.deepEqual(Array.from(find(tree, n => n.props.role === 'alert').children), ['Denied.', guidance]);
+    assert.deepEqual(Array.from(find(tree, n => n.props.role === 'alert').children), [error, guidance]);
     assert.equal(find(tree, n => n.type === 'input'), null);
   }
 });

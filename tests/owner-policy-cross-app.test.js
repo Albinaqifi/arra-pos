@@ -30,7 +30,7 @@ test('owner policy holds across administration, reports, printing and restart', 
   function login(id) {
     session.signOut();
     assert.equal(session.signIn({username:['sample-waiter','sample-owner-a','sample-owner-b','sample-combined'][id-1],password:passwords[id-1]}).ok,true);
-    assert.equal(session.selectWaiter({id,pin:''}).ok,true);
+    assert.equal(session.currentUserId(),id);
   }
   const call = (channel, req) => handlers['arra:'+channel]({}, req);
   const fin = req => call('financial-visibility', req);

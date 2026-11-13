@@ -37,7 +37,7 @@ test('version 19 upgrade preserves an open order and corrections for billing', t
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'); INSERT INTO order_items (id,order_id,product_id,name,unit_price,quantity,status) VALUES (1,1,'qebapa','Old snapshot',100,3,'sent'); INSERT INTO order_item_modifiers VALUES (1,'Size','Large',10); INSERT INTO sent_item_corrections (request_id,item_id,order_id,actor_id,quantity,reason,occurred_at) VALUES ('old-correction',1,1,1,1,'Sample',1);");
   // Migration 20 only adds these tables and triggers; removing them recreates
   // the populated version 19 schema before reopening through the migrator.
-  db.exec(`DROP TRIGGER billed_item_insert; DROP TRIGGER billed_item_update; DROP TRIGGER billed_item_delete;
+  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; DROP TRIGGER billed_item_insert; DROP TRIGGER billed_item_update; DROP TRIGGER billed_item_delete;
     DROP TRIGGER billed_correction; DROP TRIGGER billed_order_move; DROP TRIGGER bills_no_update;
     DROP TRIGGER bills_no_delete; DROP TRIGGER bill_lines_no_update; DROP TRIGGER bill_lines_no_delete;
     DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payments; DROP TABLE bill_lines; DROP TABLE bills; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE IF EXISTS financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version = 19;`);
@@ -46,7 +46,7 @@ test('version 19 upgrade preserves an open order and corrections for billing', t
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 31);
     assert.equal(db.prepare('SELECT name FROM order_items WHERE id=1').get().name, 'Old snapshot');
     assert.equal(db.prepare('SELECT quantity FROM sent_item_corrections WHERE request_id=?').get('old-correction').quantity, 1);
     let handle;

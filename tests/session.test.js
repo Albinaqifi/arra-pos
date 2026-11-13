@@ -27,8 +27,8 @@ test('sign-in validates credentials, deactivation and session clearing', t => {
   const session = createSession(db);
   assert.equal(session.currentUserId(), null);
   assert.equal(session.signIn({ username: 'sample', password: 'example password' }).ok, true);
-  assert.equal(session.currentUserId(), null);
-  assert.equal(session.selectWaiter({ id: 1, pin: '' }).ok, true);
+  assert.equal(session.currentUserId(), 1);
+  assert.equal(session.selectWaiter({ id: 1, pin: '' }).ok, false);
   assert.equal(session.currentUserId(), 1);
   assert.deepEqual(session.signOut(), { ok: true }); assert.equal(session.currentUserId(), null);
   for (const request of [{ username: 'sample', password: 'incorrect' }, { username: 'unknown', password: 'example password' }, {}, null, { username: 'sample', password: 'example password', extra: true }]) {
@@ -47,7 +47,7 @@ test('bridge rejects untrusted senders and malformed requests', t => {
   assert.equal(handlers['arra:sign-in']({}, { username: 'sample', password: 'example password' }).ok, false);
   assert.equal(session.currentUserId(), null);
   assert.equal(handlers['arra:sign-in'](trusted, { username: 'sample', password: 'example password' }).ok, true);
-  assert.equal(handlers['arra:select-waiter'](trusted, { id: 1, pin: '' }).ok, true);
+  assert.equal(handlers['arra:select-waiter'](trusted, { id: 1, pin: '' }).ok, false);
   assert.equal(handlers['arra:sign-out']({}, {}).ok, false);
   assert.equal(session.currentUserId(), 1);
   assert.equal(handlers['arra:sign-out'](trusted, { extra: true }).ok, false);

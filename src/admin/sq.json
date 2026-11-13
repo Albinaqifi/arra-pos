@@ -5,13 +5,13 @@
   "language.saved": "Gjuha u ruajt: {language}.",
   "language.failed": "Gjuha nuk u ruajt. Kontrolloni lejen tuaj dhe provoni përsëri.",
   "language.loading": "Duke ruajtur…",
-  "waiter.Restaurant sign in": "Hyrja në restorant",
-  "waiter.Do this once at the start of the day. Waiters pick their own name on the next screen.": "Bëjeni këtë një herë në fillim të ditës. Kamerierët zgjedhin emrin e tyre në ekranin tjetër.",
+  "waiter.Restaurant sign in": "Hyrja",
+  "waiter.Do this once at the start of the day. Waiters pick their own name on the next screen.": "Hyni si restorant për të zgjedhur stafin, ose përdorni llogarinë e pronarit për administrim.",
   "waiter.Sign in": "Hyr",
   "waiter.Sign out restaurant": "Dil nga restoranti",
   "waiter.Who is using the PC?": "Kush po e përdor kompjuterin?",
   "waiter.Choose your name.": "Zgjidhni emrin tuaj.",
-  "waiter.No PIN": "Pa PIN",
+  "waiter.No PIN": "PIN-i duhet të vendoset nga llogaria e kombinuar",
   "waiter.Enter your 4-digit PIN": "Shkruani PIN-in tuaj me 4 shifra",
   "waiter.Not you? Pick another name": "Nuk jeni ju? Zgjidhni një emër tjetër",
   "waiter.Switch waiter": "Ndërro kamerierin",
@@ -299,5 +299,6 @@
   "waiter.Unknown destination": "Destinacion i panjohur",
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Duke ngarkuar faturën…",
-  "waiter.Working…": "Duke punuar…"
+  "waiter.Working…": "Duke punuar…",
+  "waiter.Enter your 6-digit PIN": "Shkruani PIN-in tuaj me 6 shifra"
 }

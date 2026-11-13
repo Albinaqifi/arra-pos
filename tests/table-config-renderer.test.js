@@ -3,14 +3,15 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-test('manage tables navigation opens configuration and returns to refreshed grid', async () => {
-  let loads = 0, configLoads = 0;
+test('manage tables navigation opens configuration and signs out from administration', async () => {
+  let loads = 0, configLoads = 0, signOuts = 0;
   const api = {
     getMenu: async () => ({ ok: true, data: { categories: [], products: [] } }),
+    signOut: async () => { signOuts++; return { ok: true }; },
     getTables: async () => { loads++; return { ok: true, data: [] }; },
     tableConfig: async request => { assert.equal(request.action, 'list'); configLoads++; return { ok: true, data: { areas: [], tables: [] } }; }
   };
-  class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
+  class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
@@ -35,6 +36,5 @@ test('manage tables navigation opens configuration and returns to refreshed grid
   configElement.props.onBack(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.state.screen, 'admin');
   shell = app.render(); shell.props.back(); await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.state.screen, 'tables'); assert.equal(loads, 1);
-  assert.ok(find(app.render(), node => node.type === 'button' && node.children.includes('Administration →')));
+  assert.equal(app.state.screen, 'login'); assert.equal(signOuts, 1);
 });

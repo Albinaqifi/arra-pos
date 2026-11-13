@@ -18,18 +18,18 @@ function setup() {
   Object.assign(page.state, data, { access: true, creating: true, selected: 1 });
   return { page, calls };
 }
-function formWith(tree, name) { return find(tree, n => n.type === 'form' && find(n, x => x.type === 'input' && x.props.name === name)); }
+function formWith(tree, section) { return find(tree, n => n.type === 'form' && n.props['data-section'] === section); }
 function submit(form, elements) { form.props.onSubmit({ preventDefault() {}, currentTarget: { elements, reset() { for (const value of Object.values(elements)) if ('value' in value) value.value = ''; } } }); }
 
 test('employee creation validates names and UTF-8 passwords without retaining credentials', () => {
   const { page, calls } = setup();
   const elements = { username: { value: ' Sample ' }, password: { value: 'secret' }, pin: { value: '1234' } };
-  submit(formWith(page.render(), 'username'), elements);
+  submit(formWith(page.render(), 'create'), elements);
   assert.match(page.state.error, /leading or trailing spaces/);
   assert.equal(elements.username.value, ' Sample ');
   assert.equal(elements.password.value, ''); assert.equal(elements.pin.value, ''); assert.equal(calls.length, 0);
   elements.username.value = 'Sample'; elements.password.value = 'é'.repeat(513); elements.pin.value = '1234';
-  submit(formWith(page.render(), 'username'), elements);
+  submit(formWith(page.render(), 'create'), elements);
   assert.match(page.state.error, /1024 UTF-8 bytes/);
   assert.equal(elements.username.value, 'Sample'); assert.equal(elements.password.value, ''); assert.equal(elements.pin.value, ''); assert.equal(calls.length, 0);
 });
@@ -38,7 +38,7 @@ test('credential reset rejects oversized passwords and clears secret fields', ()
   const { page, calls } = setup();
   page.state.creating = false;
   const elements = { password: { value: 'é'.repeat(513) }, pin: { value: '1234' }, removePin: { checked: false } };
-  submit(formWith(page.render(), 'removePin'), elements);
+  submit(formWith(page.render(), 'credential'), elements);
   assert.match(page.state.error, /1024 UTF-8 bytes/);
   assert.equal(elements.password.value, ''); assert.equal(elements.pin.value, ''); assert.equal(calls.length, 0);
 });

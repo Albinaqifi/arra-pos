@@ -42,3 +42,15 @@ test('Albanian failed-print banner offers a translated backup action',()=>{
   const rendered=JSON.stringify(app.render());
   assert.ok(rendered.includes('Printo në printerin rezervë')); assert.ok(!rendered.includes('Print on backup printer'));
 });
+
+test('staff PIN prompt uses the selected role and language', () => {
+  const {app}=setup({});
+  for (const [language, isTransfer, expected, length] of [
+    ['en', false, 'Enter your 4-digit PIN', 4], ['en', true, 'Enter your 6-digit PIN', 6],
+    ['sq', false, 'Shkruani PIN-in tuaj me 4 shifra', 4], ['sq', true, 'Shkruani PIN-in tuaj me 6 shifra', 6]
+  ]) {
+    Object.assign(app.state,{language,screen:'pin',pin:'',pinFor:{name:'Sample',isTransfer}});
+    assert.ok(JSON.stringify(app.render()).includes(expected));
+    assert.equal(app.renderVals().pinDots.length, length);
+  }
+});

@@ -5,8 +5,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { openDatabase } = require('../src/desktop/database');
 const { createSampleAccounts } = require('../src/desktop/sample-accounts');
-const { createSession } = require('../src/desktop/session');
+const { createSession, hashPassword } = require('../src/desktop/session');
 const { registerEmployeeConfig } = require('../src/desktop/employee-config');
+const { randomBytes, randomInt } = require('node:crypto');
+function entryFixture(db, waiter = 1) {
+  const password = randomBytes(24).toString('hex'), pin = String(randomInt(10000)).padStart(4, '0');
+  const salt = randomBytes(16), pinSalt = randomBytes(16);
+  const id = db.prepare('INSERT INTO local_users(username,salt,password_hash) VALUES(?,?,?)').run('sample restaurant',salt,hashPassword(password,salt)).lastInsertRowid;
+  db.prepare("INSERT INTO financial_scopes VALUES(?,'waiter')").run(id);
+  db.prepare('INSERT INTO restaurant_accounts VALUES(?)').run(id);
+  db.prepare('UPDATE local_users SET pin_salt=?,pin_hash=? WHERE id=?').run(pinSalt,hashPassword(pin,pinSalt),waiter);
+  return { password, pin };
+}
 
 test('credential and grant control remains Combined-only for owners and pre-existing waiter administrators', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-admin-boundary-'));
@@ -14,6 +24,7 @@ test('credential and grant control remains Combined-only for owners and pre-exis
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   const passwords = ['sample one', 'sample two', 'sample three', 'sample four'];
   createSampleAccounts(db, passwords);
+  const entry = entryFixture(db);
   // Model a pre-existing waiter with employee-administration grants.
   const grant = db.prepare('INSERT OR IGNORE INTO user_permissions(user_id, permission) VALUES (?, ?)');
   for (const p of ['employees.view', 'employees.change']) grant.run(1, p);
@@ -23,8 +34,8 @@ test('credential and grant control remains Combined-only for owners and pre-exis
   const names = ['sample-waiter', 'sample-owner-a', 'sample-owner-b', 'sample-combined'];
   function login(id) {
     session.signOut();
-    assert.equal(session.signIn({ username: names[id - 1], password: passwords[id - 1] }).ok, true);
-    assert.equal(session.selectWaiter({ id, pin: '' }).ok, true);
+    assert.equal(session.signIn({ username: id === 1 ? 'sample restaurant' : names[id - 1], password: id === 1 ? entry.password : passwords[id - 1] }).ok, true);
+    if (id === 1) assert.equal(session.selectWaiter({ id, pin: entry.pin }).ok, true);
   }
   for (const actor of [1, 2, 3]) {
     login(actor);
@@ -44,16 +55,16 @@ test('credential and grant control remains Combined-only for owners and pre-exis
   assert.equal(invoke({ action: 'account', id: pending.id, username: 'sample pending', active: true }).ok, false);
   assert.equal(session.signIn({ username: 'sample pending', password: 'sample new' }).ok, false);
   login(4);
-  assert.equal(invoke({ action: 'credential', id: pending.id, password: 'sample new', pin: null }).ok, true);
+  assert.equal(invoke({ action: 'credential', id: pending.id, password: 'sample new', pin: entry.pin }).ok, true);
   assert.equal(invoke({ action: 'permissions', id: pending.id, permissions: ['orders.view'] }).ok, true);
   assert.equal(invoke({ action: 'account', id: pending.id, username: 'sample pending', active: true }).ok, true);
   assert.equal(db.prepare("SELECT count(*) AS n FROM application_audit WHERE actor_id=2 AND action='create' AND entity_type='employee' AND entity_id=?").get(String(pending.id)).n, 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM employee_credential_audit WHERE actor_id=4 AND target_id=?').get(pending.id).n, 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM employee_permission_audit WHERE actor_id=4 AND target_id=?').get(pending.id).n, 1);
-  assert.equal(session.signIn({ username: 'sample pending', password: 'sample new' }).ok, true);
-  assert.equal(session.selectWaiter({ id: pending.id, pin: '' }).ok, true);
+  assert.equal(session.signIn({ username: 'sample restaurant', password: entry.password }).ok, true);
+  assert.equal(session.selectWaiter({ id: pending.id, pin: entry.pin }).ok, true);
   // A different password-authenticated identity cannot use a selected admin's rights.
-  assert.equal(session.selectWaiter({ id: 4, pin: '' }).ok, true);
+  assert.equal(session.selectWaiter({ id: 4, pin: '' }).ok, false);
   assert.equal(invoke({ action: 'credential', id: 2, password: 'sample replacement', pin: null }).ok, false);
   assert.equal(handlers['arra:employee-config']({}, { action: 'list' }).ok, false);
 });
@@ -66,17 +77,19 @@ test('waiter-only version 27 upgrade preserves identity without silently grantin
   bootstrap(db, 'sample legacy', 'sample legacy password');
   db.prepare("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1").run();
   db.prepare("DELETE FROM user_permissions WHERE user_id=1 AND permission='business_days.close'").run();
-  db.exec('DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27');
+  db.exec('DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 31);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope, 'waiter');
   assert.equal(db.prepare("SELECT count(*) AS n FROM financial_scopes WHERE scope='combined'").get().n, 0);
   assert.throws(() => bootstrap(db, 'sample second', 'sample second password'));
   const session = createSession(db), handlers = {}, event = {};
   registerEmployeeConfig({ handle: (name, fn) => { handlers[name] = fn; } }, e => e === event, db, session);
-  assert.equal(session.signIn({ username: 'sample legacy', password: 'sample legacy password' }).ok, true);
-  assert.equal(session.selectWaiter({ id: 1, pin: '' }).ok, true);
+  assert.equal(session.signIn({ username: 'sample legacy', password: 'sample legacy password' }).ok, false);
+  const entry = entryFixture(db);
+  assert.equal(session.signIn({ username: 'sample restaurant', password: entry.password }).ok, true);
+  assert.equal(session.selectWaiter({ id: 1, pin: entry.pin }).ok, true);
   assert.equal(handlers['arra:employee-config'](event, { action: 'create', username: 'sample new', password: 'sample new', pin: '' }).ok, false);
   assert.equal(handlers['arra:employee-config'](event, { action: 'financialAccess', id: 1, scope: 'combined', close: true }).ok, false);
 });
@@ -91,7 +104,6 @@ test('financial administration rolls back on audit failure and retains an active
   const handlers = {}, event = {};
   registerEmployeeConfig({ handle: (name, fn) => { handlers[name] = fn; } }, e => e === event, db, session);
   assert.equal(session.signIn({ username: 'sample-combined', password: 'sample four' }).ok, true);
-  assert.equal(session.selectWaiter({ id: 4, pin: '' }).ok, true);
   const call = req => handlers['arra:employee-config'](event, req);
   const change = { action: 'financialAccess', id: 1, scope: 'combined', close: true };
   db.exec("CREATE TRIGGER fail_financial_audit BEFORE INSERT ON application_audit BEGIN SELECT RAISE(ABORT, 'sample failure'); END;");

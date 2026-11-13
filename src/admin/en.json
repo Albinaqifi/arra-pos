@@ -5,13 +5,13 @@
   "language.saved": "Language saved: {language}.",
   "language.failed": "Language could not be saved. Check your permission and try again.",
   "language.loading": "Saving…",
-  "waiter.Restaurant sign in": "Restaurant sign in",
-  "waiter.Do this once at the start of the day. Waiters pick their own name on the next screen.": "Do this once at the start of the day. Waiters pick their own name on the next screen.",
+  "waiter.Restaurant sign in": "Sign in",
+  "waiter.Do this once at the start of the day. Waiters pick their own name on the next screen.": "Sign in as the restaurant to select staff, or use your owner account for administration.",
   "waiter.Sign in": "Sign in",
   "waiter.Sign out restaurant": "Sign out restaurant",
   "waiter.Who is using the PC?": "Who is using the PC?",
   "waiter.Choose your name.": "Choose your name.",
-  "waiter.No PIN": "No PIN",
+  "waiter.No PIN": "PIN needs setup by Combined",
   "waiter.Enter your 4-digit PIN": "Enter your 4-digit PIN",
   "waiter.Not you? Pick another name": "Not you? Pick another name",
   "waiter.Switch waiter": "Switch waiter",
@@ -299,5 +299,6 @@
   "waiter.Unknown destination": "Unknown destination",
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Loading bill…",
-  "waiter.Working…": "Working…"
+  "waiter.Working…": "Working…",
+  "waiter.Enter your 6-digit PIN": "Enter your 6-digit PIN"
 }

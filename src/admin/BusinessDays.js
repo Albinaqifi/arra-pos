@@ -3,7 +3,7 @@ const h=React.createElement;
 const date=value=>new Date(value).toLocaleString();
 function Issues({issues,language}) {
   const t=(key,values)=>financeText(language,key,values);
-  return h('div',{className:'finance-issues'},h('div',null,h('strong',null,t("Open orders (")+issues.orders.length+')'),h('p',null,issues.orders.map(o=>t('#{id} · table {table}',{id:o.id,table:o.tableId})).join(', ') || t("None"))),h('div',null,h('strong',null,t("Unsuccessful or uncertain print jobs (")+issues.printJobs.length+')'),h('p',null,issues.printJobs.map(j=>t('#{id} · {status}',{id:j.id,status:t(j.result || "Unavailable")})).join(', ') || t("None"))));
+  return h('div',{className:'finance-issues'},h('div',null,h('strong',null,t("Open orders (")+issues.orders.length+')'),h('p',null,(issues.orders.length && issues.orders[0].id == null ? t('Details available to Combined.') : issues.orders.map(o=>t('#{id} · table {table}',{id:o.id,table:o.tableId})).join(', ') || t("None")))),h('div',null,h('strong',null,t("Unsuccessful or uncertain print jobs (")+issues.printJobs.length+')'),h('p',null,issues.printJobs.map(j=>j.id == null ? t(j.result || 'Unavailable') : t('#{id} · {status}',{id:j.id,status:t(j.result || "Unavailable")})).join(', ') || t("None"))));
 }
 export class BusinessDays extends React.Component {
   constructor(props) { super(props); this.state={data:null,turnover:null,error:'',loading:true,busy:false,confirmId:null,preview:null,success:''}; this.sequence=0; this.retryTokens={}; }
