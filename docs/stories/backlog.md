@@ -415,11 +415,12 @@ These are three separate, unstarted stories. Improve the actual workflows using 
 
 **Acceptance:**
 
+- Deliver a noticeable, cohesive redesign of the menu management screen, not just additional controls on the existing layout. Rework the visual hierarchy and interaction flow so finding a product, understanding its category and choices, and editing it take less scanning and preserve context. Use the improved areas-and-tables experience as a quality reference while designing for the menu's own complexity.
 - Provide a scannable category and subcategory structure with a way to find products by name and narrow or expand the relevant details. Show product price, preparation destination and active state, and make the relationship between product, choice group and options clear. Inactive or parent-hidden items must remain identifiable and manageable.
 - Offer contextual create and edit actions for categories, products, groups and options, retaining the selected context after save or cancel. Clearly explain price and adjustment, display order, required choices and the effect of deactivation where those decisions are made. Provide useful empty states and actionable validation and save feedback; protect unsaved input when changing context.
 - Preserve the existing menu rules, kitchen/bar routing, historical order snapshots, trusted permissions, offline behavior and uncertain-save reconciliation. Do not retry an unconfirmed creation automatically. Support keyboard use, visible focus, supported desktop sizes and English and Albanian.
 
-**Checks/review:** Use a representative sample menu with categories, subcategories, products and choices to exercise finding, creating, editing, deactivating and reactivating items, invalid input and unconfirmed save recovery. Verify routing, existing snapshots, denied direct requests, restart, both languages and keyboard/resizing behavior.
+**Checks/review:** Inspect the rendered redesign and assess whether the layout and workflow are materially clearer than the previous screen, including a representative large menu and empty, selected and error states. Use sample categories, subcategories, products and choices to exercise finding, creating, editing, deactivating and reactivating items, invalid input and unconfirmed save recovery. Verify routing, existing snapshots, denied direct requests, restart, both languages and keyboard/resizing behavior. Record actual visual and desktop evidence and any limitations.
 
 ### S-070 — Make employee and access management understandable
 
@@ -427,11 +428,12 @@ These are three separate, unstarted stories. Improve the actual workflows using 
 
 **Acceptance:**
 
+- Deliver a noticeable, cohesive redesign of employee and access management, not just additional controls on the existing layout. Rework the visual hierarchy and interaction flow so administrators can find a person, understand their status and available actions, and make changes with clear context and consequences. Use the improved areas-and-tables experience as a quality reference while designing for the sensitivity and complexity of access management.
 - Present a scannable staff list with name, account type and active or pending status, and a clear selected-person view. Organize account, credentials, operational permissions, financial access and relevant history so the available actions and their consequences are easy to find without overwhelming the page. Handle empty lists and pending provisioning clearly.
 - Guide creation and editing according to the signed-in administrator's existing authority. Explain when Combined must complete provisioning, which changes end a session, and the consequences of deactivation or changing access. Provide clear confirmations for consequential actions, field-level validation and save, failure and unconfirmed-save feedback. Avoid accidental loss of unsaved edits when changing employee or section; never display saved passwords or PINs.
 - Keep permissions and financial scope understandable without implying a user can grant access they do not hold. Preserve all trusted-code restrictions, owner and Combined boundaries, session protections, audit history and recovery behavior. Support keyboard use, visible focus, supported desktop sizes, English and Albanian, and offline operation.
 
-**Checks/review:** Exercise Combined, Owner A and Owner B with sample identities: create or provision staff, edit accounts, reset credentials, change permitted grants and inspect history. Verify pending, denied, invalid, deactivation, session-ending and uncertain-save cases, including unauthorized direct requests and self-escalation attempts. Check both languages and keyboard/resizing behavior; do not record credentials in evidence.
+**Checks/review:** Inspect the rendered redesign and assess whether the layout and workflow are materially clearer than the previous screen, including a representative staff list and empty, selected, denied and error states. Exercise Combined, Owner A and Owner B with sample identities: create or provision staff, edit accounts, reset credentials, change permitted grants and inspect history. Verify pending, denied, invalid, deactivation, session-ending and uncertain-save cases, including unauthorized direct requests and self-escalation attempts. Check both languages and keyboard/resizing behavior; record actual visual and desktop evidence and any limitations. Do not record credentials in evidence.
 
 ## Suggested next session
 

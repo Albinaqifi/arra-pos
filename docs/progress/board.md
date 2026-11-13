@@ -72,4 +72,4 @@ The S-052 local recovery exercise worked and no longer blocks local verification
 
 | S-067 | In progress | Code review and focused tests passed; rendered visual review and desktop verification outstanding. |
 
-| S-068 | In progress | Code review and focused checks passed; rendered desktop, keyboard, resizing and offline verification outstanding. |
+| S-068 | In progress | Code review and focused checks passed; owner reports desktop redesign works. Detailed keyboard, resizing and offline evidence outstanding; PR #92 open. |
