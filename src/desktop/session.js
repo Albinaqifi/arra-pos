@@ -5,6 +5,15 @@ const failure = () => ({ ok: false, error: 'Sign in failed' });
 const validUsername = value => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 128;
 const validPassword = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value, 'utf8') <= 1024;
 function hashPassword(password, salt) { return scryptSync(password, salt, 32, OPTIONS); }
+function verifyLocalAccount(db, username, password) {
+  if (!validUsername(username) || !validPassword(password)) return null;
+  try {
+    const row = db.prepare('SELECT id, salt, password_hash, active FROM local_users WHERE username=?').get(username);
+    const candidate = hashPassword(password, row ? row.salt : Buffer.alloc(16));
+    const expected = row ? Buffer.from(row.password_hash) : Buffer.alloc(32);
+    return row && row.active === 1 && expected.length === candidate.length && timingSafeEqual(candidate, expected) ? row.id : null;
+  } catch (_) { return null; }
+}
 function bootstrap(db, username, password) {
   if (!validUsername(username) || !validPassword(password)) throw new Error('Invalid account input');
   const salt = randomBytes(16);
@@ -32,22 +41,24 @@ function createSession(db) {
           Reflect.ownKeys(request).length !== 2 || !Object.hasOwn(request, 'username') || !Object.hasOwn(request, 'password') ||
           !validUsername(request.username) || !validPassword(request.password)) return failure();
       try {
-        const row = db.prepare('SELECT id, salt, password_hash, active FROM local_users WHERE username = ?').get(request.username);
+        const row = db.prepare('SELECT u.id, u.username, u.salt, u.password_hash, u.active, f.scope, EXISTS(SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AS restaurant FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id WHERE u.username = ?').get(request.username);
         // Perform the same work for an unknown username without storing a credential.
         const salt = row ? row.salt : Buffer.alloc(16);
         const candidate = hashPassword(request.password, salt);
         const expected = row ? Buffer.from(row.password_hash) : Buffer.alloc(32);
         if (expected.length !== candidate.length || !timingSafeEqual(candidate, expected) || !row || row.active !== 1) return failure();
+        if (db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(row.id) || !((row.restaurant === 1 && row.scope === 'waiter') || (row.restaurant === 0 && ['A', 'B', 'combined'].includes(row.scope)))) return failure();
         restaurantId = row.id;
-        return { ok: true };
+        if (!row.restaurant) { activeId = row.id; return { ok: true, admin: true, name: row.username }; }
+        return { ok: true, admin: false };
       } catch (_) { return failure(); }
     },
     signOut() { activeId = null; restaurantId = null; return { ok: true }; },
     clearWaiter() { activeId = null; return { ok: true }; },
     listWaiters() {
-      if (!restaurantActive()) return { ok: false, error: 'Access denied' };
+      if (!restaurantActive() || !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId)) return { ok: false, error: 'Access denied' };
       try {
-        return { ok: true, data: db.prepare("SELECT u.id, CASE WHEN tm.user_id IS NULL THEN u.username ELSE 'Duda' END AS name, u.pin_hash IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id WHERE u.active = 1 AND NOT EXISTS (SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AND (tm.user_id IS NULL OR (u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL)) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
+        return { ok: true, data: db.prepare("SELECT u.id, u.username AS name, u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL AS hasPin, tm.user_id IS NOT NULL AS isTransfer FROM local_users u LEFT JOIN transfer_managers tm ON tm.user_id=u.id LEFT JOIN financial_scopes f ON f.user_id=u.id WHERE u.active = 1 AND NOT EXISTS (SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AND NOT EXISTS (SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AND (f.scope='waiter' OR tm.user_id IS NOT NULL) ORDER BY isTransfer, u.username").all().map(row => ({ id: row.id, name: row.name, hasPin: row.hasPin === 1, isTransfer: row.isTransfer === 1 })) };
       } catch (_) { return { ok: false, error: 'Waiters unavailable' }; }
     },
     selectWaiter(request) {
@@ -57,16 +68,16 @@ function createSession(db) {
           !Number.isSafeInteger(request.id) || request.id <= 0 || typeof request.pin !== 'string' ||
           !Object.hasOwn(request, 'id') || !Object.hasOwn(request, 'pin')) return fail();
       try {
-        const row = db.prepare('SELECT active, pin_salt, pin_hash FROM local_users WHERE id = ?').get(request.id);
+        if (!db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId)) return fail();
+        const row = db.prepare('SELECT u.active, u.pin_salt, u.pin_hash, f.scope FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id WHERE u.id = ?').get(request.id);
         if (!row || row.active !== 1 || db.prepare('SELECT 1 FROM pending_staff WHERE user_id=?').get(request.id)) return fail();
         const selectedTransfer = Boolean(db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(request.id));
-        if (db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(restaurantId)) return fail();
-        if (selectedTransfer && (!row.pin_hash || !row.pin_salt)) return fail();
-        if (row.pin_hash !== null || row.pin_salt !== null) {
-          if (!row.pin_hash || !row.pin_salt || !/^\d{4}$/.test(request.pin)) return fail();
+        if ((!selectedTransfer && row.scope !== 'waiter') || db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(request.id)) return fail();
+        {
+          if (!row.pin_hash || !row.pin_salt || !(selectedTransfer ? /^\d{6}$/ : /^\d{4}$/).test(request.pin)) return fail();
           const candidate = hashPassword(request.pin, row.pin_salt), expected = Buffer.from(row.pin_hash);
           if (candidate.length !== expected.length || !timingSafeEqual(candidate, expected)) return fail();
-        } else if (request.pin !== '') return fail();
+        }
         activeId = request.id;
         return { ok: true };
       } catch (_) { return fail(); }
@@ -112,4 +123,4 @@ function registerSession(ipcMain, isAllowedSender, db) {
   });
   return session;
 }
-module.exports = { bootstrap, createSession, registerSession, hashPassword, validUsername, validPassword };
+module.exports = { bootstrap, createSession, registerSession, hashPassword, validUsername, validPassword, verifyLocalAccount };

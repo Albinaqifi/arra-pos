@@ -4,19 +4,20 @@ const ADMIN_AREAS = [
   { id: 'menuConfig', label: 'Menu', description: 'Manage categories, products and choices.' },
   { id: 'employeeConfig', label: 'Employees', description: 'Manage staff accounts and permissions.' },
   { id: 'orderHistory', label: 'Order history', description: 'Review orders and operational activity.' },
+  { id: 'adminSentCorrections', label: 'Correct sent items', description: 'Review unbilled open orders and correct sent items.' },
   { id: 'financialVisibility', label: 'Financial information', description: 'Review available payments and business days.' },
   { id: 'operationalReports', label: 'Operational reports', description: 'Explore product, table and waiter activity.' }
 ];
 
-export function AdminShell({ screen, user, language, navigate, back, switchUser, children }) {
+export function AdminShell({ screen, user, language, navigate, back, switchUser, directOwner, children }) {
   const t = key => shellText(language, key);
   return <div className="admin-shell">
     <header className="admin-header">
       <div className="admin-brand"><span className="admin-brand-mark" aria-hidden={true}>A</span><span>Arra <small>{t("Administration")}</small></span></div>
-      <div className="admin-identity"><span>{t("Using PC:")} <strong>{user || t('Unknown')}</strong></span><button className="admin-button admin-button-light" onClick={switchUser}>{t("Switch user")}</button></div>
+      <div className="admin-identity"><span>{t("Using PC:")} <strong>{user || t('Unknown')}</strong></span><button className="admin-button admin-button-light" onClick={switchUser}>{t(directOwner ? "Sign out" : "Switch user")}</button></div>
     </header>
     <div className="admin-layout">
-      <aside className="admin-sidebar"><button className="admin-return" onClick={back}>{t("← Back to tables")}</button>
+      <aside className="admin-sidebar"><button className="admin-return" onClick={back}>{t(directOwner ? "← Sign out" : "← Back to tables")}</button>
         <nav aria-label={t("Administration")}><p className="admin-nav-label">{t("WORKSPACE")}</p>
           <button className="admin-nav-item" aria-current={screen === 'admin' ? 'page' : undefined} onClick={() => navigate('admin')}>{t("Overview")}</button>
           {ADMIN_AREAS.map(a => <button key={a.id} className="admin-nav-item" aria-current={screen === a.id ? 'page' : undefined} onClick={() => navigate(a.id)}>{t(a.label)}</button>)}

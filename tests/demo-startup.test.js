@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync(require.resolve('../src/desktop-status.js'), 'utf8');
 async function start(mode, bridge) {
-  const status = { textContent: '', role: 'status', setAttribute(k, v) { this[k] = v; } };
+  const status = { textContent: '', role: 'status', dataset: {}, setAttribute(k, v) { this[k] = v; } };
   let mounts = 0;
-  const context = { document: { body: { dataset: { mode } }, getElementById(id) { return id === 'application-status' ? status : {}; } }, window: { arra: bridge }, React: { createElement() { return {}; } }, ReactDOM: { createRoot() { return { render() { mounts++; } }; } }, WaiterDemo: class {} };
+  const messages = { 'status.demo': 'Browser demo — sample data and simulated actions only', 'status.development': 'Development', 'status.unavailable': 'Desktop application unavailable.' };
+  const context = { document: { body: { dataset: { mode } }, getElementById(id) { return id === 'application-status' ? status : {}; } }, window: { arra: bridge, addEventListener() {} }, ArraComponents: { translate: (_, key) => messages[key] }, React: { createElement() { return {}; } }, ReactDOM: { createRoot() { return { render() { mounts++; } }; } }, WaiterDemo: class {} };
   await vm.runInNewContext(source, context);
   return { status, mounts };
 }

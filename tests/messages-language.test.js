@@ -34,11 +34,11 @@ test('configuration and finance text references exist and retain placeholders', 
   const financeSource = fs.readFileSync('src/admin/finance-i18n.js', 'utf8').replace(/export function financeText[\s\S]*/, 'this.dictionary = sq;');
   const financeContext = {}; vm.runInNewContext(financeSource, financeContext);
   const placeholders = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
-  for (const [dictionary, files] of [[config, ['EmployeeConfig','MenuConfig','TableConfig','FinancialDetails','SalesReports']], [financeContext.dictionary, ['BusinessDays','FinancialVisibility']]]) {
+  for (const [dictionary, files] of [[config, ['EmployeeConfig','MenuConfig','TableConfig','FinancialDetails','SalesReports','AdminSentCorrections']], [financeContext.dictionary, ['BusinessDays','FinancialVisibility']]]) {
     for (const [key, value] of Object.entries(dictionary)) assert.deepEqual(placeholders(value), placeholders(key), key);
     for (const file of files) {
       const source = fs.readFileSync(`src/admin/${file}.js`, 'utf8');
-      const calls = /(?:this\.)?t\(\s*(['"])((?:\\.|(?!\1).)*?)\1/g;
+      const calls = /(?<![\w.])(?:this\.)?t\(\s*(['"])((?:\\.|(?!\1).)*?)\1/g;
       for (const match of source.matchAll(calls)) {
         const key = match[2].replace(/\\'/g, "'");
         if (file === 'SalesReports' && ['period','dayId','account','method'].includes(key)) continue; // URLSearchParams.get

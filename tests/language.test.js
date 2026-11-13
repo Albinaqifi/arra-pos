@@ -7,6 +7,7 @@ const { openDatabase } = require('../src/desktop/database');
 const { createSampleAccounts } = require('../src/desktop/sample-accounts');
 const { createSession } = require('../src/desktop/session');
 const { registerLanguage } = require('../src/desktop/language');
+const entryFixture = require('./entry-fixture');
 
 test('language is shared, authorized, validated and persisted across restart', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-language-'));
@@ -14,6 +15,7 @@ test('language is shared, authorized, validated and persisted across restart', t
   t.after(() => { db.close(); fs.rmSync(dir, { recursive:true, force:true }); });
   const passwords = ['sample waiter', 'sample owner a', 'sample owner b', 'sample combined'];
   createSampleAccounts(db, passwords);
+  const entry = entryFixture(db);
   db.prepare('INSERT INTO app_metadata(key,value) VALUES (?,?)').run('sample', 'retained');
   let session, handler; const event = {};
   const register = () => { session = createSession(db); registerLanguage({handle:(_, fn) => handler = fn}, e => e === event, db, session); };
@@ -23,13 +25,12 @@ test('language is shared, authorized, validated and persisted across restart', t
   assert.equal(call({ action:'set', language:'sq' }).ok, false);
   assert.equal(handler({}, { action:'get' }).ok, false);
   db.prepare("DELETE FROM user_permissions WHERE user_id=1 AND permission='employees.change'").run();
-  assert.equal(session.signIn({username:'sample-waiter', password:passwords[0]}).ok, true);
-  assert.equal(session.selectWaiter({id:1,pin:''}).ok, true);
+  assert.equal(session.signIn({username:'sample restaurant', password:entry.password}).ok, true);
+  assert.equal(session.selectWaiter({id:1,pin:entry.pin}).ok, true);
   assert.equal(call({action:'set', language:'sq'}).ok, false);
   session.signOut();
   assert.equal(session.signIn({username:'sample-owner-a', password:passwords[1]}).ok, true);
-  assert.equal(call({action:'set', language:'sq'}).ok, false);
-  assert.equal(session.selectWaiter({id:2,pin:''}).ok, true);
+  assert.equal(session.selectWaiter({id:2,pin:''}).ok, false);
   for (const req of [{action:'set',language:'fr'}, {action:'set',language:'sq',extra:true}, {action:'get',extra:true}]) assert.equal(call(req).ok,false);
   assert.deepEqual(call({action:'set', language:'sq'}), {ok:true,language:'sq'});
   session.signOut(); assert.equal(call({action:'get'}).language,'sq');
@@ -37,7 +38,7 @@ test('language is shared, authorized, validated and persisted across restart', t
   assert.equal(call({action:'get'}).language,'sq');
   assert.equal(db.prepare('SELECT value FROM app_metadata WHERE key=?').get('sample').value,'retained');
   assert.equal(session.signIn({username:'sample-owner-a', password:passwords[1]}).ok,true);
-  assert.equal(session.selectWaiter({id:2,pin:''}).ok,true);
+  assert.equal(session.selectWaiter({id:2,pin:''}).ok,false);
   assert.equal(call({action:'set',language:'en'}).language,'en');
   db.prepare("DELETE FROM user_permissions WHERE user_id=2 AND permission='employees.change'").run();
   assert.equal(call({action:'set',language:'sq'}).ok,false);

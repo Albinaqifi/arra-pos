@@ -92,3 +92,9 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** An authenticated one-time Combined setup may be provided for older waiter-only test databases; unsupported older test databases may be left as they are if recovery is not straightforward.
 - **Why:** The existing databases were used for testing and do not require a comprehensive recovery feature.
 - **Revisit if:** A production provisioning or recovery process is designed.
+
+## D-016 — Legacy account recovery and sent-item corrections
+- **Origin:** Owner direction during S-071, 2026-11-13.
+- **What:** An active waiter administrator may, after password verification, create a Combined account through a documented local recovery procedure for a legacy waiter-only database. Combined alone may inspect unbilled open orders and make reasoned sent-item corrections under the new entry flow.
+- **Why:** Preserve an authorized recovery route and sent-item correction while maintaining the owner and staff access boundaries.
+- **Revisit if:** The owner changes these rules or production recovery requirements are established.

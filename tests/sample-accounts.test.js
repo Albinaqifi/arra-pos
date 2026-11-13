@@ -27,7 +27,7 @@ test('isolated sample setup creates separately authenticated roles, rejects repe
   for (let i = 0; i < 4; i++) {
     const username = ['sample-waiter','sample-owner-a','sample-owner-b','sample-combined'][i];
     assert.equal(session.signIn({username, password: values[(i+1)%4]}).ok, false);
-    assert.equal(session.signIn({username, password: values[i]}).ok, true);
+    assert.equal(session.signIn({username, password: values[i]}).ok, i !== 0);
     session.signOut();
   }
 });
@@ -42,8 +42,9 @@ test('owner cannot turn shared services or employee management into cross-accoun
   const handlers={}; const ipc={handle:(name,fn)=>handlers[name]=fn};
   for (const register of [registerEmployeeConfig,registerTables,registerBills,registerPayments,registerOrderHistory,registerOrderItems]) register(ipc,()=>true,db,session);
   const call=(channel,request)=>handlers['arra:'+channel]({},request);
-  const denied = [ ['tables',{}], ['bill',{action:'review',orderId:1}], ['payment',{billId:1,method:'cash',account:'B'}], ['order-history',{orderId:null}], ['order-history',{orderId:1}], ['order-items',{action:'list',orderId:1}] ];
+  const denied = [ ['tables',{}], ['bill',{action:'review',orderId:1}], ['payment',{billId:1,method:'cash',account:'B'}], ['order-history',{orderId:1}], ['order-items',{action:'list',orderId:1}] ];
   for (const [channel,request] of denied) assert.equal(call(channel,request).ok,false,channel);
+  assert.deepEqual(call('order-history',{orderId:null}).data.orders, []);
   assert.equal(call('employee-config',{action:'create',username:'new',password:'sample-pass-5',pin:''}).ok,false);
   assert.equal(call('employee-config',{action:'credential',id:1,password:'sample-pass-5',pin:null}).ok,false);
   assert.equal(call('employee-config',{action:'credential',id:3,password:'sample-pass-5',pin:null}).ok,false);
@@ -70,14 +71,14 @@ test('sample recovery snapshots populated old database, authenticates and preser
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-old-sample-')); let copied;
   t.after(()=>{ if(copied) fs.rmSync(copied,{recursive:true,force:true}); fs.rmSync(dir,{recursive:true,force:true}); });
   let db=openDatabase(dir); bootstrap(db,'sample-legacy','sample-legacy-password');
-  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER IF EXISTS payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=21;"); db.close();
+  db.exec("DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER IF EXISTS payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payment_business_days; DROP TABLE IF EXISTS business_days; DROP TABLE financial_scopes; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=21;"); db.close();
   const source=path.join(dir,'arra.sqlite'), original=fs.readFileSync(source);
   await assert.rejects(recoverSample(source,'sample-legacy','wrong-sample-password'));
   assert.deepEqual(fs.readFileSync(source),original);
   copied=await recoverSample(source,'sample-legacy','sample-legacy-password');
   assert.notEqual(copied,dir); assert.deepEqual(fs.readFileSync(source),original);
   db=openDatabase(copied);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 30);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 31);
   assert.equal(db.prepare('SELECT count(*) n FROM orders').get().n,1);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope,'waiter');
   assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE action='sample_waiter_setup'").get().n,1);

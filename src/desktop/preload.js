@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   async transferCorrection(request) {
     try { return await ipcRenderer.invoke('arra:transfer-correction', request); } catch (_) { return { ok: false }; }
   },
+  async adminSentCorrection(request) {
+    try { return await ipcRenderer.invoke('arra:admin-sent-correction', request); } catch (_) { return { ok: false, uncertain: true }; }
+  },
   async businessDays(request) {
     try { return await ipcRenderer.invoke('arra:business-days', request); } catch (_) { return { ok: false }; }
   },
@@ -74,7 +77,8 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     if (typeof username !== 'string' || typeof password !== 'string') return { ok: false };
     try {
       const result = await ipcRenderer.invoke('arra:sign-in', { username, password });
-      if (result && result.ok === true) return { ok: true };
+      if (result && result.ok === true && result.admin === false) return { ok: true, admin: false };
+      if (result && result.ok === true && result.admin === true && typeof result.name === 'string') return { ok: true, admin: true, name: result.name };
     } catch (_) {}
     return { ok: false, error: 'Sign in failed' };
   },

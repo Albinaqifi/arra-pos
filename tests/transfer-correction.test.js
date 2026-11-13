@@ -1,11 +1,12 @@
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), os=require('node:os'), path=require('node:path');
 const {openDatabase}=require('../src/desktop/database'), {bootstrap,createSession}=require('../src/desktop/session'), {createSampleTransferManager}=require('../src/desktop/sample-transfer-manager');
+const {seedSampleIdentities}=require('../src/desktop/sample-accounts');
 const {registerTransferCorrection}=require('../src/desktop/transfer-correction'), {registerFinancialVisibility}=require('../src/desktop/financial-visibility'), {hasPermissions}=require('../src/desktop/permissions');
 test('restricted manager correction is atomic, pre-close, immutable and counted once by effective account', t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-transfer-')); let db=openDatabase(dir); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true})});
- const password=require('node:crypto').randomBytes(24).toString('hex'); bootstrap(db,'sample',password); const pin=String(require('node:crypto').randomInt(0,10000)).padStart(4,'0'); const wrong=String((Number(pin)+1)%10000).padStart(4,'0'); const manager=createSampleTransferManager(db,pin);
+ const password=require('node:crypto').randomBytes(24).toString('hex'); bootstrap(db,'sample',password); const pin=String(require('node:crypto').randomInt(0,1000000)).padStart(6,'0'); const wrong=String((Number(pin)+1)%1000000).padStart(6,'0'); const sharedPassword=require('node:crypto').randomBytes(24).toString('hex'); seedSampleIdentities(db,[sharedPassword,...Array.from({length:3},()=>require('node:crypto').randomBytes(24).toString('hex'))],String(require('node:crypto').randomInt(10000)).padStart(4,'0'),pin); const manager=db.prepare('SELECT user_id id FROM transfer_managers').get().id;
  db.exec("INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'a'),(2,2,1,1,200,'b'),(3,3,1,1,300,'c'); INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,100,'cash','B'),(2,1,2,200,'card','A'),(3,1,3,300,'cash','B'); UPDATE orders SET status='completed';");
- const session=createSession(db); assert.equal(session.signIn({username:'sample',password}).ok,true);
+ const session=createSession(db); assert.equal(session.signIn({username:'sample-restaurant',password:sharedPassword}).ok,true);
  const list=session.listWaiters().data; assert.equal(list.at(-1).id,manager); assert.equal(list.at(-1).isTransfer,true);
  assert.equal(session.selectWaiter({id:manager,pin:wrong}).ok,false); assert.equal(session.selectWaiter({id:manager,pin}).ok,true);
  assert.equal(hasPermissions(db,session,'orders.view'),false); assert.equal(hasPermissions(db,session,'employees.view'),false);
@@ -19,7 +20,7 @@ test('restricted manager correction is atomic, pre-close, immutable and counted 
  assert.equal(db.prepare('SELECT account FROM payments WHERE id=1').get().account,'B'); assert.throws(()=>db.exec("UPDATE payment_account_corrections SET reason='changed'")); assert.throws(()=>db.exec('DELETE FROM payment_account_corrections')); assert.throws(()=>db.exec("INSERT OR REPLACE INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(1,1,1,'x')"));
  db.exec("UPDATE business_days SET closed_at=5,closed_by=1,issues='{}' WHERE closed_at IS NULL; INSERT INTO business_days(opened_at) VALUES(5)");
  assert.equal(call({action:'correct',paymentId:3,reason:''}).ok,false); assert.deepEqual(call({action:'list'}).data.payments,[]);
- assert.equal(session.selectWaiter({id:1,pin:''}).ok,true); assert.equal(call({action:'list'}).ok,false);
+ assert.equal(session.signIn({username:'sample',password}).ok,true); assert.equal(call({action:'list'}).ok,false);
  db.prepare("UPDATE financial_scopes SET scope='combined' WHERE user_id=1").run();
  assert.deepEqual({...financial({ok:true},{action:'aggregate',account:null}).data},{count:3,total:600});
  assert.deepEqual({...financial({ok:true},{action:'aggregate',account:'A'}).data},{count:2,total:300});
