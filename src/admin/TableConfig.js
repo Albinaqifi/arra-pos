@@ -38,6 +38,8 @@ export class TableConfig extends React.Component {
   showSelection() {
     const item = document.querySelector('.floor-tables li.floor-selected') || document.querySelector('.floor-area.floor-selected');
     if (item) item.scrollIntoView({ block: 'nearest' });
+    const action = item?.querySelector?.('button.floor-edit-table, button.floor-edit-area') || document.querySelector('#floor-add-area');
+    if (action) action.focus({ preventScroll: true });
   }
   async refreshUncertainArea() {
     if (this.state.busy) return;
@@ -67,7 +69,7 @@ export class TableConfig extends React.Component {
     this.setState({ busy: true, error: '', notice: '' });
     try {
       const r = await window.arra.tableConfig(request);
-      if (!r.ok) { this.setState({ error: configError(this.props.language, r.error, 'Could not save configuration.'), fieldError: r.error === 'Table number already exists. Choose a different number.' ? 'id' : '', busy: false }); return; }
+      if (!r.ok) { this.setState({ error: r.uncertain ? this.t('Could not save configuration. Check the list before trying again.') : configError(this.props.language, r.error, 'Could not save configuration.'), uncertainArea: !!r.uncertain && e.kind === 'area' && !e.id, fieldError: r.error === 'Table number already exists. Choose a different number.' ? 'id' : '', busy: false }); return; }
       const loaded = await this.load(true);
       if (!loaded && e.kind === 'area' && !e.id) { this.setState({ busy: false, uncertainArea: true }); return; }
       this.setState({ busy: false, ...(loaded ? { editor: null, selectedArea: e.kind === 'table' ? Number(e.areaId) : (e.id || r.id), selectedTable: e.kind === 'table' ? Number(e.id) : null, notice: e.kind === 'area' ? this.t('Area saved.') : this.t('Table saved.') } : {}) }, () => { if (loaded) this.showSelection(); });
@@ -84,11 +86,16 @@ export class TableConfig extends React.Component {
     const visibleAreas = s.areas.filter(a => !s.query.trim() || a.name.toLocaleLowerCase().includes(s.query.trim().toLocaleLowerCase()) || s.tables.some(t => t.areaId === a.id && String(t.id).includes(s.query.trim())) || a.id === s.selectedArea);
     return h('main', { className: 'floor-page' },
       h('button', { disabled: s.busy, onClick: () => { if (this.leaveEditor()) this.props.onBack(); } }, this.t('← Back to administration')),
-      h('p', { className: 'admin-eyebrow floor-eyebrow' }, this.t('ADMINISTRATION / FLOOR')),
-      h('h1', null, this.t('Areas and tables')),
-      h('p', { className: 'admin-intro' }, this.t('Organize the dining floor and set capacity for each table.')),
-      h('p', { className: 'admin-access-note' }, this.t('Changes here affect the whole restaurant and are recorded under your account.')),
-      h('div', { className: 'floor-note' }, h('strong', null, this.t('Deactivation and open orders')), h('p', null, this.t('An area or table with an open order cannot be deactivated. Inactive areas and tables are hidden from the waiter grid; their history is kept.'))),
+      h('header', { className: 'floor-hero' },
+        h('div', null, h('p', { className: 'floor-kicker' }, this.t('ADMINISTRATION / FLOOR')),
+          h('h1', null, this.t('Areas and tables')),
+          h('p', null, this.t('Organize the dining floor and set capacity for each table.'))),
+        h('button', { id: 'floor-add-area', className: 'floor-primary', disabled: s.busy, onClick: () => this.editArea(null) }, this.t('+ Add area'))),
+      h('div', { className: 'floor-overview', 'aria-label': this.t('Floor overview') },
+        h('div', null, h('span', null, this.t('Areas')), h('strong', null, s.areas.length)),
+        h('div', null, h('span', null, this.t('Tables')), h('strong', null, s.tables.length)),
+        h('div', null, h('span', null, this.t('Open orders')), h('strong', null, s.tables.filter(table => table.hasOrder).length))),
+      h('details', { className: 'floor-note' }, h('summary', null, this.t('Deactivation and open orders')), h('p', null, this.t('An area or table with an open order cannot be deactivated. Inactive areas and tables are hidden from the waiter grid; their history is kept.')), h('p', null, this.t('Changes here affect the whole restaurant and are recorded under your account.'))),
       s.notice && h('p', { role: 'status', className: 'floor-success' }, s.notice),
       !e && s.error && h('p', { role: 'alert', id: 'floor-error' }, s.error),
       e && h('section', { id: 'floor-editor', className: 'floor-editor', 'aria-label': e.kind === 'area' ? this.t('Area details') : this.t('Table details') },
@@ -105,16 +112,18 @@ export class TableConfig extends React.Component {
           toggle(), !e.active && h('p', { className: 'floor-help' }, this.t('An open order must be completed before deactivation.')), !e.active && h('p', { className: 'floor-help' }, e.kind === 'area' ? this.t('This area and its tables will be hidden from the waiter grid.') : this.t('This table will be hidden from the waiter grid.')),
           h('div', { className: 'floor-actions' }, h('button', { type: 'submit', className: 'floor-primary', disabled: s.busy || s.uncertainArea }, s.busy ? this.t('Saving…') : this.t('Save ') + this.t(e.kind))))),
       h('section', { className: 'floor-list', 'aria-labelledby': 'floor-areas-heading' },
-        h('div', { className: 'floor-section-head' }, h('div', null, h('p', { className: 'floor-kicker' }, this.t('YOUR FLOOR')), h('h2', { id: 'floor-areas-heading' }, this.t('Areas and their tables'))), h('div', { className: 'floor-actions' }, h('button', { disabled: s.busy, onClick: () => this.editArea(null) }, this.t('+ Add area')), h('button', { disabled: s.busy || !s.areas.some(a => a.active), onClick: () => this.editTable(null) }, this.t('+ Add table')))),
+        h('div', { className: 'floor-section-head' }, h('div', null, h('p', { className: 'floor-kicker' }, this.t('YOUR FLOOR')), h('h2', { id: 'floor-areas-heading' }, this.t('Areas and their tables')), h('p', { className: 'floor-list-intro' }, this.t('Select an area or table to make changes.'))), h('button', { disabled: s.busy || !s.areas.some(a => a.active), onClick: () => this.editTable(null) }, this.t('+ Add table'))),
         s.areas.length > 0 && h('label', { className: 'floor-field' }, h('span', null, this.t('Find an area or table')), h('input', { type: 'search', disabled: s.busy, value: s.query, onChange: event => this.setState({ query: event.target.value }) })),
         !s.areas.length && h('p', { className: 'floor-empty' }, this.t('No areas yet. Add an area to start arranging tables.')),
         s.areas.length > 0 && !visibleAreas.length && h('p', { className: 'floor-empty' }, this.t('No matching areas or tables.')),
         visibleAreas.map(a => {
           const tables = s.tables.filter(t => t.areaId === a.id);
+          const query = s.query.trim().toLocaleLowerCase();
+          const shownTables = !query || a.name.toLocaleLowerCase().includes(query) ? tables : tables.filter(t => String(t.id).includes(query) || t.id === s.selectedTable);
           return h('article', { key: a.id, className: 'floor-area' + (s.selectedArea === a.id ? ' floor-selected' : '') },
-            h('div', { className: 'floor-area-head' }, h('div', null, h('h3', null, a.name), h('p', null, tables.length + (tables.length === 1 ? this.t(' table') : this.t(' tables')))), status(a.active), h('button', { disabled: s.busy || !a.active, onClick: () => this.editTable(null, a.id), 'aria-label': this.t('Add table to ') + a.name }, this.t('+ Add table')), h('button', { disabled: s.busy, onClick: () => this.editArea(a), 'aria-label': this.t('Edit area ') + a.name }, this.t('Edit area'))),
+            h('div', { className: 'floor-area-head' }, h('div', { className: 'floor-area-title' }, h('span', { className: 'floor-area-icon', 'aria-hidden': 'true' }, '▦'), h('div', null, h('h3', null, a.name), h('p', null, tables.length + (tables.length === 1 ? this.t(' table') : this.t(' tables'))))), status(a.active), h('div', { className: 'floor-actions' }, h('button', { disabled: s.busy || !a.active, onClick: () => this.editTable(null, a.id), 'aria-label': this.t('Add table to ') + a.name }, this.t('+ Add table')), h('button', { className: 'floor-edit-area', disabled: s.busy, onClick: () => this.editArea(a), 'aria-label': this.t('Edit area ') + a.name }, this.t('Edit area')))),
             s.notice && s.selectedArea === a.id && h('p', { className: 'floor-success' }, s.notice),
-            tables.length ? h('ul', { className: 'floor-tables' }, ...tables.map(t => h('li', { key: t.id, className: s.selectedTable === t.id ? 'floor-selected' : '' }, h('div', null, h('strong', null, this.t('Table ') + t.id), h('span', { className: 'floor-table-detail' }, this.t('Capacity ') + t.capacity + (t.hasOrder ? this.t(' · Open order') : ''))), status(t.active), h('button', { disabled: s.busy, onClick: () => this.editTable(t), 'aria-label': this.t('Edit table ') + t.id }, this.t('Edit'))))) : h('p', { className: 'floor-empty' }, this.t('No tables in this area.')));
+            shownTables.length ? h('ul', { className: 'floor-tables' }, ...shownTables.map(t => h('li', { key: t.id, className: s.selectedTable === t.id ? 'floor-selected' : '' }, h('div', { className: 'floor-table-main' }, h('strong', null, this.t('Table ') + t.id), h('span', { className: 'floor-table-detail' }, this.t('Capacity ') + t.capacity + (t.hasOrder ? this.t(' · Open order') : ''))), h('div', { className: 'floor-table-footer' }, status(t.active), h('button', { className: 'floor-edit-table', disabled: s.busy, onClick: () => this.editTable(t), 'aria-label': this.t('Edit table ') + t.id }, this.t('Edit')))))) : h('p', { className: 'floor-empty' }, this.t(tables.length ? 'No matching tables in this area.' : 'No tables in this area.')));
         })));
   }
 }

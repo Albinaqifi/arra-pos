@@ -342,5 +342,10 @@
   "An open order must be completed before deactivation.": "Një porosi e hapur duhet të përfundohet para çaktivizimit.",
   "No matching areas or tables.": "Nuk u gjetën zona ose tavolina.",
   "Refresh floor before retrying": "Rifresko sallën para se të provosh përsëri",
-  "Check the refreshed list for the area before saving again.": "Kontrolloni zonën në listën e rifreskuar para se të ruani përsëri."
+  "Check the refreshed list for the area before saving again.": "Kontrolloni zonën në listën e rifreskuar para se të ruani përsëri.",
+  "Floor overview": "Përmbledhje e sallës",
+  "Areas": "Zonat",
+  "Open orders": "Porosi të hapura",
+  "Select an area or table to make changes.": "Zgjidhni një zonë ose tavolinë për të bërë ndryshime.",
+  "No matching tables in this area.": "Nuk u gjetën tavolina në këtë zonë."
 }
