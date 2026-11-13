@@ -435,6 +435,23 @@ These are three separate, unstarted stories. Improve the actual workflows using 
 
 **Checks/review:** Inspect the rendered redesign and assess whether the layout and workflow are materially clearer than the previous screen, including a representative staff list and empty, selected, denied and error states. Exercise Combined, Owner A and Owner B with sample identities: create or provision staff, edit accounts, reset credentials, change permitted grants and inspect history. Verify pending, denied, invalid, deactivation, session-ending and uncertain-save cases, including unauthorized direct requests and self-escalation attempts. Check both languages and keyboard/resizing behavior; record actual visual and desktop evidence and any limitations. Do not record credentials in evidence.
 
+## Sign-in and staff selection
+
+### S-071 — Finalize account entry and staff PINs
+
+**Goal:** Give the shared restaurant account and the three owner accounts their intended entry paths, with individual PINs for staff. **Depends on:** S-009, S-010, S-011, S-027, S-060 and S-064.
+
+**Acceptance:**
+
+- The restaurant account signs in locally and opens the existing staff selection screen. Active waiters and the transfer manager appear together; selecting a waiter requires that waiter's four-digit PIN, and selecting the transfer manager requires their six-digit PIN. Preserve leading zeroes. Invalid or missing PINs and inactive staff must not establish a staff session.
+- Owner A, Owner B and Combined sign in separately and open administration directly, without passing through waiter or table selection. Preserve their existing administration permissions and A, B or combined financial scope, including shared unpaid bills and the existing account-management boundary.
+- After PIN verification, a waiter has only their authorized waiter actions. The transfer manager retains only the existing restricted transfer workflow, including eligible cash B-to-A corrections before day close; selection from the shared list must not grant waiter or administrator access. Enforce authentication, PIN lengths and permissions in trusted application code, including direct requests and identity switching.
+- Support authorized PIN provisioning and reset without exposing saved PINs, logging secrets or shipping default production credentials. Handle existing accounts and credentials safely: preserve data, avoid silently disabling access, and provide a clear authorized path to meet the new PIN rules. Preserve session revocation and deactivation behavior.
+- Update the development seed script to set up sample identities for the restaurant, Owner A, Owner B, Combined, waiters and transfer manager in line with these entry paths and PIN requirements. Keep it safe to rerun without duplicating identities or overwriting existing credentials or user data; do not introduce default production credentials or record PINs in logs or committed evidence.
+- Sign-in and staff selection work offline and in English and Albanian. Keep financial records, payment and correction history, and retry protections intact.
+
+**Checks/review:** With sample identities, exercise all four account entry paths, both PIN lengths including leading zeroes, wrong and malformed PINs, inactive users, identity switching, sign-out, reset and existing-account transition. Verify a fresh development seed and repeat runs, including preservation of existing credentials and data. Test direct requests and denied cross-role or cross-account access, transfer restrictions and session revocation. Verify restart, offline operation and both languages. Review authentication, authorization and any migration or recovery changes; record actual desktop verification and limitations without recording credentials.
+
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
