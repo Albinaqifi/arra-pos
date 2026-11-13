@@ -8,7 +8,7 @@ function registerMenu(ipcMain, isAllowedSender, db, session) {
         Reflect.ownKeys(request).length !== 0) return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, 'menu.view')) return { ok: false, error: 'Access denied' };
     try {
-      const categories = db.prepare(`SELECT c.id, CASE WHEN parent.id IS NULL THEN c.name ELSE parent.name || ' / ' || c.name END AS name FROM menu_categories c LEFT JOIN menu_categories parent ON parent.id = c.parent_id WHERE c.active = 1 AND (c.parent_id IS NULL OR parent.active = 1) ORDER BY COALESCE(parent.sort_order, c.sort_order), COALESCE(parent.rowid, c.rowid), c.parent_id IS NOT NULL, c.sort_order, c.rowid`).all();
+      const categories = db.prepare(`SELECT c.id, c.name, c.parent_id AS parentId FROM menu_categories c LEFT JOIN menu_categories parent ON parent.id = c.parent_id WHERE c.active = 1 AND (c.parent_id IS NULL OR parent.active = 1) ORDER BY COALESCE(parent.sort_order, c.sort_order), COALESCE(parent.rowid, c.rowid), c.parent_id IS NOT NULL, c.sort_order, c.rowid`).all();
       const products = db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, p.price
         FROM menu_products p JOIN menu_categories c ON c.id = p.category_id
         LEFT JOIN menu_categories parent ON parent.id = c.parent_id
