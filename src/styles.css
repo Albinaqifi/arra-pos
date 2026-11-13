@@ -238,3 +238,25 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 .menu-category-summary:focus-visible, .menu-product-summary:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 .menu-selected > details > summary, .floor-area.menu-selected { outline: 2px solid #2563eb; outline-offset: 2px; }
 .menu-group.menu-selected, .menu-options .menu-selected { outline: 2px solid #2563eb; outline-offset: 2px; }
+/* Employee directory and selected-account workspace */
+.employee-overview { display:flex; gap:1px; background:#dbe4ee; border:1px solid #dbe4ee; border-radius:14px; overflow:hidden; margin:24px 0 12px; }
+.employee-overview div { flex:1; padding:16px 20px; background:#f8fafc; display:flex; flex-direction:column; gap:3px; color:#475569; }
+.employee-overview strong { font-size:24px; color:#0f172a; }
+.employee-guidance { color:#475569; max-width:80ch; }
+.employee-layout { display:grid; grid-template-columns:minmax(260px, 360px) minmax(0, 1fr); gap:20px; align-items:start; }
+.employee-page .employee-directory, .employee-detail > .floor-list { margin-top:0; }
+.employee-people { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:8px; }
+.employee-person { width:100%; text-align:left; display:grid; grid-template-columns:1fr auto; gap:5px 10px; align-items:center; padding:13px; background:#f8fafc; border:1px solid #dbe4ee; border-radius:10px; }
+.employee-person strong { grid-column:1; overflow-wrap:anywhere; }
+.employee-person > span:nth-child(2) { grid-column:1; color:#475569; font-size:13px; }
+.employee-person .floor-badge { grid-column:2; grid-row:1 / span 2; }
+.employee-person.selected { border-color:#2563eb; background:#eff6ff; box-shadow:inset 3px 0 #2563eb; }
+.employee-page .employee-search { max-width:none; margin:20px 0 0; }
+.employee-detail { min-width:0; display:grid; gap:14px; }
+.employee-selected-header { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:22px 26px; border-radius:16px; background:#163654; color:white; }
+.employee-selected-header h2, .employee-selected-header p { margin:4px 0; }
+.employee-selected-header .floor-kicker { color:#b6d4ee; }
+.employee-section summary, .employee-history > summary { cursor:pointer; font-size:19px; font-weight:700; }
+.employee-history .floor-list { margin-top:12px; padding:16px; box-shadow:none; }
+.employee-history h2 { font-size:16px; }
+@media (max-width:800px) { .employee-layout { grid-template-columns:1fr; } .employee-overview div { padding:12px; } }
