@@ -73,3 +73,5 @@ The S-052 local recovery exercise worked and no longer blocks local verification
 | S-067 | In progress | PR #92 merged as 1abb638; rendered visual review and desktop verification outstanding. |
 
 | S-068 | In progress | PR #92 merged as 1abb638; owner reports desktop redesign works. Detailed keyboard, resizing and offline evidence outstanding. |
+
+| S-069 | In progress | Code review and focused tests passed; owner reports desktop works; PR pending. |

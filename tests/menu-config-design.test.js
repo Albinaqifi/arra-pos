@@ -27,7 +27,7 @@ test('menu hierarchy provides contextual editors, validation and save feedback',
   page.state.editor.name = 'Sides'; await page.save();
   assert.equal(calls[1].action, 'category'); assert.equal(calls[1].parentId, 'c'); assert.match(page.state.notice, /saved/);
   page.edit('product', sample.products[0]); page.state.editor.price = ''; await page.save(); assert.match(page.state.error, /price/i);
-  page.state.editor.price = '150'; fail = true; await page.save(); assert.equal(page.state.error, 'Rejected'); assert.ok(page.state.editor);
+  page.state.editor.price = '150'; fail = true; await page.save(); assert.equal(page.state.error, 'Could not save configuration.'); assert.ok(page.state.editor);
   fail = false; await page.save(); assert.equal(calls.at(-2).destination, 'bar'); assert.equal(calls.at(-2).price, 150);
   page.edit('group', sample.groups[0]); await page.save(); assert.equal(calls.at(-2).required, true);
   page.edit('option', sample.options[0]); page.state.editor.adjustment = '-10'; await page.save(); assert.equal(calls.at(-2).adjustment, -10);

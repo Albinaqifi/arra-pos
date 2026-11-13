@@ -347,5 +347,19 @@
   "Areas": "Zonat",
   "Open orders": "Porosi të hapura",
   "Select an area or table to make changes.": "Zgjidhni një zonë ose tavolinë për të bërë ndryshime.",
-  "No matching tables in this area.": "Nuk u gjetën tavolina në këtë zonë."
+  "No matching tables in this area.": "Nuk u gjetën tavolina në këtë zonë.",
+  "Products": "Produkte",
+  "Hidden by parent": "Fshehur nga kategoria prind",
+  "Find products by name": "Gjej produktet sipas emrit",
+  "No products match your search.": "Asnjë produkt nuk përputhet me kërkimin.",
+  "Inactive categories hide their products and subcategories. Lower display order appears first.": "Kategoritë joaktive fshehin produktet dhe nënkategoritë e tyre. Numrat më të vegjël shfaqen të parët.",
+  "Price is the base price. Inactive products cannot be ordered. Lower display order appears first.": "Çmimi është çmimi bazë. Produktet joaktive nuk mund të porositen. Numrat më të vegjël shfaqen të parët.",
+  "A required group needs one active option. Inactive groups are hidden from ordering.": "Një grup i detyrueshëm kërkon një opsion aktiv. Grupet joaktive fshihen nga porositja.",
+  "The adjustment is added to the product price. Inactive options are hidden from ordering.": "Ndryshimi i shtohet çmimit të produktit. Opsionet joaktive fshihen nga porositja.",
+  "Hidden by category": "Fshehur nga kategoria",
+  "subcategory": "nënkategori",
+  "Choose a parent category.": "Zgjidhni një kategori prind.",
+  "Category level": "Niveli i kategorisë",
+  "Top-level category": "Kategori kryesore",
+  "Choose a level to move this category. A category with subcategories must remain top-level.": "Zgjidhni një nivel për të zhvendosur këtë kategori. Një kategori me nënkategori duhet të mbetet kategori kryesore."
 }
