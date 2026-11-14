@@ -300,5 +300,20 @@
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Loading bill…",
   "waiter.Working…": "Working…",
-  "waiter.Enter your 6-digit PIN": "Enter your 6-digit PIN"
+  "waiter.Enter your 6-digit PIN": "Enter your 6-digit PIN",
+  "waiter.Cancel order": "Cancel order",
+  "waiter.Explanation required": "Explanation required",
+  "waiter.Retry cancellation": "Retry cancellation",
+  "waiter.Confirm cancellation": "Confirm cancellation",
+  "waiter.Cancellation status unknown. Retry before leaving.": "Cancellation status unknown. Retry before leaving.",
+  "waiter.Cancellation rejected. The order may already be billed or unavailable.": "Cancellation rejected. The order may already be billed or unavailable.",
+  "waiter.Tell preparation staff in person about sent items. No cancellation notice is sent; earlier output may still arrive.": "Tell preparation staff in person about sent items. No cancellation notice is sent; earlier output may still arrive.",
+  "waiter.Order cancelled. Tell preparation staff in person; no cancellation notice was sent and earlier output may still arrive.": "Order cancelled. Tell preparation staff in person; no cancellation notice was sent and earlier output may still arrive.",
+  "waiter.Cancelled order: do not retry. Earlier output may still arrive; tell preparation staff in person.": "Cancelled order: do not retry. Earlier output may still arrive; tell preparation staff in person.",
+  "waiter.Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.": "Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.",
+  "waiter.A ticket contains a cancelled item: do not retry. Earlier output may still arrive; tell preparation staff in person.": "A ticket contains a cancelled item: do not retry. Earlier output may still arrive; tell preparation staff in person.",
+  "waiter.Correction denied. Sign in as a waiter with order access.": "Correction denied. Sign in as a waiter with order access.",
+  "waiter.This order has already been billed. The item cannot be cancelled here.": "This order has already been billed. The item cannot be cancelled here.",
+  "waiter.The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.": "The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.",
+  "waiter.Correction details are invalid. Check the quantity and explanation.": "Correction details are invalid. Check the quantity and explanation."
 }

@@ -455,3 +455,18 @@ These are three separate, unstarted stories. Improve the actual workflows using 
 ## Suggested next session
 
 Start **S-044 — JSX and local build foundation**. It establishes the frontend build in a small, reviewable increment before extracting larger workflows. It does not change database or financial rules.
+
+## Product cancellation
+
+### S-072 — Let waiters cancel an individual product with an explanation
+
+**Goal:** Let a signed-in waiter cancel a product entered by mistake, including after it was sent, with a required explanation visible to administrators. The owner's clarification supersedes the earlier admin-only sent-item cancellation rule and the whole-order interpretation in D-017. **Depends on:** S-017, S-018, S-019, S-059 and S-071.
+
+**Acceptance:**
+
+- A waiter can select an individual item and cancel an eligible quantity, including an item already sent for preparation, without cancelling the other products or the whole order. Require a nonblank explanation and confirmation. Pending items remain removable under existing rules. Enforce authorization, quantity and reason validation in trusted application code, including direct requests.
+- Preserve the original sent item and preparation history; durably record the item, quantity, explanation, waiter and time. Authorized administrators can find and review these details in the order history after restart, subject to existing financial-scope protections.
+- Update billable amounts correctly and atomically. Handle repeated or uncertain submissions without duplicating a cancellation or exceeding the remaining quantity. Preserve payments and existing billing restrictions; paid-order adjustments and refunds are outside this story.
+- Explain that staff must notify preparation in person for sent items and do not imply a cancellation notice was printed. Support offline use and English and Albanian. Remove the unintended whole-order cancellation action introduced under the mistaken interpretation, while preserving user data and historical migrations.
+
+**Checks/review:** Exercise cancellation of one sent product and partial quantity while other items remain, pending-item behavior, administrator history and restart. Test blank explanations, invalid quantities, unauthorized direct requests, repeated submissions, failures, financial scope, billing effects and existing history. Verify both languages and offline use. Review authorization, data integrity and any migration; record actual results and limitations.

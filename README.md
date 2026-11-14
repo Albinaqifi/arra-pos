@@ -106,7 +106,7 @@ npm run build
 npx electron . --sample-data-directory="$sample"
 ```
 
-The scenario command requires a marked sample database with no existing orders or payments and refuses to run twice. Tables 1–4 have paid bills: cash A, cash B, card A, and cash B transferred to A. Table 5 has an unpaid bill, table 6 has an unsent order, and table 7 has a sent item cancelled through a recorded correction; the app has no cancelled-order status. The sample setup uses simulated preparation printing and does not print those tickets. If an operation fails partway through, create a fresh sample database; the command does not delete existing records.
+The scenario command requires a marked sample database with no existing orders or payments and refuses to run twice. Tables 1–4 have paid bills: cash A, cash B, card A, and cash B transferred to A. Table 5 has an unpaid bill, table 6 has an unsent order, and table 7 has a sent item cancelled through a recorded correction. Historical whole-order cancellations remain visible in order history. The sample setup uses simulated preparation printing and does not print those tickets. If an operation fails partway through, create a fresh sample database; the command does not delete existing records.
 
 ## Backup and recovery
 

@@ -55,7 +55,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-audit-upgrade-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
-  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
+  db.exec(`DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'orders.view'),(1,'orders.change');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES (1,1,100,'open');
     INSERT INTO order_items (id,order_id,product_id,name,unit_price,quantity,status,note)

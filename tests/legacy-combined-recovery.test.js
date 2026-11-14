@@ -57,7 +57,7 @@ test('legacy recovery upgrades a version 27 copy and removes the copy after an a
   t.after(() => fs.rmSync(root, { recursive:true, force:true }));
   const dir = path.join(root, 'source'), dest = path.join(root, 'dest'), pw = randomBytes(20).toString('hex');
   let db = openDatabase(dir); bootstrap(db, 'legacy-admin', pw);
-  db.exec("UPDATE financial_scopes SET scope='waiter'; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27"); db.close();
+  db.exec("UPDATE financial_scopes SET scope='waiter'; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27"); db.close();
   await recoverLegacyCombined(path.join(dir, 'arra.sqlite'), dest, 'legacy-admin', pw, 'combined', pw);
   db = openDatabase(dest); assert.equal(createSession(db).signIn({username:'combined',password:pw}).ok,true); db.close();
   db = new (require('node:sqlite').DatabaseSync)(path.join(dir,'arra.sqlite'));

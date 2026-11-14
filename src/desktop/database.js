@@ -260,6 +260,10 @@ const migrations = [
   { version: 29, sql: `CREATE TABLE pending_staff (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;` },
   { version: 30, sql: `ALTER TABLE day_print_attempts ADD COLUMN scope TEXT NOT NULL DEFAULT 'combined' CHECK(scope IN ('A','B','combined'));` },
   { version: 31, sql: `CREATE TABLE restaurant_accounts (user_id INTEGER PRIMARY KEY REFERENCES local_users(id)) STRICT;` },
+  { version: 32, sql: `CREATE TABLE order_cancellations (order_id INTEGER PRIMARY KEY REFERENCES orders(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), occurred_at INTEGER NOT NULL, reason TEXT NOT NULL CHECK(length(trim(reason)) BETWEEN 1 AND 500), items TEXT NOT NULL) STRICT;
+  CREATE TRIGGER order_cancellations_no_update BEFORE UPDATE ON order_cancellations BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;
+  CREATE TRIGGER order_cancellations_no_delete BEFORE DELETE ON order_cancellations BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;
+  CREATE TRIGGER order_cancellations_no_replace BEFORE INSERT ON order_cancellations WHEN EXISTS(SELECT 1 FROM order_cancellations WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;` },
 ];
 
 function migrate(db) {

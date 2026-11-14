@@ -4,8 +4,8 @@ test('day close preserves scoped turnover and translates the shared-day warning'
 test('denied business day access is translated',async()=>{const p=setup('sq');await p.load();assert.match(JSON.stringify(p.render()),/nuk janë të disponueshme/);});
 test('unattempted report job status is translated',()=>{const p=setup('sq');p.setState({loading:false,data:{scope:'combined',days:[{id:2,openedAt:0,closedAt:null},{id:1,openedAt:0,closedAt:1,closedBy:1,reportId:1,printAttempts:0,printResult:'unattempted',issues:{orders:[],printJobs:[]}}],issues:{orders:[],printJobs:[]}},turnover:{groups:[]}});const tree=JSON.stringify(p.render());assert.match(tree,/pa tentuar/);assert.doesNotMatch(tree,/unattempted/);});
 test('outstanding print jobs render unattempted and null status safely in both languages',()=>{
- const p=setup('sq'); p.setState({loading:false,data:{scope:'combined',days:[{id:2,openedAt:0,closedAt:null}],issues:{orders:[],printJobs:[{id:11,result:'unattempted'},{id:12,result:null}]}},turnover:{groups:[]}});
+ const p=setup('sq'); p.setState({loading:false,data:{scope:'combined',days:[{id:2,openedAt:0,closedAt:null}],issues:{orders:[],printJobs:[{id:11,result:'unattempted'},{id:12,result:null,retryBlocked:1}]}},turnover:{groups:[]}});
  function issuesOutput() { const nodes=[]; const walk=n=>{if(n && typeof n==='object'){nodes.push(n);(n.children||[]).flat(Infinity).forEach(walk);}}; walk(p.render()); const issues=nodes.find(n=>typeof n.type==='function' && n.type.name==='Issues'); assert.ok(issues); return JSON.stringify(issues.type(issues.props)); }
- let output=issuesOutput(); assert.match(output,/#11 · pa tentuar/); assert.match(output,/#12 · Nuk është i disponueshëm/);
- p.props.language='en'; output=issuesOutput(); assert.match(output,/#11 · unattempted/); assert.match(output,/#12 · Unavailable/);
+ let output=issuesOutput(); assert.match(output,/#11 · pa tentuar/); assert.match(output,/#12 · Nuk është i disponueshëm/); assert.match(output,/Mos e riprovoni/);
+ p.props.language='en'; output=issuesOutput(); assert.match(output,/#11 · unattempted/); assert.match(output,/#12 · Unavailable/); assert.match(output,/Do not retry/);
 });

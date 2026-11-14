@@ -69,3 +69,28 @@ test('a lost print retry response keeps its token through automatic handoff and 
   await app.switchWaiter(); await app.chooseWaiter({id:2,name:'Next'},'');
   panel=panelFromRender(); await panel.retry(12); assert.deepEqual(ids,['retry-1','retry-1']); assert.equal(committed.size,1);
 });
+test('demo cancellation never claims a printed notice', async () => {
+  for (const printer of [true,false]) {
+    const {app}=harness(undefined);
+    Object.assign(app.state,{screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
+    await app.confirmCancel(); assert.match(app.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.state.toast.msg,/print/i);
+  }
+});
+
+test('definite rejection unlocks correction, but an earlier unknown result stays locked', async () => {
+  let outcome={ok:false,rejected:true};
+  const api={orderItems:async()=>outcome}; const {app}=harness(api);
+  const modal=()=>({type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''});
+  app.state.modal=modal(); await app.confirmCancel(); assert.equal(app.state.modal.unresolved,false); assert.equal(app.state.modal.requestId,null); assert.match(app.state.modal.error,/rejected/i);
+  app.state.modal=modal(); outcome={ok:false}; await app.confirmCancel(); const token=app.state.modal.requestId; assert.equal(app.state.modal.unresolved,true);
+  outcome={ok:false,rejected:true}; await app.confirmCancel(); assert.equal(app.state.modal.unresolved,true); assert.equal(app.state.modal.requestId,token); app.renderVals().closeModal(); assert.ok(app.state.modal);
+});
+
+
+test('correction rejection shows safe, translated reasons without changing uncertain retries', async () => {
+  let code; const api={orderItems:async()=>({ok:false,rejected:true,code})}; const {app,context}=harness(api);
+  const en=JSON.parse(fs.readFileSync(require.resolve('../src/admin/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/admin/sq.json'),'utf8'));
+  context.ArraComponents.translate=(lang,key)=> (lang==='sq'?sq:en)[key] || key;
+  const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashmë është faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','të pavlefshme']};
+  for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.state.language=language; app.state.modal={type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}; await app.confirmCancel(); assert.ok(app.state.modal.error.includes(texts[language==='sq'?1:0]),app.state.modal.error); assert.equal(app.state.modal.requestId,null); }
+});

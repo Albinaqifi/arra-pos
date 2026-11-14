@@ -5,7 +5,7 @@ const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
     orders: db.prepare(`SELECT o.id, o.table_id AS tableId FROM orders o WHERE o.status='open' AND o.retired_empty = 0 AND NOT (${untouchedOrder('o')}) ORDER BY o.id`).all(),
-    printJobs: db.prepare(`SELECT j.id, COALESCE(a.result, 'unattempted') AS result FROM print_jobs j
+    printJobs: db.prepare(`SELECT j.id, COALESCE(a.result, 'unattempted') AS result, (EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id)) AS retryBlocked FROM print_jobs j
       LEFT JOIN print_attempts a ON a.id=(SELECT id FROM print_attempts WHERE job_id=j.id ORDER BY id DESC LIMIT 1)
       WHERE a.result IS NULL OR a.result != 'success' ORDER BY j.id`).all()
   };

@@ -16,20 +16,19 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
         (['increment', 'decrement', 'remove', 'note'].includes(request.action) && !validId(request.itemId)) ||
         (request.action === 'note' && typeof request.note !== 'string') ||
         (request.action === 'correct' && (!validId(request.itemId) || !validId(request.quantity) || typeof request.reason !== 'string' || !request.reason.trim() || request.reason.length > 500)))
-      return { ok: false, error: 'Invalid request' };
-    if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, error: 'Access denied' };
-    if (request.action === 'correct' && !hasPermissions(db, session, 'orders.correct_sent')) return { ok: false, error: 'Access denied' };
+      return { ok: false, rejected: true, error: 'Invalid request', ...(request?.action === 'correct' ? {code:'invalid_input'} : {}) };
+    if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, rejected: true, error: 'Access denied', ...(request.action === 'correct' ? {code:'access_denied'} : {}) };
     try {
       const testAttempts = [];
       db.exec('BEGIN IMMEDIATE');
       try {
-        if (!db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
+        const priorCorrection = request.action === 'correct' ? db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId) : null;
+        if (priorCorrection && (priorCorrection.order_id !== request.orderId || priorCorrection.item_id !== request.itemId || priorCorrection.quantity !== request.quantity || priorCorrection.reason !== request.reason.trim() || priorCorrection.actor_id !== session.currentUserId())) throw Error('Invalid retry');
+        if (request.action === 'correct' && !priorCorrection && db.prepare('SELECT 1 FROM bills WHERE order_id=?').get(request.orderId)) throw Error('Order billed');
+        if (!priorCorrection && !db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
           WHERE o.id = ? AND o.status = 'open' AND o.retired_empty = 0 AND t.active = 1 AND COALESCE(a.active, 1) = 1`).get(request.orderId)) throw Error('Invalid order');
         if (request.action === 'correct') {
-          const prior = db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId);
-          if (prior) {
-            if (prior.order_id !== request.orderId || prior.item_id !== request.itemId || prior.quantity !== request.quantity || prior.reason !== request.reason.trim() || prior.actor_id !== session.currentUserId()) throw Error('Invalid retry');
-          } else {
+          if (!priorCorrection) {
             const item = db.prepare("SELECT quantity FROM order_items WHERE id = ? AND order_id = ? AND status = 'sent'").get(request.itemId, request.orderId);
             const corrected = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS quantity FROM sent_item_corrections WHERE item_id = ?').get(request.itemId).quantity;
             if (!item || request.quantity > item.quantity - corrected) throw Error('Invalid correction');
@@ -116,7 +115,15 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
         db.exec('COMMIT');
         if (testPrinting) for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt);
         return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting) } };
-      } catch (error) { db.exec('ROLLBACK'); throw error; }
+      } catch (error) {
+        try { db.exec('ROLLBACK'); } catch (_) { return { ok: false, uncertain: request.action === 'correct' }; }
+        if (request.action === 'correct') {
+          const codes = { 'Invalid order':'unavailable', 'Invalid correction':'unavailable', 'Invalid retry':'invalid_input', 'Order billed':'already_billed' };
+          const code = codes[error.message];
+          return code ? { ok: false, rejected: true, code } : { ok: false, rejected: false };
+        }
+        throw error;
+      }
     } catch (_) { return { ok: false, error: 'Could not update order items' }; }
   });
 }
