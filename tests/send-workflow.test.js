@@ -88,12 +88,12 @@ test('an unresolved movement or correction blocks direct send after its write le
   let sends = 0;
   const { app } = harness({ orderItems: async () => { sends++; return { ok: false }; } });
   for (const type of ['moveTable', 'cancel']) {
-    app.state.modal = { type, unresolved: true };
+    arrange(app, { modal: { type, unresolved: true } });
     assert.equal(app.tableOrders.writeBusy, false);
     await app.sendWorkflow.send();
     assert.equal(sends, 0); assert.equal(app.sendWorkflow.state.busy, false);
   }
-  app.state.modal = null; await app.sendWorkflow.send(); assert.equal(sends, 1);
+  arrange(app, { modal: null }); await app.sendWorkflow.send(); assert.equal(sends, 1);
 });
 
 test('demo printing owns route jobs, immutable retry history, movement and retirement', () => {

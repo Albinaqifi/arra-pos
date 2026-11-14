@@ -20,16 +20,17 @@ test('changing language preserves unresolved correction and move requests', asyn
     { type: 'cancel', itemId: 4, qty: 1, reason: 'Entered by mistake', requestId: 'correction-request', unresolved: true },
     { type: 'moveTable', dest: 2, unresolved: true },
   ]) {
-    arrange(app, { screen: 'order', tableId: 1, modal });
-    app._moveRequests = { '7:1:2': 'move-request' };
-    const before = JSON.stringify({ modal: app.state.modal, move: app._moveRequests });
+    arrange(app, { screen: 'order', tableId: 1, orders: { 1: { id: 7, log: [] } }, modal });
+    app.moveWorkflow.requests.set('7:1:2', 'move-request');
+    const snapshot = () => JSON.stringify({ modal: modal.type === 'moveTable' ? app.moveWorkflow.state.dialog : app.state.modal, move: [...app.moveWorkflow.requests] });
+    const before = snapshot();
     await app.settings.changeLanguage('sq');
     assert.equal(app.settings.state.language, 'sq');
     assert.equal(routeOf(app), 'order');
     assert.equal(app.tableOrders.state.tableId, 1);
-    assert.equal(JSON.stringify({ modal: app.state.modal, move: app._moveRequests }), before);
-    app.renderVals().closeModal();
-    assert.ok(app.state.modal, 'an unresolved operation stays open after language changes');
+    assert.equal(snapshot(), before);
+    if (modal.type === 'moveTable') app.moveWorkflow.dismiss(); else app.renderVals().closeModal();
+    assert.ok(modal.type === 'moveTable' ? app.moveWorkflow.state.dialog : app.state.modal, 'an unresolved operation stays open after language changes');
   }
   assert.equal(calls.length, 2);
   assert.ok(calls.every(request => request.action === 'set' && request.language === 'sq'));

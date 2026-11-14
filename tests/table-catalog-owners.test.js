@@ -195,7 +195,7 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   await app.confirmCancel();
   entered = app.tableOrders.state.items.filter(value => value.tableId === 1);
   assert.equal(entered[0].cxQty, 1); assert.equal(entered[0].cx.length, 1);
-  app.setState({ modal: { type: 'moveTable', dest: 2 } }); await app.confirmMoveTable();
+  app.moveWorkflow.open(); app.moveWorkflow.chooseDestination(2); await app.moveWorkflow.confirm();
   assert.equal(app.tableOrders.state.orders[2].log.filter(value => value.text.startsWith('Moved the whole order')).length, 1);
   app.setState({ modal: { type: 'bill', method: 'Card', account: 'A', printed: 0, step: 'review' } });
   app.printBill(false); app.printBill(false);

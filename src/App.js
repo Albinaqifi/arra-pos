@@ -3,7 +3,7 @@ import { desktopBridge } from './shared/desktop-bridge.js';
 import { waiterTranslate, style } from './shared/waiter-ui.js';
 import { renderTables } from './waiter/Tables.js';
 import { renderOrder } from './waiter/Order.js';
-import { renderMoveTable } from './waiter/MoveTable.js';
+import { MoveWorkflow } from './movement/MoveWorkflow.js';
 import { renderBill } from './waiter/Bill.js';
 import { DesktopBill } from './waiter/DesktopBill.js';
 import { SendWorkflow } from './waiter/SendWorkflow.js';
@@ -36,16 +36,16 @@ export class WaiterDemo extends React.Component {
     this.catalog = new CatalogModel({ bridge: desktopBridge, demoCatalog: catalog });
     this.tableOrders = new TableOrderModel({
       bridge: desktopBridge, demoOrders: desktopBridge ? undefined : demoOrders(catalog, this.nextDemoId), nextId: this.nextDemoId,
-      canNavigate: () => !this.sendWorkflow?.state.busy && !this.state.modal?.unresolved,
+      canNavigate: () => !this.sendWorkflow?.state.busy && !this.state.modal?.unresolved && !this.moveWorkflow?.locked,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       getLanguage: () => this.settings.state.language,
       onOrderOpened: () => this.catalog.clearSearch(),
-      onDismiss: () => { this.pending?.dismiss(); this.setState({ modal: null }); },
+      onDismiss: () => { this.pending?.dismiss(); this.moveWorkflow?.dismiss(); this.setState({ modal: null }); },
     });
     this.pending = new PendingItems({
       bridge: desktopBridge,
       getCatalog: () => this.catalog.state, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
-      canEdit: () => !this.sendWorkflow?.state.busy && !this.state.modal,
+      canEdit: () => !this.sendWorkflow?.state.busy && !this.state.modal && !this.moveWorkflow?.state.dialog,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       orders: {
         snapshot: () => this.tableOrders.state, writeBusy: () => this.tableOrders.writeBusy,
@@ -66,7 +66,7 @@ export class WaiterDemo extends React.Component {
     });
     this.sendWorkflow = new SendWorkflow({
       bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
-      canSend: () => !this.state.modal?.unresolved,
+      canSend: () => !this.state.modal?.unresolved && !this.moveWorkflow?.locked,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       completeHandoff: notice => this.session.completeHandoff(notice),
       submitDemoRound: round => this.demoPrinting.submitRound(round),
@@ -79,10 +79,26 @@ export class WaiterDemo extends React.Component {
         markPendingSent: (tableId, actor) => this.tableOrders.markPendingSent(tableId, actor),
       },
     });
+    this.moveWorkflow = new MoveWorkflow({
+      bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
+      isHandoffPending: () => this.sendWorkflow.state.busy, canOpen: () => !this.state.modal?.unresolved,
+      dismissOtherDialogs: () => { if (!this.pending.dismiss()) return false; this.setState({ modal: null }); return true; },
+      notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
+      onDemoMoved: (from, to) => this.demoPrinting.moveJobs(from, to), createRequestId: () => crypto.randomUUID(),
+      orders: {
+        snapshot: () => this.tableOrders.state, writeBusy: () => this.tableOrders.writeBusy,
+        captureTarget: () => this.tableOrders.captureTarget(), isCurrent: target => this.tableOrders.isCurrent(target),
+        acquireWrite: (kind, target) => this.tableOrders.acquireWrite(kind, target), releaseWrite: lease => this.tableOrders.releaseWrite(lease),
+        applyConfirmedMove: (target, destination, untouched) => this.tableOrders.applyConfirmedMove(target, destination, untouched),
+        reconcileOrderLocations: (target, tables) => this.tableOrders.reconcileOrderLocations(target, tables),
+        abandonChangedOrder: target => this.tableOrders.abandonChangedOrder(target), refreshAvailability: target => this.tableOrders.refreshAvailability(target),
+        moveDemoOrder: (from, to, actor) => this.tableOrders.moveDemoOrder(from, to, actor),
+      },
+    });
     this.administration = new AdminWorkspace({ signOut: () => this.session.signOut(), refreshAccess: generation => this.session.refreshAdminAccess(generation) });
     this.session = new SessionModel({
       bridge: desktopBridge,
-      canLeave: ({ afterAction }) => !this.tableOrders.opening && !this.tableOrders.writeBusy && (!this.sendWorkflow?.state.busy || afterAction) && !this.state.modal?.unresolved && this.administration.canLeave(),
+      canLeave: ({ afterAction }) => !this.tableOrders.opening && !this.tableOrders.writeBusy && (!this.sendWorkflow?.state.busy || afterAction) && !this.state.modal?.unresolved && !this.moveWorkflow.locked && this.administration.canLeave(),
       clearProtectedData: () => this.clearDesktopData(),
       dismissSelectedOrder: () => this.tableOrders.dismissSelectedOrder(),
       loadProtectedData: () => this.loadDesktopData(),
@@ -91,7 +107,7 @@ export class WaiterDemo extends React.Component {
       getDemoStaff: demoStaff,
     });
     const refresh = () => { if (this._mounted) this.forceUpdate?.(); };
-    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh), this.pending.subscribe(refresh), this.sendWorkflow.subscribe(refresh), this.demoPrinting.subscribe(refresh)];
+    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh), this.pending.subscribe(refresh), this.sendWorkflow.subscribe(refresh), this.demoPrinting.subscribe(refresh), this.moveWorkflow.subscribe(refresh)];
   }
   componentDidMount() {
     this._mounted = true;
@@ -102,13 +118,14 @@ export class WaiterDemo extends React.Component {
     this.catalog.clearProtectedData();
     this.tableOrders.clearProtectedData();
     this.pending.reset();
+    this.moveWorkflow.reset();
     this.setState({ modal: null });
   }
   loadDesktopData() { return Promise.all([this.catalog.load(), this.tableOrders.loadTables()]); }
   componentWillUnmount() {
     this._mounted = false;
     this._subscriptions.forEach(unsubscribe => unsubscribe());
-    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose(); this.pending.dispose(); this.sendWorkflow.dispose(); this.demoPrinting.dispose();
+    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose(); this.pending.dispose(); this.sendWorkflow.dispose(); this.demoPrinting.dispose(); this.moveWorkflow.dispose();
     clearInterval(this._tick); clearTimeout(this._tt);
   }
 
@@ -139,7 +156,7 @@ export class WaiterDemo extends React.Component {
 
 
 
-  openCancel(id) { if (this.sendWorkflow?.state.busy || !this.pending.dismiss()) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
+  openCancel(id) { if (this.sendWorkflow?.state.busy || !this.pending.dismiss() || !this.moveWorkflow.dismiss()) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
   async confirmCancel() {
     if (desktopBridge) {
       const m = this.state.modal;
@@ -169,58 +186,6 @@ export class WaiterDemo extends React.Component {
     if (!item || !m.reason || (m.reason === 'Other' && !m.other.trim())) return;
     this.tableOrders.applyDemoCorrection(m.itemId, m.qty, m.reason === 'Other' ? m.other.trim() : m.reason, this.who());
     this.mut(n => { this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); n.modal = null; });
-  }
-  async confirmMoveTable() {
-    if (desktopBridge) {
-      if (this.sendWorkflow?.state.busy || this.state.modal?.saving) return;
-      const target = this.tableOrders.captureTarget(), from = target.tableId, orderId = target.orderId, to = this.state.modal?.dest;
-      const destination = this.tableOrders.state.orders[to];
-      if (!orderId || !to || to === from || (destination && !destination.untouched)) return;
-      const lease = this.tableOrders.acquireWrite('move', target);
-      if (!lease) return;
-      this._moveRequests = this._moveRequests || {};
-      const key = [orderId, from, to].join(':');
-      const token = this._moveRequests[key] || (this._moveRequests[key] = crypto.randomUUID());
-      this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
-      try {
-        let result, reconciledTable;
-        try { result = await desktopBridge.moveOrder(orderId, from, to, token); } catch (_) { result = { ok: false }; }
-        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
-        if (!result.ok) {
-          let tables;
-          try { tables = await desktopBridge.getTables(); } catch (_) { tables = { ok: false }; }
-          if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
-          if (!tables?.ok || !Array.isArray(tables.data)) {
-            this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Move status is unknown. Retry to check it before leaving."); });
-            return;
-          }
-          const current = tables.data.find(table => table.orderId === orderId);
-          reconciledTable = current;
-          if (current?.id !== to) {
-            this.tableOrders.reconcileOrderLocations(lease, tables.data);
-            if (current?.id === from) {
-              this.mut(n => { n.modal.saving = false; n.modal.unresolved = false; n.modal.dest = null; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Order was not moved. Check the destination and try again."); });
-            } else {
-              this.tableOrders.abandonChangedOrder(lease);
-              this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Order location changed. Select a table to continue.'), 'warn'));
-            }
-            return;
-          }
-        }
-        delete this._moveRequests[key];
-        this.tableOrders.applyConfirmedMove(lease, to, reconciledTable ? reconciledTable.untouched === true : false);
-        this.mut(n => { n.modal = null; this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Everything moved to Table {to}. Table {from} is free now.', {to, from})); });
-        if (!reconciledTable) await this.tableOrders.refreshAvailability(lease);
-      } finally { this.tableOrders.releaseWrite(lease); }
-      return;
-    }
-    const from = this.tableOrders.state.tableId, to = this.state.modal.dest;
-    if (!this.tableOrders.moveDemoOrder(from, to, this.who())) return;
-    this.demoPrinting.moveJobs(from, to);
-    this.mut(n => {
-      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Everything moved to Table {to}. Table {from} is free now.', {to, from}));
-      n.modal = null;
-    });
   }
   bSet(fn) { this.mut(n => { if (n.modal && n.modal.type === 'bill') fn(n.modal, n); }); }
   printBill(useBackup) {
@@ -331,10 +296,8 @@ export class WaiterDemo extends React.Component {
     const billable = sent.filter(i => bq(i) > 0);
     v.billDisabled = !o || (!desktopBridge && billable.length === 0);
     v.billStyle = 'flex:1; height:72px; border-radius:18px; border:none; display:flex; align-items:center; justify-content:center; gap:10px; font-size:21px; font-weight:800; ' + (v.billDisabled ? 'background:#E2E8F0; color:#475569' : 'background:#2563EB; color:#FFFFFF; box-shadow:0 10px 22px rgba(37,99,235,0.3)');
-    v.moveDisabled = !o;
-    v.moveStyle = 'flex:1; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:800; ' + (o ? 'border:2px solid #C4B5FD; background:#F5F3FF; color:#5B21B6' : 'border:2px solid #E2E8F0; background:#F8FAFC; color:#64748B');
-    v.openBill = () => { if (!this.sendWorkflow?.state.busy && this.pending.dismiss()) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
-    v.openMoveTable = () => { if (!this.sendWorkflow?.state.busy && this.pending.dismiss()) this.mut(n => { n.modal = { type: 'moveTable', dest: null }; }); };
+    Object.assign(v, this.moveWorkflow.buttonView());
+    v.openBill = () => { if (!this.sendWorkflow?.state.busy && this.pending.dismiss() && this.moveWorkflow.dismiss()) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
     v.activity = o ? o.log.slice().reverse().map(e => ({ time: hm(e.t), who: e.who, text: e.text })) : [];
     v.noActivity = v.activity.length === 0;
 
@@ -354,11 +317,11 @@ export class WaiterDemo extends React.Component {
     const md = s.modal; const ty = md ? md.type : '';
     v.hasModal = !!md && ty !== 'desktopBill';
     v.isCancel = ty === 'cancel';
-    v.isMoveTable = ty === 'moveTable'; v.isBill = ty === 'bill';
+    v.isBill = ty === 'bill';
     v.closeModal = () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.setState({ modal: null }); };
     v.modalTitle = ''; v.modalSub = '';
     v.modalCardStyle = modalCardStyle(ty === 'bill' ? '880px' : '760px');
-    v.cxReasons = []; v.mtTables = []; v.miItems = []; v.miTables = []; v.billLines = [];
+    v.cxReasons = []; v.billLines = [];
     const bigBtn = (on, bg, fg) => 'height:72px; border-radius:18px; border:none; font-size:21px; font-weight:800; ' + (on ? 'background:' + bg + '; color:' + fg + '; box-shadow:0 10px 22px rgba(15,23,42,0.18)' : 'background:#E2E8F0; color:#475569');
     const chip = on => 'min-height:60px; border-radius:16px; padding:10px 14px; font-size:17px; font-weight:800; text-align:center; ' + (on ? 'background:#0F172A; color:#FFFFFF; border:2px solid #0F172A' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1');
 
@@ -384,24 +347,6 @@ export class WaiterDemo extends React.Component {
       v.cxStyle = 'flex:2; ' + bigBtn(ok, '#DC2626', '#FFFFFF').replace('height:72px', 'height:64px');
       v.cxInfo = t('Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.');
       v.cxConfirm = () => this.confirmCancel();
-    }
-
-    if (ty === 'moveTable') {
-      v.modalTitle = t("Move the whole table");
-      v.modalSub = md.error || t('Everything on Table {id} moves to the table you pick. Table {id} becomes free. Only free tables can be picked, so no order gets overwritten.', {id: tid});
-      v.mtTables = d.sections.flatMap(sec => sec.ids).filter(id => id !== tid).map(id => {
-        const tk = !!d.orders[id] && !d.orders[id].untouched; const on = md.dest === id;
-        return {
-          num: String(id), sub: tk ? t("Taken") : t("Free"), disabled: tk,
-          aria: t(tk ? 'Table {id}, taken, not available' : 'Table {id}, free', {id}),
-          style: 'min-height:84px; border-radius:16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; ' + (tk ? 'background:#F1F5F9; color:#64748B; border:2px dashed #CBD5E1' : (on ? 'background:#7C3AED; color:#FFFFFF; border:2px solid #7C3AED' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1')),
-          pick: () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.mut(n => { n.modal.dest = id; n.modal.error = ''; }); }
-        };
-      });
-      v.mtDisabled = md.dest == null || !!md.saving;
-      v.mtLabel = md.dest != null ? t('Move everything to Table {id}', {id: md.dest}) : t("Pick a free table");
-      v.mtStyle = bigBtn(md.dest != null, '#7C3AED', '#FFFFFF');
-      v.mtConfirm = () => this.confirmMoveTable();
     }
 
     if (ty === 'bill') {
@@ -467,8 +412,8 @@ export class WaiterDemo extends React.Component {
     if (this.session.state.screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
     const v = this.renderVals();
     const t = v.t;
-    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), renderDemoPrintStatus(this.demoPrinting.failedView()), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.demoPrinting.failedTableIds(), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", this.pending.render(), (v.hasModal ? ModalFrame({ title: v.modalTitle, subtitle: v.modalSub, cardStyle: v.modalCardStyle, onClose: v.closeModal, closeLabel: t('Close'), children: React.createElement(React.Fragment, null,
+    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), renderDemoPrintStatus(this.demoPrinting.failedView()), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.demoPrinting.failedTableIds(), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", this.pending.render(), this.moveWorkflow.render(), (v.hasModal ? ModalFrame({ title: v.modalTitle, subtitle: v.modalSub, cardStyle: v.modalCardStyle, onClose: v.closeModal, closeLabel: t('Close'), children: React.createElement(React.Fragment, null,
       v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null,
-      v.isMoveTable ? renderMoveTable(v, style) : null, renderBill(v, style)) }) : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
+      renderBill(v, style)) }) : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
   }
 }

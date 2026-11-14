@@ -23,10 +23,10 @@ test('extracted waiter views connect table, order and move controls to the exist
   assert.ok(table); table.props.onClick(); assert.equal(routeOf(app), 'order'); assert.equal(app.tableOrders.state.tableId, 1);
   arrange(app, { orders: { ...app.tableOrders.state.orders, 1: { openedAt: 1, rounds: 0, log: [] } } });
   let move = nodes(app.render()).find(n => n.type === 'button' && label(n).includes('Move whole table'));
-  assert.ok(move); assert.equal(move.props.disabled, false); assert.equal(move.props.style.background, '#F5F3FF'); move.props.onClick(); assert.equal(app.state.modal.type, 'moveTable');
-  const free = app.renderVals().mtTables.find(t => !t.disabled);
+  assert.ok(move); assert.equal(move.props.disabled, false); assert.equal(move.props.style.background, '#F5F3FF'); move.props.onClick(); assert.equal(app.moveWorkflow.view().isMoveTable, true);
+  const free = app.moveWorkflow.view().mtTables.find(t => !t.disabled);
   let dest = nodes(app.render()).find(n => n.type === 'button' && n.props['aria-label'] === free.aria);
-  assert.ok(dest); dest.props.onClick(); assert.equal(app.state.modal.dest, Number(free.num));
+  assert.ok(dest); dest.props.onClick(); assert.equal(app.moveWorkflow.state.dialog.dest, Number(free.num));
   arrange(app, { modal: null });
   assert.equal(nodes(app.render()).some(n => n.type === 'button' && label(n).includes('Move items')), false);
   arrange(app, { modal: { type: 'bill', step: 'method', method: null, account: null, printed: 0, backup: false } });

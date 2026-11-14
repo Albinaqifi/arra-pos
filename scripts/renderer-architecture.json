@@ -1,7 +1,7 @@
 {
   "phase": "migration",
   "coordinator": {
-    "sha256": "6662e05af9581f1c5f9267c3d2453224c069305bc30562de346b83b902362977",
+    "sha256": "aa36f7776c6c82de1845680acac62eceac35d58ec69ccdbb03296e2fa2ba7abc",
     "methods": [
       "constructor",
       "componentDidMount",
@@ -17,7 +17,6 @@
       "rlabel",
       "openCancel",
       "confirmCancel",
-      "confirmMoveTable",
       "bSet",
       "printBill",
       "paid",
@@ -28,5 +27,5 @@
   "legacySharedEdges": [
     "src/shared/waiter-ui.js -> src/admin/i18n.js"
   ],
-  "baseRevision": "6ff2e51"
+  "baseRevision": "8f24dd8"
 }
