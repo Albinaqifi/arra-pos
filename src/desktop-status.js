@@ -1,5 +1,5 @@
 import { desktopBridge } from './shared/desktop-bridge.js';
-import { translate } from './admin/i18n.js';
+import { translate } from './shared/i18n.js';
 
 const unavailable = 'Desktop application unavailable. Close and restart Arra POS; seek support if the problem continues. / Aplikacioni nuk është i disponueshëm. Mbyllni dhe rinisni Arra POS; kërkoni ndihmë nëse problemi vazhdon.';
 let startup;

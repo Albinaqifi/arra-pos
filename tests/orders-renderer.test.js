@@ -24,7 +24,7 @@ test('desktop opens and restores an order and reports an open failure', async ()
   // entry is now owned separately from the table/order route under test.
   app.session.state.screen = 'waiter';
   assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken, true);
-  assert.match(app.state.toast.msg, /Could not load order items/);
+  assert.match(app.shell.state.toast.msg, /Could not load order items/);
   failItems = false;
   await app.tableOrders.openTable(1);
   assert.equal(routeOf(app), 'order'); assert.equal(app.tableOrders.state.orders[1].id, 5);
@@ -39,7 +39,7 @@ test('desktop opens and restores an order and reports an open failure', async ()
   app.tableOrders.showTables(); card = app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0];
   assert.match(card.total, /240/); assert.equal(card.count, '2 items'); assert.equal(card.unsent, '2 not sent');
   fail = true; await app.tableOrders.openTable(1);
-  assert.equal(routeOf(app), 'tables'); assert.match(app.state.toast.msg, /Could not open/);
+  assert.equal(routeOf(app), 'tables'); assert.match(app.shell.state.toast.msg, /Could not open/);
 });
 test('desktop leaves untouched tables free and keeps failed item saves free', async () => {
  let added=false, failSave=true, loseResponse=false;

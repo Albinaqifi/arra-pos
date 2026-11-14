@@ -1,4 +1,4 @@
-import { translate } from './i18n.js';
+import { translate } from '../shared/i18n.js';
 export function LanguageSetting({ language, onChange, busy, feedback }) {
   const t = key => translate(language, key, { language: language === 'sq' ? 'Shqip' : 'English' });
   return <section className="floor-list">

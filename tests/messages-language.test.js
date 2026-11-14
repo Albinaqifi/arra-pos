@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const en = require('../src/admin/en.json');
-const sq = require('../src/admin/sq.json');
+const en = require('../src/shared/en.json');
+const sq = require('../src/shared/sq.json');
 
 test('shared dictionaries have matching keys and placeholders', () => {
   assert.deepEqual(Object.keys(sq).sort(), Object.keys(en).sort());
@@ -58,13 +58,22 @@ test('startup shows bilingual recovery if a vendor runtime is missing', async ()
 });
 
 test('literal waiter translation references exist in both dictionaries', () => {
-  for (const file of ['src/App.js', 'src/waiter/DesktopBill.js']) {
+  const directories = ['billing', 'catalog', 'correction', 'movement', 'orders', 'pending', 'printing', 'session', 'shell', 'waiter', 'shared'];
+  const files = directories.flatMap(directory => fs.readdirSync(`src/${directory}`).filter(name => name.endsWith('.js')).map(name => `src/${directory}/${name}`));
+  let checked = 0;
+  for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
-    for (const match of source.matchAll(/waiterTranslate\([^,]+,\s*(["'])(waiter\.[^"']+)\1/g)) {
-      assert.ok(Object.hasOwn(en, match[2]), `${file}: ${match[2]}`);
-      assert.ok(Object.hasOwn(sq, match[2]), `${file}: ${match[2]}`);
+    // Feature t/tr wrappers add the waiter namespace. Explicit namespace
+    // literals also cover ternary error/notice keys passed to waiterTranslate.
+    const wrapped = [...source.matchAll(/(?<![\w.])(?:this\.)?(?:t|tr)\(\s*('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")/g)].map(match => 'waiter.' + vm.runInNewContext(match[1]));
+    const explicit = [...source.matchAll(/('waiter\.(?:\\.|[^'\\])+'|"waiter\.(?:\\.|[^"\\])+")/g)].map(match => vm.runInNewContext(match[1]));
+    for (const key of new Set([...wrapped, ...explicit])) {
+      assert.ok(Object.hasOwn(en, key), `${file}: ${key}`);
+      assert.ok(Object.hasOwn(sq, key), `${file}: ${key}`);
+      checked++;
     }
   }
+  assert.ok(checked >= 76, 'relocating translation calls must not silently empty this check');
 });
 
 test('print destinations translate without modifying their identifiers', () => {

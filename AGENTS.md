@@ -17,3 +17,5 @@ Read `docs/intent.md`, `docs/process/workflow.md`, `docs/progress/board.md`, and
 ## Running a story
 
 When the user asks to run a story with agents, follow `docs/process/workflow.md`: coordinator → builder → independent reviewer → independent tester; pass findings back for correction. Fresh subagents or fresh sessions are preferred. If independent agents are unavailable, say so and offer or perform the available checks without misrepresenting them. The owner authorizes agents to commit verified story changes, push a story branch, and open a PR when repository access permits. Do not merge without explicit authorization. Respect the user's instructions and session permissions.
+
+The renderer architecture gate runs in both `npm test` and `npm run build` (`npm run check:architecture` runs it alone). Do not update `scripts/renderer-architecture.json` to admit feature logic into App or silence a failed check. Changes to the approved composition or dependency directions require explicit architectural review of the source and contract together. New feature behavior belongs in its owner. No legacy exceptions are permitted.

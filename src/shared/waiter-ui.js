@@ -1,4 +1,4 @@
-import { translate } from '../admin/i18n.js';
+import { translate } from './i18n.js';
 
 export function waiterTranslate(language, key, values = {}) {
   if (translate) {

@@ -20,7 +20,7 @@ test('correction summary distinguishes the total from the latest event', () => {
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const app = new context.Demo(); arrange(app, {screen: 'order', tableId: 1, orders: {1: {id: 5, log: []}}});
   app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [{ id: 1, productId: 'p', name: 'Dish', unitPrice: 10, quantity: 4, note: '', status: 'sent', round: 1, sentAt: 1, sentBy: 'Waiter', route: 'kitchen', correctedQuantity: 3, corrections: [{ quantity: 2, reason: 'First', actor: 'One', occurredAt: 2 }, { quantity: 1, reason: 'Second', actor: 'Two', occurredAt: 3 }] }]);
-  const text = app.renderVals().rounds[0].items[0].cxText;
+  const text = app.tableOrders.orderView({ language: app.settings.state.language }).rounds[0].items[0].cxText;
   assert.match(text, /3 cancelled total · latest: 1 · Second · Two/);
 });
 
@@ -64,8 +64,8 @@ test('desktop screen loads and saves items, shows failures, and does not send de
   release(); await pending; release = null;
   assert.equal(app.tableOrders.state.items[0].note, 'Changed'); assert.equal(app.pending.state.dialog, null);
   app.sendWorkflow.send(); assert.equal(app.tableOrders.state.items[0].status, 'pending');
-  app = await load(); assert.equal(app.tableOrders.state.items[0].qty, 2); assert.equal(app.tableOrders.state.items[0].note, 'Changed'); assert.match(app.renderVals().total, /240/);
-  fail = true; await app.pending.removeItem(7); assert.equal(app.tableOrders.state.items.length, 1); assert.match(app.state.toast.msg, /Could not save/);
+  app = await load(); assert.equal(app.tableOrders.state.items[0].qty, 2); assert.equal(app.tableOrders.state.items[0].note, 'Changed'); assert.match(app.tableOrders.orderView({ language: app.settings.state.language }).total, /240/);
+  fail = true; await app.pending.removeItem(7); assert.equal(app.tableOrders.state.items.length, 1); assert.match(app.shell.state.toast.msg, /Could not save/);
   fail = false; await app.pending.removeItem(7); assert.equal(app.tableOrders.state.items.length, 0);
 });
 test('modifier dialog locks during save, closes after success and remains retryable after failure', async () => {

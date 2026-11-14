@@ -24,7 +24,7 @@ test('confirmed send switches identity and shows a print issue; failed send stay
     getWaiters: async () => ({ok:true,data:[{id:2,name:'Next',hasPin:false}]}), selectWaiter: async () => {select++; return {ok:true};},
     getMenu: async () => ({ok:true,data:{categories:[],products:[]}}), getTables: async () => ({ok:true,data:[]})};
   const {app}=harness(api);
-  await app.sendWorkflow.send(); assert.equal(routeOf(app),'order'); assert.equal(clears,0); assert.match(app.state.toast.msg,/Could not save/);
+  await app.sendWorkflow.send(); assert.equal(routeOf(app),'order'); assert.equal(clears,0); assert.match(app.shell.state.toast.msg,/Could not save/);
   outcome='ok'; const sending=app.sendWorkflow.send(); await tick(); await app.sendWorkflow.send(); assert.equal(sends,2);
   resolveJobs({ok:true,data:{jobs:[{result:'uncertain'}]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1); assert.match(app.session.state.handoffNotice,/print job needs attention/i);
@@ -55,8 +55,9 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
   const {app}=harness(api); const sending=app.sendWorkflow.send(); await tick();
   app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
-  const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.correction.open(1); app.pending.openNote(1);
+  app.billing.open(); app.moveWorkflow.open(); app.tableOrders.showHistory(); app.correction.open(1); app.pending.openNote(1);
   assert.equal(routeOf(app),'order'); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null); assert.equal(opened,0); assert.equal(clears,0);
+  assert.equal(app.pending.state.dialog, null); assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.correction.state.dialog, null);
   release({ok:true,data:{jobs:[]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1);
 });
@@ -74,7 +75,7 @@ test('demo cancellation never claims a printed notice', async () => {
   for (const printer of [true,false]) {
     const {app}=harness(undefined);
     arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
-    await app.correction.confirm(); assert.match(app.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.state.toast.msg,/print/i);
+    await app.correction.confirm(); assert.match(app.shell.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.shell.state.toast.msg,/print/i);
   }
 });
 
@@ -96,7 +97,7 @@ test('an uncertain correction blocks conflicting commands until the exact retry 
   assert.equal(app.correction.locked, true); assert.equal(app.tableOrders.writeBusy, false);
   const dialog = app.correction.state.dialog;
   await app.sendWorkflow.send(); await app.pending.incItem(2); app.pending.openNote(2);
-  app.moveWorkflow.open(); app.renderVals().openBill(); app.tableOrders.showTables(); await app.session.switchWaiter();
+  app.moveWorkflow.open(); app.billing.open(); app.tableOrders.showTables(); await app.session.switchWaiter();
   assert.equal(calls.length, 1); assert.equal(clears, 0); assert.equal(routeOf(app), 'order');
   assert.equal(app.pending.state.dialog, null); assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null);
   assert.equal(app.correction.state.dialog, dialog);
@@ -109,7 +110,7 @@ test('an uncertain correction blocks conflicting commands until the exact retry 
 test('correction rejection shows safe, translated reasons without changing uncertain retries', async () => {
   let code; const api={orderItems:async()=>({ok:false,rejected:true,code})}; const {app,context}=harness(api);
   app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [row('sent')]);
-  const en=JSON.parse(fs.readFileSync(require.resolve('../src/admin/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/admin/sq.json'),'utf8'));
+  const en=JSON.parse(fs.readFileSync(require.resolve('../src/shared/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/shared/sq.json'),'utf8'));
   context.ArraComponents.translate=(lang,key)=> (lang==='sq'?sq:en)[key] || key;
   const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashmë është faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','të pavlefshme']};
   for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.settings.state.language=language; arrange(app, {modal:{type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}}); await app.correction.confirm(); assert.ok(app.correction.state.dialog.error.includes(texts[language==='sq'?1:0]),app.correction.state.dialog.error); assert.equal(app.correction.state.dialog.requestId,null); }

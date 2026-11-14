@@ -3,6 +3,7 @@ import { waiterTranslate } from '../shared/waiter-ui.js';
 export function catalogView(s, { language, pendingItems = [], addProduct, chooseCategory, chooseSubcategory, setSearch, clearSearch }) {
   const M = s, v = {};
   const t = (key, values) => waiterTranslate(language, 'waiter.' + key, values);
+  v.t = t;
   const money = value => Math.round(value).toLocaleString('en-US') + ' den';
   const cat = M.catById[s.cat] || { subs: [] };
   const q = s.search.trim().toLowerCase();

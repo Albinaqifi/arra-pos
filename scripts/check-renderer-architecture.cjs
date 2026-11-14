@@ -7,6 +7,11 @@ const root = path.resolve(__dirname, '..');
 const contractPath = path.join(__dirname, 'renderer-architecture.json');
 const slash = value => value.replaceAll('\\', '/');
 
+function layer(file) {
+  const roots = { 'src/App.js': 'app', 'src/renderer-entry.js': 'entry', 'src/desktop-status.js': 'startup', 'src/AdminShell.jsx': 'admin', 'src/TransferCorrection.js': 'admin' };
+  return roots[file] || (file.split('/').length > 2 ? file.split('/')[1] : null);
+}
+
 function normalizeCoordinator(source) {
   return esbuild.transformSync(source, { loader: 'js', format: 'esm', legalComments: 'none', charset: 'utf8' }).code;
 }
@@ -32,19 +37,31 @@ function verifyCoordinator(source, contract) {
 
 function verifyGraph(inputs, contract) {
   const errors = [], graph = new Map();
+  if (contract.phase !== 'coordinator') errors.push('The final architecture contract cannot return to migration mode.');
+  if (contract.legacySharedEdges?.length) errors.push('The final architecture contract cannot retain legacy exceptions.');
   for (const [rawFile, input] of Object.entries(inputs)) {
     const file = slash(rawFile);
     if (!file.startsWith('src/')) continue;
     if (file.startsWith('src/desktop/')) errors.push('Privileged desktop code entered the renderer: ' + file);
+    for (const item of input.imports || []) {
+      if (/^(node:|electron(?:\/|$))/.test(item.path)) errors.push('Privileged runtime import in renderer: ' + file + ' -> ' + item.path);
+    }
     const imports = (input.imports || []).filter(item => !item.external).map(item => slash(item.path));
     graph.set(file, imports);
+    const from = layer(file);
+    if (!Object.hasOwn(contract.allowedFeatureImports || {}, from)) errors.push('Unreviewed renderer layer: ' + file);
     for (const target of imports) {
       if ((target === 'src/App.js' && file !== 'src/renderer-entry.js') || target === 'src/renderer-entry.js') {
         errors.push('Reverse coordinator dependency: ' + file + ' -> ' + target);
       }
       if (file.startsWith('src/shared/') && target.startsWith('src/') && !target.startsWith('src/shared/')) {
-        const edge = file + ' -> ' + target;
-        if (!contract.legacySharedEdges.includes(edge)) errors.push('Shared code imports a feature: ' + edge);
+        errors.push('Shared code imports a feature: ' + file + ' -> ' + target);
+      }
+      if (target.startsWith('src/')) {
+        const to = layer(target);
+        if (from !== to && !(contract.allowedFeatureImports?.[from] || []).includes(to)) {
+          errors.push('Forbidden renderer dependency direction: ' + file + ' -> ' + target);
+        }
       }
     }
   }
@@ -57,7 +74,6 @@ function verifyGraph(inputs, contract) {
     active.delete(file); done.add(file);
   }
   for (const file of graph.keys()) visit(file, []);
-  if (contract.phase === 'coordinator' && contract.legacySharedEdges.length) errors.push('Final coordinator contract cannot retain shared-feature exceptions.');
   return [...new Set(errors)];
 }
 

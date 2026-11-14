@@ -20,7 +20,7 @@ test('switching language during send and uncertain payment does not repeat eithe
   let sends=0,payments=0,releaseSend;
   const api={language:async r=>({ok:true,language:r.language}),orderItems:()=>{sends++;return new Promise(resolve=>{releaseSend=resolve;});},payment:async()=>{payments++;return {ok:false,uncertain:true};}};
   const {app,ctx}=setup(api);
-  const pending=app.sendWorkflow.send(); await app.settings.changeLanguage('sq'); app.renderVals(); assert.equal(sends,1);
+  const pending=app.sendWorkflow.send(); await app.settings.changeLanguage('sq'); app.render(); assert.equal(sends,1);
   releaseSend({ok:false}); await pending; assert.equal(sends,1);
   const bill=new ctx.Bill({language:'sq',onPaid(){},onClose(){}}); Object.assign(bill.state,{data:{id:7,total:100,lines:[]},method:'card',account:'A'});
   await bill.pay(); assert.equal(payments,1); assert.equal(bill.state.uncertain,true);
@@ -30,7 +30,7 @@ test('switching language during send and uncertain payment does not repeat eithe
 
 test('Albanian sign-in failure and bill review and uncertain payment show translated states', async()=>{
   const api={signIn:async()=>({ok:false}),payment:async()=>({ok:false,uncertain:true}),bill:async r=>({ok:true,data:r.action==='review'?{total:100,lines:[],fingerprint:'x'}:{id:7,total:100,lines:[]}})};
-  const {app,ctx}=setup(api); arrange(app, {language:'sq',user:'sample',pass:'sample'}); await app.session.login(); assert.equal(app.state.toast.msg,'Hyrja dështoi.');
+  const {app,ctx}=setup(api); arrange(app, {language:'sq',user:'sample',pass:'sample'}); await app.session.login(); assert.equal(app.shell.state.toast.msg,'Hyrja dështoi.');
   const bill=new ctx.Bill({language:'sq',orderId:5,onPaid(){},onClose(){}}); await bill.review();
   assert.ok(button(bill.render(),'Krijo faturën')); await bill.generate(); assert.ok(button(bill.render(),'Kartë (Llogaria A)'));
   button(bill.render(),'Kartë (Llogaria A)').props.onClick(); await bill.pay();

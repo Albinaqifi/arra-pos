@@ -32,8 +32,9 @@ test('send lock spans the item response, print lookup, waiter clearing and staff
   item.resolve({ ok: true, data: { items: [row()], testPrintEnabled: true } }); await tick();
   assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, true);
   await app.tableOrders.openTable(2); await app.session.switchWaiter();
-  app.renderVals().openBill(); app.renderVals().openMoveTable(); app.correction.open(1); app.pending.openNote(1);
+  app.billing.open(); app.moveWorkflow.open(); app.correction.open(1); app.pending.openNote(1);
   assert.equal(opens, 0); assert.equal(clears, 0); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null); assert.equal(app.pending.state.dialog, null);
+  assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.correction.state.dialog, null);
   print.resolve({ ok: true, data: { jobs: [] } }); await tick();
   assert.equal(clears, 1); assert.equal(app.sendWorkflow.state.busy, true); assert.equal(routeOf(app), 'waiters');
   await app.sendWorkflow.send(); clear.resolve({ ok: true }); await tick();
@@ -50,7 +51,7 @@ test('failed and thrown sends release the lease and retain one request until con
     printJobs: async () => ({ ok: false }), clearWaiter: async () => ({ ok: true }), getWaiters: async () => ({ ok: true, data: [] }),
   });
   await app.sendWorkflow.send(); outcome = 'fail'; await app.sendWorkflow.send();
-  assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, false); assert.match(app.state.toast.msg, /Could not save order items/);
+  assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, false); assert.match(app.shell.state.toast.msg, /Could not save order items/);
   outcome = 'ok'; await app.sendWorkflow.send();
   assert.equal(requests.length, 3); assert.ok(requests.every(request => request.orderId === 5 && request.token === requests[0].token));
   assert.match(app.session.state.handoffNotice, /Print status unavailable/); assert.match(app.session.state.handoffNotice, /No physical ticket/);
@@ -81,7 +82,7 @@ test('a confirmed send does not become an item failure if the later handoff thro
   app.session.completeHandoff = async () => { throw Error('handoff interrupted'); };
   await assert.rejects(app.sendWorkflow.send(), /handoff interrupted/);
   assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, false);
-  assert.equal(app.tableOrders.state.items[0].status, 'sent'); assert.equal(app.state.toast, null);
+  assert.equal(app.tableOrders.state.items[0].status, 'sent'); assert.equal(app.shell.state.toast, null);
 });
 
 test('an unresolved movement or correction blocks direct send after its write lease ends', async () => {
@@ -98,7 +99,8 @@ test('an unresolved movement or correction blocks direct send after its write le
 
 test('demo printing owns route jobs, immutable retry history, movement and retirement', () => {
   const { app } = harness(undefined), printing = app.demoPrinting;
-  assert.equal(Object.hasOwn(app.state, 'jobs'), false); assert.equal(Object.hasOwn(app.state, 'printers'), false);
+  assert.equal(Object.hasOwn(app.state || {}, 'jobs'), false); assert.equal(Object.hasOwn(app.state || {}, 'printers'), false);
+  assert.equal(app.state, undefined, 'the root no longer stores feature state');
   printing.toggle('kitchen');
   const notice = printing.submitRound({ tableId: 1, round: 2, actor: 'First', items: [{ route: 'kitchen', qty: 2 }, { route: 'bar', qty: 1 }] });
   const original = printing.state.jobs;
@@ -106,7 +108,7 @@ test('demo printing owns route jobs, immutable retry history, movement and retir
   assert.equal(original[0].id, 'j114'); assert.equal(original[1].id, 'j115');
   assert.deepEqual(Array.from(original, job => job.count), [2, 1]);
   assert.equal(printing.failedView().hasFailed, true); printing.failedView().failed[0].retry();
-  assert.equal(original[0].attempts, 1); assert.equal(printing.state.jobs[0].attempts, 2); assert.match(app.state.toast.msg, /still not responding/);
+  assert.equal(original[0].attempts, 1); assert.equal(printing.state.jobs[0].attempts, 2); assert.match(app.shell.state.toast.msg, /still not responding/);
   printing.backup(original[0].id); assert.equal(printing.state.jobs[0].status, 'ok'); assert.equal(printing.state.jobs[0].attempts, 3);
   assert.equal(printing.failedView().hasFailed, false); assert.equal(app.tableOrders.state.orders[1].log.length, 3);
   printing.moveJobs(1, 2); assert.ok(printing.state.jobs.every(job => job.tableId === 2));

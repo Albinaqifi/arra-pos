@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { checkArchitecture, fingerprint, verifyCoordinator, verifyGraph } = require('../scripts/check-renderer-architecture.cjs');
 
 const coordinator = 'export function App() { return React.createElement(Workspace); }';
-const contract = { phase: 'coordinator', coordinator: fingerprint(coordinator), legacySharedEdges: [] };
+const contract = { phase: 'coordinator', coordinator: fingerprint(coordinator), allowedFeatureImports: { app: ['orders', 'session'], entry: ['app'], orders: ['shared'], session: ['shared'], admin: ['shared'], shared: [] } };
 const input = (...paths) => ({ imports: paths.map(path => ({ path })) });
 
 test('the real renderer satisfies the reviewed architecture contract', () => {
@@ -30,10 +30,14 @@ test('dependency guard rejects backend imports, reverse imports, shared-feature 
   for (const { graph, message } of cases) assert.match(verifyGraph(graph, contract).join('\n'), message);
 });
 
-test('migration exceptions are specific and prohibited in the final composition contract', () => {
-  const edge = 'src/shared/helper.js -> src/admin/i18n.js';
-  const migration = { ...contract, phase: 'migration', legacySharedEdges: [edge] };
-  assert.deepEqual(verifyGraph({ 'src/shared/helper.js': input('src/admin/i18n.js') }, migration), []);
-  assert.match(verifyGraph({ 'src/shared/helper.js': input('src/admin/EmployeeConfig.js') }, migration).join('\n'), /Shared code imports/);
-  assert.match(verifyGraph({}, { ...migration, phase: 'coordinator' }).join('\n'), /cannot retain/);
+test('feature layers permit reviewed dependencies and reject reverse ownership and privileged external imports', () => {
+  assert.deepEqual(verifyGraph({ 'src/App.js': input('src/orders/Orders.js'), 'src/orders/Orders.js': input('src/shared/format.js'), 'src/shared/format.js': input() }, contract), []);
+  assert.match(verifyGraph({ 'src/orders/Orders.js': input('src/session/Session.js') }, contract).join('\n'), /Forbidden renderer dependency direction/);
+  assert.match(verifyGraph({ 'src/unreviewed/Store.js': input() }, contract).join('\n'), /Unreviewed renderer layer/);
+  assert.match(verifyGraph({ 'src/orders/Orders.js': { imports: [{ path: 'node:fs', external: true }] } }, contract).join('\n'), /Privileged runtime import/);
+});
+
+test('final architecture cannot restore migration mode or legacy exceptions', () => {
+  assert.match(verifyGraph({}, { ...contract, phase: 'migration' }).join('\n'), /cannot return to migration/);
+  assert.match(verifyGraph({}, { ...contract, legacySharedEdges: ['src/shared/helper.js -> src/admin/i18n.js'] }).join('\n'), /cannot retain/);
 });

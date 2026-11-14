@@ -2,6 +2,7 @@ import { FeatureState } from '../shared/FeatureState.js';
 import { waiterTranslate } from '../shared/waiter-ui.js';
 import { normalizeItems, tableSnapshot } from './order-snapshots.js';
 import { tableView } from './table-view.js';
+import { orderView } from './order-view.js';
 
 export class TableOrderModel extends FeatureState {
   constructor({ bridge, demoOrders, nextId, canNavigate = () => true, notify = () => {}, getLanguage = () => 'en', onOrderOpened = () => {}, onDismiss = () => {} }) {
@@ -143,6 +144,8 @@ export class TableOrderModel extends FeatureState {
     this.onDismiss();
   }
   tableView(options) { return tableView(this.state, { ...options, desktop: !!this.bridge, openTable: id => this.openTable(id) }); }
+  orderView(options) { return orderView(this.state, { ...options, desktop: !!this.bridge, selectTab: tab => this.selectTab(tab), showTables: () => this.showTables(), showHistory: () => this.showHistory() }); }
+  selectedPendingItems() { return this.state.items.filter(item => item.tableId === this.state.tableId && item.status === 'pending'); }
 
   // Demo-only record changes; dialogs, retry policy, printing and payment stay
   // with their workflow owners. These commands never call the desktop bridge.

@@ -33,14 +33,14 @@ function arrange(app, values) {
     else if (name === 'printers' || name === 'jobs') app.demoPrinting.state[name] = value;
     else if (name === 'history' || name === 'billNo') app.demoBilling.state[name] = value;
     else if (name === 'language') app.settings.state.language = value;
-    else app.state[name] = value;
+    else if (name === 'toast') app.shell.state.toast = value;
+    else throw new Error('Unknown fixture field: ' + name);
   }
   if (hasPendingDialog) app.pending.state.dialog = { ...pendingDialog, target: app.tableOrders.captureTarget(), draftId: ++app.pending.draftSequence };
   if (moveDialog) app.moveWorkflow.state.dialog = { ...moveDialog, target: app.tableOrders.captureTarget(), draftId: ++app.moveWorkflow.draftSequence };
   if (correctionDialog) app.correction.state.dialog = { other: '', ...correctionDialog, target: app.tableOrders.captureTarget(), draftId: ++app.correction.draftSequence };
   if (billingDialog?.type === 'desktopBill') app.billing.state.desktop = { key: ++app.billing.sequence, target: app.tableOrders.captureTarget(), orderId: app.tableOrders.captureTarget().orderId, busy: false, uncertain: false };
   else if (billingDialog) app.demoBilling.state.dialog = { ...billingDialog, target: app.tableOrders.captureTarget() };
-  return app.state;
 }
 
 function routeOf(app) {

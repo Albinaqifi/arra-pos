@@ -137,5 +137,6 @@ test('demo bill gates pending items and preserves backup, reprint, totals and on
   const record = app.demoBilling.state.history[0]; assert.equal(record.total, 100); assert.equal(record.count, 1); assert.equal(record.account, 'B');
   assert.equal(app.tableOrders.state.orders[1], undefined); assert.equal(routeOf(app), 'waiters');
   assert.equal(app.demoBilling.historyView().hCount, '5');
-  for (const field of ['modal', 'history', 'billNo']) assert.equal(Object.hasOwn(app.state, field), false);
+  for (const field of ['modal', 'history', 'billNo']) assert.equal(Object.hasOwn(app.state || {}, field), false);
+  assert.equal(app.state, undefined, 'the root no longer stores feature state');
 });

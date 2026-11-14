@@ -13,6 +13,10 @@ export class SessionModel extends FeatureState {
   setUsername(user) { this._set({ user }); }
   setPassword(pass) { this._set({ pass }); }
   identity() { return { generation: this.state.identityGeneration, name: this.state.waiter?.name, adminAccess: this.state.adminAccess }; }
+  headerView() {
+    const waiter = this.state.waiter || { name: '', color: '#475569' };
+    return { t: (key, values) => this.t(key, values), waiterName: waiter.name, waiterInitial: waiter.name ? waiter.name[0] : '', waiterAv: avatar(waiter.color, 44), switchWaiter: () => this.switchWaiter() };
+  }
   _changeIdentity() { const generation = this.state.identityGeneration + 1; this._set({ identityGeneration: generation }); return generation; }
   _current(generation) { return !this.disposed && generation === this.state.identityGeneration; }
   async login() {

@@ -1,22 +1,85 @@
 {
-  "phase": "migration",
+  "phase": "coordinator",
   "coordinator": {
-    "sha256": "55e070425c720533c8b5d5bad501789684acd44e6369a0b82337c6b651fc089c",
+    "sha256": "31957413cfde8a8053f13c03a2233cd843916dec9bba7eec880c7e72474bc301",
     "methods": [
       "constructor",
       "componentDidMount",
       "clearDesktopData",
       "loadDesktopData",
       "componentWillUnmount",
-      "fmt",
-      "mut",
-      "toast",
-      "renderVals",
       "render"
     ]
   },
-  "legacySharedEdges": [
-    "src/shared/waiter-ui.js -> src/admin/i18n.js"
-  ],
-  "baseRevision": "9e63d79"
+  "baseRevision": "2ed34e2",
+  "allowedFeatureImports": {
+    "entry": [
+      "app",
+      "startup"
+    ],
+    "app": [
+      "admin",
+      "billing",
+      "catalog",
+      "correction",
+      "demo",
+      "movement",
+      "orders",
+      "pending",
+      "printing",
+      "session",
+      "settings",
+      "shared",
+      "shell",
+      "waiter"
+    ],
+    "startup": [
+      "shared"
+    ],
+    "admin": [
+      "shared",
+      "waiter"
+    ],
+    "billing": [
+      "shared",
+      "waiter"
+    ],
+    "catalog": [
+      "shared"
+    ],
+    "correction": [
+      "shared",
+      "waiter"
+    ],
+    "demo": [],
+    "movement": [
+      "shared",
+      "waiter"
+    ],
+    "orders": [
+      "shared"
+    ],
+    "pending": [
+      "shared"
+    ],
+    "printing": [
+      "shared"
+    ],
+    "session": [
+      "shared"
+    ],
+    "settings": [
+      "admin",
+      "shared"
+    ],
+    "shell": [
+      "shared"
+    ],
+    "shared": [],
+    "waiter": [
+      "shared",
+      "catalog",
+      "pending"
+    ]
+  }
 }

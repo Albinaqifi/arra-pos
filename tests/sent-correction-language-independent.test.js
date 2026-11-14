@@ -1,3 +1,4 @@
+const { orderProps } = require('./support/renderer-view');
 const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -20,7 +21,7 @@ test('sent item correction requires review and tells preparation in both languag
     const app = new ctx.App();
     arrange(app, {language,screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{openedAt:Date.now(),log:[]}},items:[{id:1,tableId:1,name:'Dish',qty:2,unit:10,status:'sent',cxQty:0,cx:[],route:'kitchen',round:1,sentAt:Date.now()},{id:2,tableId:1,name:'Other dish',qty:1,unit:20,status:'sent',cxQty:0,cx:[],route:'kitchen',round:1,sentAt:Date.now()}]});
     const visit=(node,out=[])=>{if(Array.isArray(node))node.forEach(x=>visit(x,out));else if(node&&typeof node==='object'){out.push(node);visit(node.children,out)}return out};
-    const order=visit(ctx.renderOrder.call(app,app.renderVals(),()=>({})));
+    const order=visit(ctx.renderOrder(orderProps(app),()=>({})));
     assert.equal(order.filter(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).length,2);
     assert.ok(!order.some(x=>x.type==='button' && /cancel (whole )?order|anulo porosinë/i.test(String(x.children[0]))));
     order.find(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).props.onClick();
@@ -33,6 +34,6 @@ test('sent item correction requires review and tells preparation in both languag
     assert.equal(app.tableOrders.state.items[0].cxQty,0);
     nodes=visit(ctx.Correction({v:app.correction.view(),modal:app.correction.state.dialog}));
     const confirmButton=nodes.find(x=>x.props.className==='correction-primary'); assert.equal(confirmButton.children[0],confirm); await confirmButton.props.onClick();
-    assert.equal(app.tableOrders.state.items[0].cxQty,1); assert.equal(app.tableOrders.state.items[1].cxQty,0); assert.equal(app.state.toast.msg,saved);
+    assert.equal(app.tableOrders.state.items[0].cxQty,1); assert.equal(app.tableOrders.state.items[1].cxQty,0); assert.equal(app.shell.state.toast.msg,saved);
   }
 });

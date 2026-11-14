@@ -14,6 +14,7 @@ module.exports = function rendererBundle() {
 export * from './src/admin/index.js';
 export * from './src/shared/waiter-ui.js';
 export * from './src/shared/desktop-bridge.js';
+export * from './src/shell/ShellModel.js';
 export * from './src/session/SessionModel.js';
 export * from './src/session/AccountEntry.js';
 export * from './src/settings/LanguageSettings.js';

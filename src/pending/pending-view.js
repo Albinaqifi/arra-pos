@@ -7,7 +7,7 @@ export function pendingRowsView(state, owner) {
   const t = (key, values) => owner.t(key, values);
   const pending = state.items.filter(item => item.tableId === state.tableId && item.status === 'pending');
   const count = pending.reduce((sum, item) => sum + item.qty, 0);
-  return { hasPending: pending.length > 0, pendingCount: t(count === 1 ? '{count} item' : '{count} items', {count}), pending: pending.map(item => ({
+  return { t, hasPending: pending.length > 0, pendingCount: t(count === 1 ? '{count} item' : '{count} items', {count}), pending: pending.map(item => ({
     name: item.name, mods: item.mods, hasMods: !!item.mods, note: item.note, hasNote: !!item.note, qty: String(item.qty), amount: money(item.qty * item.unit),
     inc: () => owner.incItem(item.id), dec: () => owner.decItem(item.id), remove: () => owner.removeItem(item.id), editNote: () => owner.openNote(item.id),
     noteLabel: item.note ? t('Edit note') : t('Note'), decAria: t('One less {name}', {name:item.name}), incAria: t('One more {name}', {name:item.name}), removeAria: t('Remove {name}', {name:item.name})

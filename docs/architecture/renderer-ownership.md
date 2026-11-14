@@ -15,7 +15,7 @@ Each feature owns its state, effects, busy/error states, request identity, clean
 - Compose ordinary modules with explicit imports and the existing esbuild build. React/ReactDOM may remain the bundled vendor runtime; application features must not depend on script order, `ArraComponents`, `render*.call(this, ...)`, implicit global helpers or browser-only globals to load in tests. Do not introduce a state-management framework or general event bus.
 - Capture desktop/demo mode and the bridge once at startup. A missing or disconnected desktop bridge never activates sample data or simulated mutations. Only the explicitly selected demo entry may start without a bridge.
 
-## Current state to target owners
+## Ownership and lifetime contract
 
 The names in the target column describe responsibilities, not required class names. Adjacent responsibilities may share a small module when their lifecycle is the same; they must not be collapsed back into one all-feature owner.
 
@@ -66,8 +66,10 @@ This is the check plan, not a claim that checks or independent reviews passed. R
 
 The targeted lists identify existing coverage; add focused tests for any newly exposed race or lifetime boundary. Do not repeatedly run the complete suite between unchanged slices. No database migration, service permission change, payment policy change or new product behavior is authorized by this refactor.
 
-### Temporary migration boundary
+## Permanent enforcement
 
-Step 3 moves both desktop printing panels and their persistent retry/refresh/status owner. Browser-demo `printers`/`jobs` and their send/move/payment mutations remain explicitly legacy until steps 7–10 move the corresponding demo operations. This follows the approved plan's incremental demo migration and avoids introducing generic cross-owner mutations merely to move the fields early. This is not final acceptance of demo printing in App: step 11 must remove these fields, commands and view-model calculations from App, with demo failure/backup/reprint/handoff tests retained.
+The final renderer uses explicit bundled imports. App composes feature owners, subscriptions, lifecycle and routes; it contains no feature state, aggregate renderVals, generic mutation helper or workflow handler. Shell owns clock/toast presentation; catalog, order data, pending editing, sending, movement, correction, printing, session/settings, administration and billing retain the responsibilities and lifetimes above. Demo billing/history and printing use separate owners and named order-data commands. Order layout receives separate catalog, pending, order, send, move and bill projections, not an all-screen object.
 
-The migration architecture check runs through both the build and the test suite (`npm run check:architecture` runs it alone). Its contract records esbuild-normalized App code, existing methods and narrowly named shared-module exceptions. Intentional extraction/wiring changes require an explicit contract update alongside the reviewed source diff; never update the contract merely to silence a failed check or admit a new feature in App. There is no automatic baseline regeneration in the build. The dependency check rejects privileged renderer imports, reverse coordinator imports and cycles. The normalized App contract catches additions inside existing handlers as well as new handlers; it is not a semantic proof that an imported module has good ownership. Reviewers must still reject replacement monoliths and generic mutation injection. Step 11 replaces the migration contract with the final small composition and removes its exceptions.
+Both test and build execute the architecture gate; npm run check:architecture runs it alone. scripts/renderer-architecture.json records the reviewed normalized App source and permitted layer dependencies. There are no migration exceptions. The check rejects new App behavior (including code inserted into existing methods), privileged renderer imports, reverse/forbidden feature dependencies, unknown layers and cycles. Negative tests exercise each boundary. Formatting/comments alone do not require changing the App contract.
+
+An intentional composition or dependency change requires explicit architectural review of the actual source diff and contract together. Never regenerate the contract merely to silence a failure or admit new feature logic. The gate does not prove semantic ownership: review must also reject whole-app props, generic mutation injection and replacement monoliths. These are local gates; no CI enforcement is assumed.
