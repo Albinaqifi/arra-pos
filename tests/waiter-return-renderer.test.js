@@ -55,7 +55,7 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
   const {app}=harness(api); const sending=app.send(); await tick();
   app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
-  const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.openNote(1);
+  const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.pending.openNote(1);
   assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
   release({ok:true,data:{jobs:[]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1);

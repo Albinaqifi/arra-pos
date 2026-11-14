@@ -1,7 +1,7 @@
 {
   "phase": "migration",
   "coordinator": {
-    "sha256": "e2f34e897bf9e8a0a8aebdded0368c14481fa3ea3ed31adc28cdbff5fa3775e7",
+    "sha256": "01a32685f1d9a95469f35de8b51718e4f7a5da8155ff7b1be4cf77fb9bfac488",
     "methods": [
       "constructor",
       "componentDidMount",
@@ -16,14 +16,7 @@
       "log",
       "rlabel",
       "togglePrinter",
-      "changeDesktopItems",
-      "addProduct",
-      "modAdd",
-      "incItem",
-      "decItem",
-      "removeItem",
-      "openNote",
-      "saveNote",
+      "submitSend",
       "send",
       "retryJob",
       "backupJob",
@@ -40,5 +33,5 @@
   "legacySharedEdges": [
     "src/shared/waiter-ui.js -> src/admin/i18n.js"
   ],
-  "baseRevision": "472334b"
+  "baseRevision": "b3bf32f"
 }

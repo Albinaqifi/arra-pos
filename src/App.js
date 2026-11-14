@@ -19,6 +19,8 @@ import { TableOrderModel } from './orders/TableOrderModel.js';
 import { demoCatalog } from './demo/catalog.js';
 import { demoOrders } from './demo/orders.js';
 import { demoSequence } from './demo/sequence.js';
+import { PendingItems } from './pending/PendingItems.js';
+import { ModalFrame, modalCardStyle } from './shared/ModalFrame.js';
 
 export class WaiterDemo extends React.Component {
   constructor(...a) {
@@ -35,7 +37,23 @@ export class WaiterDemo extends React.Component {
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       getLanguage: () => this.settings.state.language,
       onOrderOpened: () => this.catalog.clearSearch(),
-      onDismiss: () => this.setState({ modal: null }),
+      onDismiss: () => { this.pending?.dismiss(); this.setState({ modal: null }); },
+    });
+    this.pending = new PendingItems({
+      bridge: desktopBridge,
+      getCatalog: () => this.catalog.state, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
+      canEdit: () => !this._handoffInProgress && !this.state.modal,
+      notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
+      orders: {
+        snapshot: () => this.tableOrders.state, writeBusy: () => this.tableOrders.writeBusy,
+        captureTarget: tableId => this.tableOrders.captureTarget(tableId), isCurrent: target => this.tableOrders.isCurrent(target),
+        acquireWrite: (kind, target) => this.tableOrders.acquireWrite(kind, target), releaseWrite: lease => this.tableOrders.releaseWrite(lease),
+        markAddAttempted: target => this.tableOrders.markAddAttempted(target), applyConfirmedItems: (target, items) => this.tableOrders.applyConfirmedItems(target, items),
+        refreshAvailability: target => this.tableOrders.refreshAvailability(target), ensureDemoOrder: (tableId, actor) => this.tableOrders.ensureDemoOrder(tableId, actor),
+        appendPending: (tableId, product, modifiers, delta, actor) => this.tableOrders.appendPending(tableId, product, modifiers, delta, actor),
+        changeQuantity: (id, delta, actor) => this.tableOrders.changeQuantity(id, delta, actor), removePending: (id, actor) => this.tableOrders.removePending(id, actor),
+        saveNote: (id, note, actor) => this.tableOrders.saveNote(id, note, actor),
+      },
     });
     this.administration = new AdminWorkspace({ signOut: () => this.session.signOut(), refreshAccess: generation => this.session.refreshAdminAccess(generation) });
     this.session = new SessionModel({
@@ -49,7 +67,7 @@ export class WaiterDemo extends React.Component {
       getDemoStaff: demoStaff,
     });
     const refresh = () => { if (this._mounted) this.forceUpdate?.(); };
-    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh)];
+    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh), this.pending.subscribe(refresh)];
   }
   componentDidMount() {
     this._mounted = true;
@@ -59,13 +77,14 @@ export class WaiterDemo extends React.Component {
   clearDesktopData() {
     this.catalog.clearProtectedData();
     this.tableOrders.clearProtectedData();
+    this.pending.reset();
     this.setState({ modal: null });
   }
   loadDesktopData() { return Promise.all([this.catalog.load(), this.tableOrders.loadTables()]); }
   componentWillUnmount() {
     this._mounted = false;
     this._subscriptions.forEach(unsubscribe => unsubscribe());
-    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose();
+    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose(); this.pending.dispose();
     clearInterval(this._tick); clearTimeout(this._tt);
   }
 
@@ -106,83 +125,19 @@ export class WaiterDemo extends React.Component {
 
   // ---------- order entry ----------
 
-  async changeDesktopItems(action, value) {
-    if (this.tableOrders.writeBusy || (this._handoffInProgress && action !== 'send')) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Please wait for the order to save."), 'warn')); return; }
+  async submitSend(value) {
+    if (this.tableOrders.writeBusy) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Please wait for the order to save."), 'warn')); return; }
     const target = this.tableOrders.captureTarget();
-    const lease = this.tableOrders.acquireWrite(action, target);
+    const lease = this.tableOrders.acquireWrite('send', target);
     if (!lease) return;
-    // A lost response may hide a committed add; remain conservative until refreshed.
-    if (action === 'add') this.tableOrders.markAddAttempted(lease);
     try {
-      const result = await desktopBridge.orderItems(action, lease.orderId, value);
+      const result = await desktopBridge.orderItems('send', lease.orderId, value);
       if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
       if (!result.ok) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not save order items. Try again."), 'err')); return false; }
       if (!this.tableOrders.applyConfirmedItems(lease, result.data.items)) return;
-      if (action === 'add') this.tableOrders.markAddAttempted(lease);
-      if ((action === 'remove' || action === 'decrement') && result.data.items.length === 0) await this.tableOrders.refreshAvailability(lease);
       return result.data;
     } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not save order items. Try again."), 'err')); }
     finally { this.tableOrders.releaseWrite(lease); }
-  }
-  addProduct(pid) {
-    if (this._handoffInProgress) return;
-    const p = this.catalog.state.byId[pid];
-    if (!p) return;
-    if (desktopBridge && !p.groups.length) return this.changeDesktopItems('add', pid);
-    if (p.groups.length) this.setState({ modal: { type: 'mods', pid, sel: {} } });
-    else this.tableOrders.appendPending(this.tableOrders.state.tableId, p, '', 0, this.who());
-  }
-
-  async modAdd() {
-    if (desktopBridge) {
-      if (this.tableOrders.writeBusy || this.state.modal?.saving) return;
-      const modal = this.state.modal, p = this.catalog.state.byId[modal.pid], G = this.catalog.state.G;
-      const optionIds = p.groups.filter(g => modal.sel[g] != null).map(g => G[g].opts[modal.sel[g]][2]);
-      this.mut(n => { if (n.modal?.type === 'mods' && n.modal.pid === modal.pid) n.modal.saving = true; });
-      const saved = await this.changeDesktopItems('add', { productId: p.id, optionIds });
-      if (this._mounted) this.mut(n => {
-        if (n.modal?.type === 'mods' && n.modal.pid === modal.pid && n.modal.saving) {
-          if (saved) n.modal = null;
-          else n.modal.saving = false;
-        }
-      });
-      return;
-    }
-    const modal = this.state.modal, M = this.catalog.state, p = M.byId[modal.pid];
-    let delta = 0; const labels = [];
-    p.groups.forEach(group => { const selected = modal.sel[group]; if (selected != null) { labels.push(M.G[group].opts[selected][0]); delta += M.G[group].opts[selected][1]; } });
-    this.tableOrders.appendPending(this.tableOrders.state.tableId, p, labels.join(' · '), delta, this.who());
-    this.setState({ modal: null });
-  }
-  incItem(id) { if (desktopBridge) return this.changeDesktopItems('increment', id); this.tableOrders.changeQuantity(id, 1, this.who()); }
-  decItem(id) { if (desktopBridge) return this.changeDesktopItems('decrement', id); this.tableOrders.changeQuantity(id, -1, this.who()); }
-  removeItem(id) { if (desktopBridge) return this.changeDesktopItems('remove', id); this.tableOrders.removePending(id, this.who()); }
-
-  openNote(id) {
-    if (this._handoffInProgress) return;
-    const item = this.tableOrders.state.items.find(value => value.id === id && value.status === 'pending');
-    if (item) this.setState({ modal: { type: 'note', itemId: id, text: item.note } });
-  }
-  async saveNote() {
-    if (desktopBridge) {
-      const modal = this.state.modal;
-      if (!modal || modal.type !== 'note') return;
-      const lease = this.tableOrders.acquireWrite('note');
-      if (!lease) return;
-      this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
-      try {
-        const result = await desktopBridge.orderItems('note', lease.orderId, { itemId: modal.itemId, note: modal.text.trim() });
-        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
-        if (!result.ok) { this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) { n.modal.saving = false; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Could not save note. Try again."); } }); return; }
-        this.tableOrders.applyConfirmedItems(lease, result.data.items);
-        this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) n.modal = null; });
-      } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) { n.modal.saving = false; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Could not save note. Try again."); } }); }
-      finally { this.tableOrders.releaseWrite(lease); }
-      return;
-    }
-    const modal = this.state.modal;
-    this.tableOrders.saveNote(modal.itemId, modal.text.trim(), this.who());
-    this.setState({ modal: null });
   }
   send() {
     if (desktopBridge) {
@@ -192,7 +147,7 @@ export class WaiterDemo extends React.Component {
       this._handoffInProgress = true;
       this._sendRequests = this._sendRequests || {};
       const token = this._sendRequests[orderId] || (this._sendRequests[orderId] = crypto.randomUUID());
-      return this.changeDesktopItems('send', token).then(async data => {
+      return this.submitSend(token).then(async data => {
         if (!data) return;
         delete this._sendRequests[orderId];
         this.printing.jobsChanged();
@@ -245,7 +200,7 @@ export class WaiterDemo extends React.Component {
       this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} ticket printed on the backup printer.', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + destination)}));
     });
   }
-  openCancel(id) { if (this._handoffInProgress) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
+  openCancel(id) { if (this._handoffInProgress || !this.pending.dismiss()) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
   async confirmCancel() {
     if (desktopBridge) {
       const m = this.state.modal;
@@ -414,7 +369,7 @@ export class WaiterDemo extends React.Component {
     v.orderMeta = o ? t(o.openedBy ? 'Opened {time} by {name} · {minutes} min' : 'Opened {time} · {minutes} min', {time:hm(o.openedAt), name:o.openedBy, minutes:Math.max(0, Math.round((now - o.openedAt) / 60000))}) : t("Free. Add products to open it.");
     v.statusLabel = o ? t("Taken") : t("Free");
     v.statusStyle = 'height:36px; padding:0 14px; border-radius:999px; display:inline-flex; align-items:center; font-size:15px; font-weight:800; ' + (o ? 'background:#F97316; color:#1A0B00' : 'background:#DCFCE7; color:#14532D');
-    Object.assign(v, this.catalog.view({ language: this.settings.state.language, pendingItems: d.items.filter(item => item.tableId === tid && item.status === 'pending'), addProduct: id => this.addProduct(id) }));
+    Object.assign(v, this.catalog.view({ language: this.settings.state.language, pendingItems: d.items.filter(item => item.tableId === tid && item.status === 'pending'), addProduct: id => this.pending.addProduct(id) }));
 
     const its = tid ? d.items.filter(i => i.tableId === tid) : [];
     const pend = its.filter(i => i.status === 'pending');
@@ -426,13 +381,7 @@ export class WaiterDemo extends React.Component {
     v.setTabOrder = () => this.tableOrders.selectTab('order');
     v.setTabAct = () => this.tableOrders.selectTab('activity');
     v.isEmpty = its.length === 0;
-    v.hasPending = pend.length > 0;
-    v.pendingCount = t(pc === 1 ? '{count} item' : '{count} items', {count: pc});
-    v.pending = pend.map(i => ({
-      name: i.name, mods: i.mods, hasMods: !!i.mods, note: i.note, hasNote: !!i.note, qty: String(i.qty), amount: money(i.qty * i.unit),
-      inc: () => this.incItem(i.id), dec: () => this.decItem(i.id), remove: () => this.removeItem(i.id), editNote: () => this.openNote(i.id),
-      noteLabel: i.note ? t("Edit note") : t("Note"), decAria: t('One less {name}', {name: i.name}), incAria: t('One more {name}', {name: i.name}), removeAria: t('Remove {name}', {name: i.name})
-    }));
+    Object.assign(v, this.pending.rowsView());
     const sent = its.filter(i => i.status !== 'pending');
     const byRound = {};
     sent.forEach(i => { (byRound[i.round] = byRound[i.round] || []).push(i); });
@@ -470,8 +419,8 @@ export class WaiterDemo extends React.Component {
     v.moveDisabled = !o;
     v.moveStyle = 'flex:1; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:800; ' + (o ? 'border:2px solid #C4B5FD; background:#F5F3FF; color:#5B21B6' : 'border:2px solid #E2E8F0; background:#F8FAFC; color:#64748B');
     v.send = () => this.send();
-    v.openBill = () => { if (!this._handoffInProgress) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
-    v.openMoveTable = () => { if (!this._handoffInProgress) this.mut(n => { n.modal = { type: 'moveTable', dest: null }; }); };
+    v.openBill = () => { if (!this._handoffInProgress && this.pending.dismiss()) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
+    v.openMoveTable = () => { if (!this._handoffInProgress && this.pending.dismiss()) this.mut(n => { n.modal = { type: 'moveTable', dest: null }; }); };
     v.activity = o ? o.log.slice().reverse().map(e => ({ time: hm(e.t), who: e.who, text: e.text })) : [];
     v.noActivity = v.activity.length === 0;
 
@@ -490,59 +439,14 @@ export class WaiterDemo extends React.Component {
     // modals: defaults
     const md = s.modal; const ty = md ? md.type : '';
     v.hasModal = !!md && ty !== 'desktopBill';
-    v.isMods = ty === 'mods'; v.isNote = ty === 'note'; v.isCancel = ty === 'cancel';
+    v.isCancel = ty === 'cancel';
     v.isMoveTable = ty === 'moveTable'; v.isBill = ty === 'bill';
     v.closeModal = () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.setState({ modal: null }); };
     v.modalTitle = ''; v.modalSub = '';
-    v.modalCardStyle = 'background:#FFFFFF; border-radius:26px; width:100%; max-width:' + (ty === 'bill' ? '880px' : '760px') + '; max-height:calc(100vh - 40px); overflow:auto; padding:26px; box-sizing:border-box; display:flex; flex-direction:column; gap:20px; box-shadow:0 30px 80px rgba(15,23,42,0.35)';
-    v.modGroups = []; v.noteChips = []; v.cxReasons = []; v.mtTables = []; v.miItems = []; v.miTables = []; v.billLines = [];
+    v.modalCardStyle = modalCardStyle(ty === 'bill' ? '880px' : '760px');
+    v.cxReasons = []; v.mtTables = []; v.miItems = []; v.miTables = []; v.billLines = [];
     const bigBtn = (on, bg, fg) => 'height:72px; border-radius:18px; border:none; font-size:21px; font-weight:800; ' + (on ? 'background:' + bg + '; color:' + fg + '; box-shadow:0 10px 22px rgba(15,23,42,0.18)' : 'background:#E2E8F0; color:#475569');
     const chip = on => 'min-height:60px; border-radius:16px; padding:10px 14px; font-size:17px; font-weight:800; text-align:center; ' + (on ? 'background:#0F172A; color:#FFFFFF; border:2px solid #0F172A' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1');
-
-    if (ty === 'mods') {
-      const p = M.byId[md.pid]; let d = 0, ok = true;
-      v.modalTitle = p.name; v.modalSub = t('Pick the options from the paper order. Base price {price}.', {price: money(p.price)});
-      v.modGroups = p.groups.map(gid => {
-        const g = M.G[gid]; const sel = md.sel[gid];
-        if (g.req && sel == null) ok = false;
-        if (sel != null) d += g.opts[sel][1];
-        return {
-          label: g.label, reqLabel: g.req ? t("Required") : t("Optional"),
-          reqStyle: 'height:26px; padding:0 10px; border-radius:999px; display:inline-flex; align-items:center; font-size:13px; font-weight:800; ' + (g.req ? (sel == null ? 'background:#FEE2E2; color:#991B1B' : 'background:#DCFCE7; color:#14532D') : 'background:#F1F5F9; color:#475569'),
-          options: g.opts.map(([l, dd], k) => {
-            const on = sel === k;
-            return {
-              label: l, price: dd ? (dd > 0 ? '+' : '') + money(dd) : t("Included"), pressed: String(on), disabled: !!md.saving,
-              style: 'min-height:84px; border-radius:16px; padding:12px; display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:6px; text-align:left; ' + (on ? 'background:#2563EB; color:#FFFFFF; border:2px solid #2563EB' : 'background:#F8FAFC; color:#0F172A; border:2px solid #CBD5E1'),
-              pick: () => { if (!this.tableOrders.writeBusy && !this.state.modal?.saving) this.mut(n => { if (n.modal.sel[gid] === k && !g.req) delete n.modal.sel[gid]; else n.modal.sel[gid] = k; }); }
-            };
-          })
-        };
-      });
-      v.modAddDisabled = !ok || !!md.saving;
-      v.modAddLabel = md.saving ? t("Saving…") : ok ? t('Add to order · {price}', {price: money(p.price + d)}) : t("Pick the required options first");
-      v.modAddStyle = bigBtn(ok && !md.saving, '#16A34A', '#FFFFFF');
-      v.modAdd = () => this.modAdd();
-    }
-
-    if (ty === 'note') {
-      const it = d.items.find(i => i.id === md.itemId);
-      v.modalTitle = t('Note for {name}', {name: it ? it.name : ''});
-      v.modalSub = md.error || (desktopBridge ? t('Save a note for this item. Leave blank to remove it.') : t('This prints on the kitchen or bar ticket.'));
-      v.noteText = md.text; v.noteSaving = !!md.saving;
-      const parts = md.text.split(',').map(x => x.trim()).filter(Boolean);
-      v.noteChips = ['No onions', 'Less salt', 'Extra spicy', 'Sauce on the side', 'No ice', 'Bring first', 'For sharing', 'Kids portion'].map(l => {
-        const note = t(l);
-        const variants = [waiterTranslate('en', 'waiter.' + l), waiterTranslate('sq', 'waiter.' + l)];
-        const on = parts.some(part => variants.includes(part));
-        return {
-          label: note, pressed: String(on), style: chip(on),
-          toggle: () => this.mut(n => { let ps = n.modal.text.split(',').map(x => x.trim()).filter(Boolean); ps = ps.some(x => variants.includes(x)) ? ps.filter(x => !variants.includes(x)) : ps.concat(note); n.modal.text = ps.join(', '); })
-        };
-      });
-      v.onNoteText = e => { const val = e.target.value; this.setState(st => ({ modal: Object.assign({}, st.modal, { text: val }) })); };
-      v.saveNote = () => this.saveNote();
-    }
 
     if (ty === 'cancel') {
       const it = d.items.find(i => i.id === md.itemId);
@@ -648,6 +552,8 @@ export class WaiterDemo extends React.Component {
     if (this.session.state.screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
     const v = this.renderVals();
     const t = v.t;
-    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), (v.hasFailed ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"role": "alert", "style": style("flex: none; background: #DC2626; color: #FFFFFF; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px")} , "\n  ", (v.failed || []).map((f, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n    ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 14px; flex-wrap: wrap")} , "\n      ", React.createElement("svg", {"width": "26", "height": "26", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.4", "strokeLinecap": "round", "strokeLinejoin": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M6 9V3h12v6"}), React.createElement("rect", {"x": "6", "y": "14", "width": "12", "height": "7"}), React.createElement("path", {"d": "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"})), "\n      ", React.createElement("div", {"style": style("flex: 1 1 320px; font-size: 18px; font-weight: 700; line-height: 1.3")} , f.text), "\n      ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , f.attempts), "\n      ", React.createElement("button", {"onClick": f.retry, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: none; background: #FFFFFF; color: #B91C1C; font-size: 17px; font-weight: 800")} , t("Retry")), "\n      ", React.createElement("button", {"onClick": f.backup, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: 2px solid #FFFFFF; background: transparent; color: #FFFFFF; font-size: 17px; font-weight: 800")} , t("Print on backup printer")), "\n    "), "\n  "))), "\n"), "\n") : null), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.state.jobs.filter(job => job.status === 'failed').map(job => job.tableId), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", (v.hasModal ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"style": style("position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; z-index: 50")} , "\n  ", React.createElement("div", {"role": "dialog", "aria-modal": "true", "aria-label": v.modalTitle, "style": style(v.modalCardStyle)} , "\n\n    ", React.createElement("div", {"style": style("display: flex; align-items: flex-start; gap: 12px")} , "\n      ", React.createElement("div", {"style": style("flex: 1; min-width: 0")} , "\n        ", React.createElement("div", {"style": style("font-size: 28px; font-weight: 800; line-height: 1.15")} , v.modalTitle), "\n        ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 600; color: #475569; margin-top: 4px; line-height: 1.4")} , v.modalSub), "\n      "), "\n      ", React.createElement("button", {"onClick": v.closeModal, "aria-label": t("Close"), "style": style("width: 52px; height: 52px; flex: none; border-radius: 14px; border: none; background: #F1F5F9; color: #0F172A; display: flex; align-items: center; justify-content: center")} , React.createElement("svg", {"width": "24", "height": "24", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.6", "strokeLinecap": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M18 6L6 18M6 6l12 12"}))), "\n    "), "\n\n    ", "\n    ", (v.isMods ? React.createElement(React.Fragment, null, "\n      ", (v.modGroups || []).map((g, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n        ", React.createElement("div", {"style": style("display: flex; flex-direction: column; gap: 10px")} , "\n          ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n            ", React.createElement("span", {"style": style("font-size: 19px; font-weight: 800")} , g.label), "\n            ", React.createElement("span", {"style": style(g.reqStyle)} , g.reqLabel), "\n          "), "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px")} , "\n            ", (g.options || []).map((o, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n              ", React.createElement("button", {"onClick": o.pick, "disabled": o.disabled, "aria-pressed": o.pressed, "style": style(o.style)} , "\n                ", React.createElement("span", {"style": style("font-size: 18px; font-weight: 800")} , o.label), "\n                ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , o.price), "\n              "), "\n            "))), "\n          "), "\n        "), "\n      "))), "\n      ", React.createElement("button", {"onClick": v.modAdd, "disabled": v.modAddDisabled, "style": style(v.modAddStyle)} , v.modAddLabel), "\n    ") : null), "\n\n    ", "\n    ", (v.isNote ? React.createElement(React.Fragment, null, "\n      ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px")} , "\n        ", (v.noteChips || []).map((nc, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("button", {"onClick": nc.toggle, "disabled": v.noteSaving, "aria-pressed": nc.pressed, "style": style(nc.style)} , nc.label), "\n        "))), "\n      "), "\n      ", React.createElement("label", {"style": style("display: flex; flex-direction: column; gap: 8px; font-size: 16px; font-weight: 800")} , t('Or type the note'), React.createElement("input", {"type": "text", "value": v.noteText, "onChange": v.onNoteText, "disabled": v.noteSaving, "placeholder": t("e.g. medium rare, no onions"), "style": style("height: 60px; border-radius: 14px; border: 2px solid #CBD5E1; padding: 0 18px; font-size: 19px; font-weight: 600; color: #0F172A")}), "\n      "), "\n      ", React.createElement("div", {"style": style("display: flex; gap: 10px")} , "\n        ", React.createElement("button", {"onClick": v.closeModal, "style": style("flex: 1; height: 64px; border-radius: 16px; border: 2px solid #CBD5E1; background: #FFFFFF; color: #0F172A; font-size: 19px; font-weight: 800")} , t("Back")), "\n        ", React.createElement("button", {"onClick": v.saveNote, "disabled": v.noteSaving, "style": style("flex: 2; height: 64px; border-radius: 16px; border: none; background: #2563EB; color: #FFFFFF; font-size: 20px; font-weight: 800")} , t("Save note")), "\n      "), "\n    ") : null), "\n\n    ", "\n    ", (v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null), "\n\n", "\n    ", (v.isMoveTable ? renderMoveTable.call(this, v, style) : null), "\n\n    ", "\n    ", renderBill.call(this, v, style), "\n  "), "\n"), "\n") : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
+    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), (v.hasFailed ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"role": "alert", "style": style("flex: none; background: #DC2626; color: #FFFFFF; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px")} , "\n  ", (v.failed || []).map((f, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n    ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 14px; flex-wrap: wrap")} , "\n      ", React.createElement("svg", {"width": "26", "height": "26", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.4", "strokeLinecap": "round", "strokeLinejoin": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M6 9V3h12v6"}), React.createElement("rect", {"x": "6", "y": "14", "width": "12", "height": "7"}), React.createElement("path", {"d": "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"})), "\n      ", React.createElement("div", {"style": style("flex: 1 1 320px; font-size: 18px; font-weight: 700; line-height: 1.3")} , f.text), "\n      ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , f.attempts), "\n      ", React.createElement("button", {"onClick": f.retry, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: none; background: #FFFFFF; color: #B91C1C; font-size: 17px; font-weight: 800")} , t("Retry")), "\n      ", React.createElement("button", {"onClick": f.backup, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: 2px solid #FFFFFF; background: transparent; color: #FFFFFF; font-size: 17px; font-weight: 800")} , t("Print on backup printer")), "\n    "), "\n  "))), "\n"), "\n") : null), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.state.jobs.filter(job => job.status === 'failed').map(job => job.tableId), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", this.pending.render(), (v.hasModal ? ModalFrame({ title: v.modalTitle, subtitle: v.modalSub, cardStyle: v.modalCardStyle, onClose: v.closeModal, closeLabel: t('Close'), children: React.createElement(React.Fragment, null,
+      v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null,
+      v.isMoveTable ? renderMoveTable(v, style) : null, renderBill(v, style)) }) : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
   }
 }

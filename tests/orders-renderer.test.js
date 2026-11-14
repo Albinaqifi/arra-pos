@@ -49,8 +49,8 @@ test('desktop leaves untouched tables free and keeps failed item saves free', as
  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',context);
  const load=async()=>{const app=new context.Demo();app.componentDidMount();app.loadDesktopData();await new Promise(resolve=>setImmediate(resolve));return app;};
  let app=await load(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true); await app.tableOrders.openTable(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
- await app.tableOrders.openTable(1); await app.addProduct('p'); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true); app=await load(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
- await app.tableOrders.openTable(1); failSave=false; loseResponse=true; await app.addProduct('p'); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
+ await app.tableOrders.openTable(1); await app.pending.addProduct('p'); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true); app=await load(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
+ await app.tableOrders.openTable(1); failSave=false; loseResponse=true; await app.pending.addProduct('p'); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
  app=await load(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
 });
 test('removing the last pending item refreshes availability; an uncertain refresh stays taken', async () => {
@@ -60,9 +60,9 @@ test('removing the last pending item refreshes availability; an uncertain refres
  const context={React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}}}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',context);
  const app=new context.Demo(); app.componentDidMount(); arrange(app, {screen:'tables',sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}}});
- await app.tableOrders.openTable(1); await app.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
- hasItem=true; await app.tableOrders.openTable(1); failTables=true; await app.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
- hasItem=true; failTables=false; await app.tableOrders.openTable(1); loseRemoval=true; await app.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
+ await app.tableOrders.openTable(1); await app.pending.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
+ hasItem=true; await app.tableOrders.openTable(1); failTables=true; await app.pending.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
+ hasItem=true; failTables=false; await app.tableOrders.openTable(1); loseRemoval=true; await app.pending.removeItem(1); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
 });
 test('correcting the final sent item refreshes the card and preserves uncertainty', async () => {
  let available=false, failTables=false, loseResponse=false;

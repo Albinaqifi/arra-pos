@@ -174,12 +174,12 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   const app = new context.RendererModules.WaiterDemo(); app.componentDidMount();
   await app.session.chooseWaiter({ name: 'Sample' }, '');
   await app.tableOrders.openTable(1);
-  app.addProduct('qebapa');
-  app.state.modal.sel = { portion: 0, side: 0 };
-  await app.modAdd();
+  app.pending.addProduct('qebapa');
+  app.pending.chooseModifier('portion', 0); app.pending.chooseModifier('side', 0);
+  await app.pending.modAdd();
   let entered = app.tableOrders.state.items.filter(value => value.tableId === 1);
   assert.equal(entered.length, 1); assert.equal(entered[0].qty, 1); assert.equal(entered[0].id, 'i114');
-  app.incItem(entered[0].id);
+  app.pending.incItem(entered[0].id);
   app.setState({ printers: { kitchen: false, bar: true, A: true, B: true } });
   app.send();
   assert.equal(app.state.jobs.length, 1); assert.equal(app.state.jobs[0].id, 'j115');
