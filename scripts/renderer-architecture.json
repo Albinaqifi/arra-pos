@@ -1,0 +1,85 @@
+{
+  "phase": "coordinator",
+  "coordinator": {
+    "sha256": "31957413cfde8a8053f13c03a2233cd843916dec9bba7eec880c7e72474bc301",
+    "methods": [
+      "constructor",
+      "componentDidMount",
+      "clearDesktopData",
+      "loadDesktopData",
+      "componentWillUnmount",
+      "render"
+    ]
+  },
+  "baseRevision": "2ed34e2",
+  "allowedFeatureImports": {
+    "entry": [
+      "app",
+      "startup"
+    ],
+    "app": [
+      "admin",
+      "billing",
+      "catalog",
+      "correction",
+      "demo",
+      "movement",
+      "orders",
+      "pending",
+      "printing",
+      "session",
+      "settings",
+      "shared",
+      "shell",
+      "waiter"
+    ],
+    "startup": [
+      "shared"
+    ],
+    "admin": [
+      "shared",
+      "waiter"
+    ],
+    "billing": [
+      "shared",
+      "waiter"
+    ],
+    "catalog": [
+      "shared"
+    ],
+    "correction": [
+      "shared",
+      "waiter"
+    ],
+    "demo": [],
+    "movement": [
+      "shared",
+      "waiter"
+    ],
+    "orders": [
+      "shared"
+    ],
+    "pending": [
+      "shared"
+    ],
+    "printing": [
+      "shared"
+    ],
+    "session": [
+      "shared"
+    ],
+    "settings": [
+      "admin",
+      "shared"
+    ],
+    "shell": [
+      "shared"
+    ],
+    "shared": [],
+    "waiter": [
+      "shared",
+      "catalog",
+      "pending"
+    ]
+  }
+}

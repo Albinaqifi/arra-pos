@@ -1,29 +1,26 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const esbuild = require('esbuild');
+require('./scripts/check-renderer-architecture.cjs').checkArchitecture();
 
 const root = __dirname;
 const output = path.join(root, 'dist');
 fs.mkdirSync(output, { recursive: true });
 esbuild.buildSync({
-  entryPoints: [path.join(root, 'src/admin/index.js')],
+  entryPoints: [path.join(root, 'src/renderer-entry.js')],
   bundle: true,
   format: 'iife',
-  globalName: 'ArraComponents',
-  outfile: path.join(output, 'admin-shell.js'),
+  outfile: path.join(output, 'renderer-entry.js'),
   charset: 'utf8',
 });
 for (const [source, destination] of [
   ['index.html', 'index.html'],
   ['demo.html', 'demo.html'],
-  ['src/App.js', 'App.js'],
-  ['src/waiter/Tables.js', 'waiter-tables.js'],
-  ['src/waiter/Order.js', 'waiter-order.js'],
-  ['src/waiter/MoveTable.js', 'waiter-move-table.js'],
-  ['src/waiter/Bill.js', 'waiter-bill.js'],
-  ['src/waiter/DesktopBill.js', 'waiter-desktop-bill.js'],
   ['src/styles.css', 'styles.css'],
-  ['src/desktop-status.js', 'desktop-status.js'],
   ['vendor/react.js', 'react.js'],
   ['vendor/react-dom.js', 'react-dom.js'],
 ]) fs.copyFileSync(path.join(root, source), path.join(output, destination));
+// Remove only the obsolete outputs from the former script-order build.
+for (const name of ['admin-shell.js', 'App.js', 'waiter-tables.js', 'waiter-order.js', 'waiter-move-table.js', 'waiter-bill.js', 'waiter-desktop-bill.js', 'desktop-status.js']) {
+  fs.rmSync(path.join(output, name), { force: true });
+}

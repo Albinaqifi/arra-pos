@@ -7,8 +7,9 @@ test('test print list failure stays visible and refresh recovers', async () => {
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   let fail = true;
   const context = { React: { Component, createElement: (type, props, ...children) => ({type, props, children}) }, window: { arra: { testPrinting: async () => fail ? {ok:false} : {ok:true, data:{queues:[],jobs:[]}} } } };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.TestPrintJobs=TestPrintJobs;', context);
-  const jobs = new context.TestPrintJobs({});
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.TestPrintJobs=TestPrintJobs;', context);
+  const printing = new context.RendererModules.PrintingSession({ bridge: context.window.arra });
+  const jobs = new context.TestPrintJobs({ printing });
   await jobs.load();
   assert.match(jobs.state.error, /status unavailable/i);
   assert.equal(jobs.render().type, 'section');

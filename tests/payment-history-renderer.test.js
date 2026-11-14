@@ -18,7 +18,7 @@ test('history renders corrected and unpaid details, empty results, and failed re
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Financial = ArraComponents.FinancialVisibility;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({ onBack() {} });
   screen.state.view = 'history';
   const text = node => Array.isArray(node) ? node.map(text).join(' ') : node && typeof node === 'object' ? typeof node.type === 'function' && !node.type.prototype?.render ? text(node.type(node.props)) : text(node.children) : String(node || '');

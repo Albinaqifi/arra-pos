@@ -18,14 +18,14 @@ export function installCorrectionFocus(dialog, previous) {
 }
 export function SentItemCorrection({v,modal}) {
   const t = v.t;
-  const [confirming,setConfirming]=React.useState(false), root=React.useRef(null);
+  const confirming = !!modal.confirming, root=React.useRef(null);
   React.useEffect(()=>installCorrectionFocus(root.current.closest('[role="dialog"]'),document.activeElement),[]);
   React.useEffect(()=>{const dialog=root.current.closest('[role="dialog"]'); if(!dialog.contains(document.activeElement) || document.activeElement?.disabled) focusable(dialog)[0]?.focus();},[modal.saving,modal.unresolved]);
   const locked=!!modal.requestId, reason=modal.reason==='Other' ? modal.other.trim() : modal.reason;
   return h('div',{ref:root,className:'correction-flow'},
     h('div',{className:'correction-item'},h('strong',null,v.cxName),v.cxHasMods && h('span',null,v.cxMods),h('small',null,v.cxMeta)),
     h('div',{className:'correction-quantity'},h('strong',null,t("Quantity to correct")),h('div',null,h('button',{onClick:v.cxDec,disabled:locked||modal.qty<=1,'aria-label':t("Correct fewer")},'−'),h('span',null,v.cxQty+' '+v.cxMax),h('button',{onClick:v.cxInc,disabled:locked||!v.cxMulti||modal.qty>=v.cxMaxNumber,'aria-label':t("Correct more")},'+'))),
-    h('fieldset',{className:'correction-reasons',disabled:locked},h('legend',null,t("Reason "),h('span',null,t("Required"))),h('div',null,v.cxReasons.map(r=>h('button',{type:'button',key:r.label,onClick:()=>{r.pick();setConfirming(false)},'aria-pressed':r.pressed},r.label))),v.cxIsOther && h('label',null,t("Write the reason"),h('input',{type:'text',value:v.cxOther,onChange:v.onCxOther,maxLength:500}))),
+    h('fieldset',{className:'correction-reasons',disabled:locked},h('legend',null,t("Reason "),h('span',null,t("Required"))),h('div',null,v.cxReasons.map(r=>h('button',{type:'button',key:r.label,onClick:r.pick,'aria-pressed':r.pressed},r.label))),v.cxIsOther && h('label',null,t("Write the reason"),h('input',{type:'text',value:v.cxOther,onChange:v.onCxOther,maxLength:500}))),
     h('p',{className:'correction-info'},v.cxInfo),modal.error && h('p',{role:'alert',className:'correction-error'},modal.error),confirming && !modal.unresolved && h('p',{className:'correction-confirm'},t('Confirm correction of {qty} × {name}. Reason: {reason}. The original sent item and correction remain in history.', {qty:v.cxQty, name:v.cxName, reason:v.cxReasonLabel})),
-    h('div',{className:'correction-actions'},h('button',{onClick:confirming&&!locked ? ()=>setConfirming(false) : v.closeModal,disabled:modal.saving||modal.unresolved},confirming&&!locked ? t("Edit correction") : t("Keep item")),h('button',{className:'correction-primary',disabled:v.cxDisabled||modal.saving,onClick:()=>confirming||modal.unresolved ? v.cxConfirm() : setConfirming(true)},modal.saving ? t("Saving…") : modal.unresolved ? t("Retry correction") : confirming ? t("Confirm correction") : t("Review correction"))));
+    h('div',{className:'correction-actions'},h('button',{onClick:v.cxEditOrDismiss,disabled:modal.saving||modal.unresolved},confirming&&!locked ? t("Edit correction") : t("Keep item")),h('button',{className:'correction-primary',disabled:v.cxDisabled||modal.saving,onClick:v.cxReview},modal.saving ? t("Saving…") : modal.unresolved ? t("Retry correction") : confirming ? t("Confirm correction") : t("Review correction"))));
 }

@@ -11,8 +11,11 @@ Read `docs/intent.md`, `docs/process/workflow.md`, `docs/progress/board.md`, and
 - Preserve user data, existing work and historical migrations. Do not weaken a test just to pass. Do not put credentials, PINs or personal data in logs, tests, handoffs or commits.
 - Run checks appropriate to the change, report exactly what ran and its result. Give financial, authorization, migration and recovery changes stronger tests and review. Avoid repeatedly running the same full suite without a reason.
 - Keep the code simple and compatible with Windows. The existing React demo is a reference and starting point; it is not a production system.
+- Follow `docs/architecture/renderer-ownership.md` for renderer changes. `src/App.js` is for composition only; feature owners keep their own state, requests, effects and view models. Never pass App, whole-app state or generic mutation functions into features, or move the monolith behind a different name. Preserve request-token lifetimes, shared order-write exclusion and identity cleanup; review these boundaries as well as behavior.
 - Update the board and one concise handoff for the story. Never claim a review, test, CI run or merge occurred when it did not. Do not claim an agent is independent if it shares the builder's context.
 
 ## Running a story
 
 When the user asks to run a story with agents, follow `docs/process/workflow.md`: coordinator → builder → independent reviewer → independent tester; pass findings back for correction. Fresh subagents or fresh sessions are preferred. If independent agents are unavailable, say so and offer or perform the available checks without misrepresenting them. The owner authorizes agents to commit verified story changes, push a story branch, and open a PR when repository access permits. Do not merge without explicit authorization. Respect the user's instructions and session permissions.
+
+The renderer architecture gate runs in both `npm test` and `npm run build` (`npm run check:architecture` runs it alone). Do not update `scripts/renderer-architecture.json` to admit feature logic into App or silence a failed check. Changes to the approved composition or dependency directions require explicit architectural review of the source and contract together. New feature behavior belongs in its owner. No legacy exceptions are permitted.

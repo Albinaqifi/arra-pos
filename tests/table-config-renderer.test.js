@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -15,8 +16,8 @@ test('manage tables navigation opens configuration and signs out from administra
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(require('./support/waiter-views')() + fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo; this.Config = ArraComponents.TableConfig;', context);
-  const app = new context.Demo(); app.componentDidMount(); app.setState({ screen: 'tables', adminAccess: true });
+  vm.runInNewContext(require('./support/waiter-views')() + require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo; this.Config = ArraComponents.TableConfig;', context);
+  const app = new context.Demo(); app.componentDidMount(); arrange(app, { screen: 'tables', adminAccess: true });
   const find = (node, predicate) => {
     if (!node || typeof node !== 'object') return null;
     if (predicate(node)) return node;
@@ -34,7 +35,7 @@ test('manage tables navigation opens configuration and signs out from administra
   await new Promise(resolve => setImmediate(resolve)); assert.equal(configLoads, 1);
   assert.ok(find(config.render(), node => node.type === 'h1' && node.children.includes('Areas and tables')));
   configElement.props.onBack(); await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.state.screen, 'admin');
+  assert.equal(routeOf(app), 'admin');
   shell = app.render(); shell.props.back(); await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.state.screen, 'login'); assert.equal(signOuts, 1);
+  assert.equal(routeOf(app), 'login'); assert.equal(signOuts, 1);
 });

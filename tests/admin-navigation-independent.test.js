@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -9,7 +10,7 @@ test('administration overview and sidebar navigate all six areas and identify th
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: {} }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
   const component = require('esbuild').buildSync({ entryPoints: [require.resolve('../src/admin/index.js')], bundle: true, format: 'iife', globalName: 'ArraComponents', write: false }).outputFiles[0].text;
   vm.runInNewContext(component, context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const findAll = (node, predicate) => {
     if (!node || typeof node !== 'object') return [];
     return [...(predicate(node) ? [node] : []), ...(node.children || []).flatMap(child => (Array.isArray(child) ? child : [child]).flatMap(item => findAll(item, predicate)))];
@@ -17,20 +18,20 @@ test('administration overview and sidebar navigate all six areas and identify th
   const app = new context.Demo();
   const routes = [['Areas and tables', 'tableConfig'], ['Menu', 'menuConfig'], ['Employees', 'employeeConfig'], ['Order history', 'orderHistory'], ['Financial information', 'financialVisibility'], ['Operational reports', 'operationalReports']];
   for (const [label, screen] of routes) {
-    app.setState({screen: 'admin', adminAccess: true});
+    arrange(app, {screen: 'admin', adminAccess: true});
     let shell = app.render(), view = shell.type(shell.props);
     const buttons = findAll(view, n => n.type === 'button' && JSON.stringify(n.children).includes(label));
     assert.equal(buttons.length, 2, label);
     buttons[1].props.onClick();
-    assert.equal(app.state.screen, screen);
+    assert.equal(routeOf(app), screen);
     shell = app.render(); view = shell.type(shell.props);
     const current = findAll(view, n => n.type === 'button' && n.props['aria-current'] === 'page');
     assert.equal(current.length, 1);
     assert.equal(current[0].children[0], label);
     shell.children[0].props.onBack();
-    assert.equal(app.state.screen, 'admin');
+    assert.equal(routeOf(app), 'admin');
     shell = app.render(); view = shell.type(shell.props);
     findAll(view, n => n.type === 'button' && n.children.includes(label))[0].props.onClick();
-    assert.equal(app.state.screen, screen);
+    assert.equal(routeOf(app), screen);
   }
 });
