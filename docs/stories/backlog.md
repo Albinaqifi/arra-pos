@@ -470,3 +470,20 @@ Start **S-044 — JSX and local build foundation**. It establishes the frontend 
 - Explain that staff must notify preparation in person for sent items and do not imply a cancellation notice was printed. Support offline use and English and Albanian. Remove the unintended whole-order cancellation action introduced under the mistaken interpretation, while preserving user data and historical migrations.
 
 **Checks/review:** Exercise cancellation of one sent product and partial quantity while other items remain, pending-item behavior, administrator history and restart. Test blank explanations, invalid quantities, unauthorized direct requests, repeated submissions, failures, financial scope, billing effects and existing history. Verify both languages and offline use. Review authorization, data integrity and any migration; record actual results and limitations.
+
+## Renderer ownership
+
+### S-073 — Complete the renderer ownership refactor
+
+**Goal:** Replace the all-feature renderer root with explicit modules whose state, workflows and presentation have clear owners, preserving the current desktop and browser demo experience. **Depends on:** S-044, S-045, S-071 and S-072. The owner explicitly authorized the full twelve-step plan in this session, delivered as twelve reviewable commits within this umbrella story.
+
+**Acceptance:**
+
+- Establish the baseline and [renderer ownership contract](../architecture/renderer-ownership.md) before implementation, with permanent builder/reviewer guidance. Migrate application features to explicit imports through the existing build and adapt tests to real module boundaries without weakening assertions.
+- Extract complete ownership in order: printing; session/account entry, language settings and admin navigation; tables/catalog/order data; pending items/modifiers/notes; send/handoff; whole-order movement; sent correction; existing DesktopBill integration and demo billing/history. Each extraction includes its state, effects, request identity, errors/locks, view model and controls, not only markup or forwarding methods.
+- Keep `src/App.js` small and limited to composition. No App instance, whole-app state, generic mutation function or unrestricted dispatcher is injected into features; no renamed replacement monolith, global feature wiring or prototype delegation remains. Add a useful architecture guard and review the actual boundaries.
+- Preserve all current UI, translations, demo fixtures, offline entry and core behavior, including owner direct login, waiter/transfer PIN entry, administration/editor guards and identity cleanup. A missing desktop bridge never selects demo behavior. No new framework, data migration, authorization policy or financial feature is introduced.
+- Preserve one canonical order-data owner and shared mutation exclusion. Keep stable order identity through loads and reconciliation, existing stale-response guards, uncertain correction and movement locks, pending-item behavior, send lock through print-status wait and handoff, and print/send/move request identities for their full existing lifetimes. Card remains A; no duplicate sends, corrections, printing requests, history or payments on recovery.
+- Verify the twelve steps against the ownership contract's preimplementation matrix, then complete independent review/testing of the full diff and record actual desktop/demo/language/offline evidence and limitations in one handoff. Preserve unrelated work, historical records and tests; do not merge without explicit authorization.
+
+**Checks/review:** Capture baseline `npm run build` and `npm test`; run focused behavioral checks after each relevant extraction and final build/full tests after integration. Cover delayed/stale responses, uncertain and rejected requests, double clicks, identity transitions, dialog focus and both entry modes. Follow the twelve commit sequence and check plan in the ownership contract. Record exact commands/results and independent role findings; do not substitute source-size checks for behavioral or ownership review.
