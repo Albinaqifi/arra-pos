@@ -28,7 +28,7 @@ test('lost move response reconciles committed move or locks navigation until ret
   app.moveWorkflow.dismiss(); app.tableOrders.showTables(); app.moveWorkflow.view().mtTables.find(x=>x.num==='3').pick();
   assert.equal(app.moveWorkflow.state.dialog.dest,2); assert.equal(routeOf(app),'order'); assert.equal(calls,1);
   await app.sendWorkflow.send(); await app.pending.incItem(8); app.pending.openNote(8); app.correction.open(9); app.renderVals().openBill(); await app.session.switchWaiter();
-  assert.equal(itemWrites,0); assert.equal(waiterClears,0); assert.equal(app.pending.state.dialog,null); assert.equal(app.state.modal,null);
+  assert.equal(itemWrites,0); assert.equal(waiterClears,0); assert.equal(app.pending.state.dialog,null); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null);
   assert.equal(app.moveWorkflow.state.dialog.unresolved,true); assert.equal(app.moveWorkflow.state.dialog.dest,2);
   tableResult={ok:true,data:[{id:1,orderId:null,openedAt:null},{id:2,orderId:10,openedAt:1},{id:3,orderId:null,openedAt:null}]};
   await app.moveWorkflow.confirm(); assert.equal(app.tableOrders.state.tableId,2); assert.equal(app.tableOrders.state.orders[1],undefined); assert.equal(app.tableOrders.state.orders[2].id,10); assert.equal(app.moveWorkflow.state.dialog,null);

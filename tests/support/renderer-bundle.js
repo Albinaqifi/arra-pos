@@ -29,6 +29,8 @@ export * from './src/printing/PrintingSession.js';
 export * from './src/printing/PrintJobs.js';
 export * from './src/printing/TestPrintJobs.js';
 export * from './src/waiter/DesktopBill.js';
+export * from './src/billing/BillingBoundary.js';
+export * from './src/billing/DemoBilling.js';
 export * from './src/waiter/Tables.js';
 export * from './src/waiter/Order.js';
 export * from './src/waiter/MoveTable.js';

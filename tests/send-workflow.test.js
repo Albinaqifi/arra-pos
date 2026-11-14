@@ -33,7 +33,7 @@ test('send lock spans the item response, print lookup, waiter clearing and staff
   assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, true);
   await app.tableOrders.openTable(2); await app.session.switchWaiter();
   app.renderVals().openBill(); app.renderVals().openMoveTable(); app.correction.open(1); app.pending.openNote(1);
-  assert.equal(opens, 0); assert.equal(clears, 0); assert.equal(app.state.modal, null); assert.equal(app.pending.state.dialog, null);
+  assert.equal(opens, 0); assert.equal(clears, 0); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null); assert.equal(app.pending.state.dialog, null);
   print.resolve({ ok: true, data: { jobs: [] } }); await tick();
   assert.equal(clears, 1); assert.equal(app.sendWorkflow.state.busy, true); assert.equal(routeOf(app), 'waiters');
   await app.sendWorkflow.send(); clear.resolve({ ok: true }); await tick();
@@ -115,7 +115,7 @@ test('demo printing owns route jobs, immutable retry history, movement and retir
 
 test('demo bill printing reads the forced card account from its printing owner', () => {
   const { app } = harness(undefined);
-  app.demoPrinting.toggle('A'); app.state.modal = { type: 'bill', method: 'Card', account: 'B', printed: 0 };
-  app.printBill(false); assert.equal(app.state.modal.account, 'A'); assert.equal(app.state.modal.step, 'failed'); assert.equal(app.state.modal.printed, 0);
-  app.printBill(true); assert.equal(app.state.modal.printed, 1); assert.equal(app.state.modal.account, 'A');
+  app.demoPrinting.toggle('A'); arrange(app, { modal: { type: 'bill', method: 'Card', account: 'B', printed: 0 } });
+  app.demoBilling.print(false); assert.equal(app.demoBilling.state.dialog.account, 'A'); assert.equal(app.demoBilling.state.dialog.step, 'failed'); assert.equal(app.demoBilling.state.dialog.printed, 0);
+  app.demoBilling.print(true); assert.equal(app.demoBilling.state.dialog.printed, 1); assert.equal(app.demoBilling.state.dialog.account, 'A');
 });

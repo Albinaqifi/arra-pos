@@ -7,6 +7,7 @@ export class PrintingSession {
   #uuid;
   #retryTokens = new Map();
   #testRetryTokens = new Map();
+  #billTokens = new Map();
   #busy = { printJobs: false, testPrinting: false };
   #revision = 0;
   #revisionListeners = new Set();
@@ -73,8 +74,8 @@ export class PrintingSession {
     }), () => this.#testRetryTokens.delete(jobId));
   }
 
-  submitTestBill(billId, requestId) {
-    return this.#change('testPrinting', () => ({ action: 'bill', billId, requestId }));
+  submitTestBill(billId) {
+    return this.#change('testPrinting', () => ({ action: 'bill', billId, requestId: this.#retryToken(this.#billTokens, billId) }));
   }
 
   #retryToken(tokens, jobId) {

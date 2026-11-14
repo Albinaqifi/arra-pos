@@ -1,23 +1,16 @@
 {
   "phase": "migration",
   "coordinator": {
-    "sha256": "2d98ffdc857ce2b8b49a50ba7198412ff9db22c96414fcfc62613f1e14d8d1d2",
+    "sha256": "55e070425c720533c8b5d5bad501789684acd44e6369a0b82337c6b651fc089c",
     "methods": [
       "constructor",
       "componentDidMount",
       "clearDesktopData",
       "loadDesktopData",
       "componentWillUnmount",
-      "seed",
       "fmt",
-      "who",
       "mut",
       "toast",
-      "log",
-      "rlabel",
-      "bSet",
-      "printBill",
-      "paid",
       "renderVals",
       "render"
     ]
@@ -25,5 +18,5 @@
   "legacySharedEdges": [
     "src/shared/waiter-ui.js -> src/admin/i18n.js"
   ],
-  "baseRevision": "07900f4"
+  "baseRevision": "9e63d79"
 }

@@ -32,7 +32,7 @@ test('extracted waiter views connect table, order and move controls to the exist
   arrange(app, { modal: { type: 'bill', step: 'method', method: null, account: null, printed: 0, backup: false } });
   const card = nodes(app.render()).find(n => n.type === 'button' && label(n).trim() === 'Card');
   assert.ok(card); card.props.onClick();
-  assert.equal(app.state.modal.method, 'Card'); assert.equal(app.state.modal.account, 'A');
+  assert.equal(app.demoBilling.state.dialog.method, 'Card'); assert.equal(app.demoBilling.state.dialog.account, 'A');
   assert.ok(nodes(app.render()).some(n => n.type === 'button' && label(n).includes('Print bill')));
 });
 

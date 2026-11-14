@@ -10,6 +10,7 @@ function arrange(app, values) {
   let hasPendingDialog = false;
   let moveDialog;
   let correctionDialog;
+  let billingDialog;
   for (const [name, value] of Object.entries(values)) {
     if (name === 'screen') {
       if (adminPages.has(value)) { app.session.state.screen = 'admin'; app.administration.state.page = value; }
@@ -19,21 +20,26 @@ function arrange(app, values) {
       app.pending.state.dialog = null;
       app.moveWorkflow.state.dialog = null;
       app.correction.state.dialog = null;
-      if (value && ['mods', 'note'].includes(value.type)) { pendingDialog = value; hasPendingDialog = true; app.state.modal = null; }
-      else if (value?.type === 'cancel') { correctionDialog = value; app.state.modal = null; }
-      else if (value?.type === 'moveTable') { moveDialog = value; app.state.modal = null; }
-      else app.state.modal = value;
+      app.demoBilling.state.dialog = null;
+      app.billing.state.desktop = null;
+      if (value && ['mods', 'note'].includes(value.type)) { pendingDialog = value; hasPendingDialog = true; }
+      else if (value?.type === 'cancel') correctionDialog = value;
+      else if (value?.type === 'moveTable') moveDialog = value;
+      else if (value) billingDialog = value;
     } else if (sessionFields.has(name)) app.session.state[name] = value;
     else if (name === 'orders' && !app.tableOrders.bridge) app.tableOrders.state.orders = Object.fromEntries(Object.entries(value).map(([tableId, order]) => [tableId, { ...order, id: order.id ?? 'test-order-' + tableId }]));
     else if (tableOrderFields.has(name)) app.tableOrders.state[name] = value;
     else if (catalogFields.has(name)) app.catalog.state[name] = value;
     else if (name === 'printers' || name === 'jobs') app.demoPrinting.state[name] = value;
+    else if (name === 'history' || name === 'billNo') app.demoBilling.state[name] = value;
     else if (name === 'language') app.settings.state.language = value;
     else app.state[name] = value;
   }
   if (hasPendingDialog) app.pending.state.dialog = { ...pendingDialog, target: app.tableOrders.captureTarget(), draftId: ++app.pending.draftSequence };
   if (moveDialog) app.moveWorkflow.state.dialog = { ...moveDialog, target: app.tableOrders.captureTarget(), draftId: ++app.moveWorkflow.draftSequence };
   if (correctionDialog) app.correction.state.dialog = { other: '', ...correctionDialog, target: app.tableOrders.captureTarget(), draftId: ++app.correction.draftSequence };
+  if (billingDialog?.type === 'desktopBill') app.billing.state.desktop = { key: ++app.billing.sequence, target: app.tableOrders.captureTarget(), orderId: app.tableOrders.captureTarget().orderId, busy: false, uncertain: false };
+  else if (billingDialog) app.demoBilling.state.dialog = { ...billingDialog, target: app.tableOrders.captureTarget() };
   return app.state;
 }
 

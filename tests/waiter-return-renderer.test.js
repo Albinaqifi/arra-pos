@@ -34,7 +34,7 @@ test('confirmed send switches identity and shows a print issue; failed send stay
 test('payment uncertainty remains in bill until same selection succeeds, then switches waiter', async () => {
   let calls=[], clear=0, done=false;
   const api={payment:async req=>{calls.push({...req});if(!done){done=true;return {ok:false,uncertain:true,error:'Unknown'};}return {ok:true};},clearWaiter:async()=>{clear++;return {ok:true};},getWaiters:async()=>({ok:true,data:[{id:2,name:'Next',hasPin:false}]}),selectWaiter:async()=>({ok:true}),getMenu:async()=>({ok:true,data:{categories:[],products:[]}}),getTables:async()=>({ok:true,data:[]})};
-  const {app,context}=harness(api); app.state.modal={type:'desktopBill'};
+  const {app,context}=harness(api); app.billing.open();
   const tree=app.render(), billNode=tree.children[0]; assert.equal(billNode.type,context.Bill);
   const bill=new context.Bill(billNode.props); Object.assign(bill.state,{data:{id:7},method:'card',account:'A'});
   await bill.pay(); assert.equal(routeOf(app),'order'); assert.equal(bill.state.uncertain,true); assert.equal(clear,0);
@@ -46,7 +46,7 @@ test('demo send preserves failed print warning and paid completion returns to se
   const {app}=harness(undefined); arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{rounds:0,log:[]}},items:[{id:'x',tableId:1,status:'pending',qty:1,unit:10,route:'kitchen',cxQty:0}],printers:{kitchen:false,bar:true,A:true,B:true}});
   app.sendWorkflow.send(); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/ticket did not print/);
   await app.session.chooseWaiter({name:'Next'},''); assert.equal(routeOf(app),'tables'); assert.equal(app.demoPrinting.failedView().hasFailed,true);
-  arrange(app, {screen: 'order'}); app.tableOrders.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
+  arrange(app, {screen: 'order', tableId:1, modal:{type:'bill',printed:1,method:'Card',account:'A'}}); const before=app.demoBilling.state.history.length; app.demoBilling.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.demoBilling.state.history.length,before+1); app.demoBilling.paid(); assert.equal(app.demoBilling.state.history.length,before+1);
 });
 
 
@@ -56,7 +56,7 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   const {app}=harness(api); const sending=app.sendWorkflow.send(); await tick();
   app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
   const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.correction.open(1); app.pending.openNote(1);
-  assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
+  assert.equal(routeOf(app),'order'); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null); assert.equal(opened,0); assert.equal(clears,0);
   release({ok:true,data:{jobs:[]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1);
 });
@@ -98,7 +98,7 @@ test('an uncertain correction blocks conflicting commands until the exact retry 
   await app.sendWorkflow.send(); await app.pending.incItem(2); app.pending.openNote(2);
   app.moveWorkflow.open(); app.renderVals().openBill(); app.tableOrders.showTables(); await app.session.switchWaiter();
   assert.equal(calls.length, 1); assert.equal(clears, 0); assert.equal(routeOf(app), 'order');
-  assert.equal(app.pending.state.dialog, null); assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.state.modal, null);
+  assert.equal(app.pending.state.dialog, null); assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null);
   assert.equal(app.correction.state.dialog, dialog);
   app.correction.chooseReason('Other'); app.correction.changeQuantity(1); app.correction.dismiss();
   await app.correction.confirm();

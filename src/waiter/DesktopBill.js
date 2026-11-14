@@ -2,7 +2,7 @@ import { desktopBridge } from '../shared/desktop-bridge.js';
 import { waiterTranslate } from '../shared/waiter-ui.js';
 
 export class DesktopBill extends React.Component {
-  constructor(props) { super(props); this.state = { data: null, error: '', busy: false, loading: true, uncertain: false, method: '', account: '' }; }
+  constructor(props) { super(props); this.state = { data: null, error: '', busy: false, loading: true, uncertain: false, method: '', account: '' }; this.disposed = false; this.generation = 0; this.operation = null; this.confirmed = false; this.paymentSelection = null; }
   componentDidMount() {
     this.previousFocus = document.activeElement;
     this.keepFocus = event => { if (this.dialog && !this.dialog.contains(event.target)) this.dialog.focus(); };
@@ -14,6 +14,8 @@ export class DesktopBill extends React.Component {
     if (this.dialog && (!this.dialog.contains(document.activeElement) || document.activeElement?.disabled)) this.dialog.focus();
   }
   componentWillUnmount() {
+    this.disposed = true; this.generation++;
+    if (this.operation) this.end(this.operation);
     document.removeEventListener?.('focusin', this.keepFocus);
     this.previousFocus?.focus?.();
   }
@@ -25,34 +27,93 @@ export class DesktopBill extends React.Component {
     if (event.shiftKey && (document.activeElement === first || document.activeElement === this.dialog)) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
+  current(operation) { return !this.disposed && operation.generation === this.generation && (!this.props.isCurrent || this.props.isCurrent()); }
+  begin(kind) {
+    if (this.disposed || this.operation || this.confirmed) return null;
+    const operation = { generation: this.generation, lease: null, ended: false };
+    this.operation = operation;
+    if (this.props.beginOperation) {
+      operation.lease = this.props.beginOperation(kind);
+      if (!operation.lease) { this.operation = null; return null; }
+    }
+    this.setState({ busy: true });
+    return operation;
+  }
+  end(operation) {
+    if (operation.ended) return;
+    operation.ended = true;
+    if (this.operation === operation) this.operation = null;
+    if (operation.lease) this.props.endOperation(operation.lease);
+    if (this.current(operation) && !this.confirmed) this.setState({ busy: false });
+  }
+  close() {
+    if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain) return;
+    this.props.onClose?.();
+  }
+  selectMethod(method) {
+    if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain) return;
+    if (method === 'cash' || method === 'card') this.setState({ method, account: method === 'card' ? 'A' : '' });
+  }
+  selectAccount(account) {
+    if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain || this.state.method !== 'cash') return;
+    if (account === 'A' || account === 'B') this.setState({ account });
+  }
   async review() {
+    if (this.paymentSelection || this.state.uncertain) return;
+    const operation = this.begin('bill-review'); if (!operation) return;
     this.setState({ loading: true });
-    const r = await desktopBridge.bill({ action: 'review', orderId: this.props.orderId });
-    this.setState(r.ok ? { data: r.data, error: '', loading: false } : { data: null, error: this.serviceError(r.error, 'Could not prepare bill'), loading: false });
+    try {
+      const result = await desktopBridge.bill({ action: 'review', orderId: this.props.orderId });
+      if (this.current(operation)) this.setState(result.ok ? { data: result.data, error: '', loading: false } : { data: null, error: this.serviceError(result.error, 'Could not prepare bill'), loading: false });
+    } catch (_) { if (this.current(operation)) this.setState({ data: null, error: 'Could not prepare bill', loading: false }); }
+    finally { this.end(operation); }
   }
   async generate() {
-    if (this.state.busy || !this.state.data) return;
-    this.setState({ busy: true });
-    const r = await desktopBridge.bill({ action: 'generate', orderId: this.props.orderId, fingerprint: this.state.data.fingerprint });
-    this.setState(r.ok ? { data: r.data, error: '', busy: false } : { error: this.serviceError(r.error, 'Could not prepare bill'), busy: false });
+    if (!this.state.data || this.paymentSelection || this.state.uncertain) return;
+    const request = { action: 'generate', orderId: this.props.orderId, fingerprint: this.state.data.fingerprint };
+    const operation = this.begin('bill-generate'); if (!operation) return;
+    try {
+      const result = await desktopBridge.bill(request);
+      if (this.current(operation)) this.setState(result.ok ? { data: result.data, error: '' } : { error: this.serviceError(result.error, 'Could not prepare bill') });
+    } catch (_) { if (this.current(operation)) this.setState({ error: 'Could not prepare bill' }); }
+    finally { this.end(operation); }
   }
   async pay() {
-    if (this.state.busy || !this.state.data?.id || !this.state.method || !this.state.account) return;
-    this.setState({ busy: true, error: '' });
-    const r = await desktopBridge.payment({ billId: this.state.data.id, method: this.state.method, account: this.state.account });
-    if (r.ok) this.props.onPaid();
-    else this.setState({ busy: false, uncertain: this.state.uncertain || !!r.uncertain, error: this.serviceError(r.error, 'Could not record payment. Retry the same selection.') });
+    if (!this.state.data?.id || (!this.paymentSelection && (!this.state.method || !this.state.account))) return;
+    const selection = this.paymentSelection || Object.freeze({ billId: this.state.data.id, method: this.state.method, account: this.state.method === 'card' ? 'A' : this.state.account });
+    const operation = this.begin('payment'); if (!operation) return;
+    this.setState({ error: '' });
+    try {
+      let result;
+      try { result = await desktopBridge.payment(selection); }
+      catch (_) { result = { ok: false, uncertain: true, error: 'Payment result unknown. Retry the same selection.' }; }
+      if (!this.current(operation)) return;
+      if (result?.ok) {
+        this.confirmed = true; this.paymentSelection = null;
+        this.props.onConfirmed?.();
+        this.props.onUncertain?.(false);
+        this.setState({ uncertain: false });
+        this.end(operation); // Release the order lease before the staff handoff.
+        await this.props.onPaid?.();
+      } else {
+        const uncertain = !!this.paymentSelection || this.state.uncertain || !!result?.uncertain;
+        this.paymentSelection = uncertain ? selection : null;
+        this.props.onUncertain?.(uncertain);
+        this.setState({ uncertain, error: this.serviceError(result?.error, 'Could not record payment. Retry the same selection.') });
+      }
+    } finally { this.end(operation); }
   }
   serviceError(error, fallback) {
     const known = ['Invalid request', 'Access denied', 'Send or remove new items before billing', 'No eligible items', 'Order changed; review the bill again', 'Bill already generated', 'Could not prepare bill', 'Bill unavailable', 'Bill already paid with a different selection', 'Could not record payment. Retry the same selection.', 'Payment result unknown. Retry the same selection.'];
     return known.includes(error) ? error : fallback;
   }
   async printTestBill() {
-    if (this.state.busy || !this.state.data?.id || !desktopBridge.testPrinting) return;
-    this.printToken = this.printToken || crypto.randomUUID();
-    this.setState({busy:true,error:''});
-    const r = await desktopBridge.testPrinting({action:'bill',billId:this.state.data.id,requestId:this.printToken});
-    this.setState({busy:false, printNotice:r.ok ? waiterTranslate(this.props.language, "waiter.Test print submitted. Check the printer and paper; queue acceptance is not proof of printing. Use the test jobs list to retry.") : waiterTranslate(this.props.language, "waiter.Test print status unavailable. Check paper and the test jobs list before retrying.")});
+    if (!this.state.data?.id || !desktopBridge.testPrinting || !this.props.printing) return;
+    const billId = this.state.data.id, operation = this.begin('bill-print'); if (!operation) return;
+    try {
+      const result = await this.props.printing.submitTestBill(billId);
+      if (this.current(operation)) this.setState({ error: '', printNotice: waiterTranslate(this.props.language, result.ok ? 'waiter.Test print submitted. Check the printer and paper; queue acceptance is not proof of printing. Use the test jobs list to retry.' : 'waiter.Test print status unavailable. Check paper and the test jobs list before retrying.') });
+    } finally { this.end(operation); }
   }
   render() {
     const h = React.createElement, d = this.state.data;
@@ -77,12 +138,12 @@ export class DesktopBill extends React.Component {
             this.state.printNotice && h('p',{role:'status',className:'bill-status'},this.state.printNotice),
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),
             h('div', { className: 'bill-choices' },
-              h('button', { 'aria-pressed': this.state.method === 'cash', disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ method: 'cash', account: '' }) }, t("Cash")),
-              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ method: 'card', account: 'A' }) }, t("Card (Account A)"))),
-            this.state.method === 'cash' && h('div', { className: 'bill-choices' }, h('button', { 'aria-pressed': this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ account: 'A' }) }, t("Account A")), h('button', { 'aria-pressed': this.state.account === 'B', disabled: this.state.busy || this.state.uncertain, onClick: () => this.setState({ account: 'B' }) }, t("Account B"))),
+              h('button', { 'aria-pressed': this.state.method === 'cash', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash') }, t("Cash")),
+              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card (Account A)"))),
+            this.state.method === 'cash' && h('div', { className: 'bill-choices' }, h('button', { 'aria-pressed': this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('A') }, t("Account A")), h('button', { 'aria-pressed': this.state.account === 'B', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('B') }, t("Account B"))),
             this.state.account && h('p', { className: 'bill-selection' }, t('Selected: {method} · Account {account}', {method:t(this.state.method === 'cash' ? 'Cash' : 'Card'), account:this.state.account})))),
         h('footer', { className: 'bill-actions' },
-          h('button', { onClick: this.props.onClose, disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),
+          h('button', { onClick: () => this.close(), disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),
           this.state.error && !this.state.uncertain && h('button', { onClick: () => this.review(), disabled: this.state.busy }, t("Review again")),
           !d?.id && d && h('button', { className: 'bill-primary', onClick: () => this.generate(), disabled: this.state.busy }, t("Generate bill")),
           d?.id && this.state.account && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t("Record full test payment and close table")))));
