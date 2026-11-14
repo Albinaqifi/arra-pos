@@ -79,4 +79,4 @@ The S-052 local recovery exercise worked and no longer blocks local verification
 | S-071 | Done | Independent review and focused tests passed; owner reports desktop, language, restart and offline checks work; PR #96 merged as `cce3cee`. |
 | S-072 | Done | Independent review and focused tests passed; owner reports desktop and offline checks worked; PR #98 merged as `5875b4d`. |
 
-| S-073 | In progress | Owner authorized the complete incremental renderer-ownership refactor. Baseline: 279 tests passed and build passed; implementation/review in progress. |
+| S-073 | In progress | All 12 renderer-ownership increments implemented and independently reviewed/tested; 345 full-suite checks and build passed. Sample Electron offline/restart and browser-demo flows passed. Awaiting PR merge; physical printing remains unverified. |
