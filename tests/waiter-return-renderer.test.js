@@ -46,7 +46,7 @@ test('demo send preserves failed print warning and paid completion returns to se
   const {app}=harness(undefined); arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{rounds:0,log:[]}},items:[{id:'x',tableId:1,status:'pending',qty:1,unit:10,route:'kitchen',cxQty:0}],printers:{kitchen:false,bar:true,A:true,B:true}});
   app.send(); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/ticket did not print/);
   await app.session.chooseWaiter({name:'Next'},''); assert.equal(routeOf(app),'tables'); assert.equal(app.renderVals().hasFailed,true);
-  arrange(app, {screen: 'order'}); app.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
+  arrange(app, {screen: 'order'}); app.tableOrders.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
 });
 
 
@@ -54,7 +54,7 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   let release, opened=0, clears=0;
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
   const {app}=harness(api); const sending=app.send(); await tick();
-  app.goTables(); await app.openTable(2); await app.session.switchWaiter();
+  app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
   const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.openNote(1);
   assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
   release({ok:true,data:{jobs:[]}}); await sending;

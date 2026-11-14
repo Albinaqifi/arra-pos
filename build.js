@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const esbuild = require('esbuild');
+require('./scripts/check-renderer-architecture.cjs').checkArchitecture();
 
 const root = __dirname;
 const output = path.join(root, 'dist');

@@ -12,7 +12,7 @@ test('waiter view follows selected language without changing restaurant data', (
   arrange(app, {screen:'order', tableId:1, orders:{1:{openedAt:Date.now(),log:[]}}, items:[{id:1,tableId:1,pid:'p',name:'Pite shtëpie',qty:2,unit:100,status:'pending',cxQty:0}],language:'en'});
   let v=app.renderVals(); assert.equal(v.pendingCount,'2 items'); assert.equal(v.pending[0].name,'Pite shtëpie'); assert.equal(v.sendLabel,'Send order · 2');
   app.settings.state.language='sq'; v=app.renderVals(); assert.equal(v.pendingCount,'2 artikuj'); assert.equal(v.pending[0].name,'Pite shtëpie'); assert.equal(v.sendLabel,'Dërgo porosinë · 2'); assert.equal(v.pending[0].incAria,'Një më shumë Pite shtëpie');
-  assert.equal(app.state.items[0].name,'Pite shtëpie');
+  assert.equal(app.tableOrders.state.items[0].name,'Pite shtëpie');
 });
 test('tables and order screens render translated labels and note chips toggle in both languages', () => {
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }

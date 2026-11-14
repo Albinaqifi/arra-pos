@@ -1,0 +1,44 @@
+{
+  "phase": "migration",
+  "coordinator": {
+    "sha256": "e2f34e897bf9e8a0a8aebdded0368c14481fa3ea3ed31adc28cdbff5fa3775e7",
+    "methods": [
+      "constructor",
+      "componentDidMount",
+      "clearDesktopData",
+      "loadDesktopData",
+      "componentWillUnmount",
+      "seed",
+      "fmt",
+      "who",
+      "mut",
+      "toast",
+      "log",
+      "rlabel",
+      "togglePrinter",
+      "changeDesktopItems",
+      "addProduct",
+      "modAdd",
+      "incItem",
+      "decItem",
+      "removeItem",
+      "openNote",
+      "saveNote",
+      "send",
+      "retryJob",
+      "backupJob",
+      "openCancel",
+      "confirmCancel",
+      "confirmMoveTable",
+      "bSet",
+      "printBill",
+      "paid",
+      "renderVals",
+      "render"
+    ]
+  },
+  "legacySharedEdges": [
+    "src/shared/waiter-ui.js -> src/admin/i18n.js"
+  ],
+  "baseRevision": "472334b"
+}

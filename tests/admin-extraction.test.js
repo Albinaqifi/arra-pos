@@ -87,6 +87,6 @@ test('employee mutation rechecks access and removes revoked or invalidated sessi
     assert.equal(app.session.state.adminAccess,false); assert.equal(routeOf(app),result.signedIn?'tables':'login');
     await new Promise(setImmediate);
     assert.equal(menuLoads,result.signedIn?1:0); assert.equal(tableLoads,result.signedIn?1:0);
-    if (result.signedIn) { assert.equal(app.state.tableLoad,'ready'); assert.equal(app.state.sections[0].ids[0],42); }
+    if (result.signedIn) { assert.equal(app.tableOrders.state.tableLoad,'ready'); assert.equal(app.tableOrders.state.sections[0].ids[0],42); }
   }
 });

@@ -4,6 +4,7 @@
   "private": true,
   "description": "Self-contained React demo of the Arra POS waiter design",
   "scripts": {
+    "check:architecture": "node scripts/check-renderer-architecture.cjs",
     "start": "node server.js",
     "desktop": "electron .",
     "test": "node --test tests/*.test.js",

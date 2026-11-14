@@ -18,6 +18,8 @@ export * from './src/session/SessionModel.js';
 export * from './src/session/AccountEntry.js';
 export * from './src/settings/LanguageSettings.js';
 export * from './src/admin/AdminWorkspace.js';
+export * from './src/catalog/CatalogModel.js';
+export * from './src/orders/TableOrderModel.js';
 export * from './src/printing/PrintingSession.js';
 export * from './src/printing/PrintJobs.js';
 export * from './src/printing/TestPrintJobs.js';

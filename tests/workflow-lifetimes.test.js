@@ -27,7 +27,7 @@ test('changing language preserves unresolved correction and move requests', asyn
     await app.settings.changeLanguage('sq');
     assert.equal(app.settings.state.language, 'sq');
     assert.equal(routeOf(app), 'order');
-    assert.equal(app.state.tableId, 1);
+    assert.equal(app.tableOrders.state.tableId, 1);
     assert.equal(JSON.stringify({ modal: app.state.modal, move: app._moveRequests, send: app._sendRequests }), before);
     app.renderVals().closeModal();
     assert.ok(app.state.modal, 'an unresolved operation stays open after language changes');

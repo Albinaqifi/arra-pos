@@ -30,9 +30,9 @@ test('sent item correction requires review and tells preparation in both languag
     nodes.find(x=>x.type==='button' && x.children[0]===reason).props.onClick();
     v=app.renderVals(); nodes=visit(ctx.Correction({v,modal:app.state.modal}));
     const reviewButton=nodes.find(x=>x.props.className==='correction-primary'); assert.equal(reviewButton.children[0],review); reviewButton.props.onClick();
-    assert.equal(app.state.items[0].cxQty,0);
+    assert.equal(app.tableOrders.state.items[0].cxQty,0);
     nodes=visit(ctx.Correction({v:app.renderVals(),modal:app.state.modal}));
     const confirmButton=nodes.find(x=>x.props.className==='correction-primary'); assert.equal(confirmButton.children[0],confirm); await confirmButton.props.onClick();
-    assert.equal(app.state.items[0].cxQty,1); assert.equal(app.state.items[1].cxQty,0); assert.equal(app.state.toast.msg,saved);
+    assert.equal(app.tableOrders.state.items[0].cxQty,1); assert.equal(app.tableOrders.state.items[1].cxQty,0); assert.equal(app.state.toast.msg,saved);
   }
 });

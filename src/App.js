@@ -14,28 +14,42 @@ import { renderAccountEntry } from './session/AccountEntry.js';
 import { demoStaff } from './session/demo-staff.js';
 import { LanguageSettings } from './settings/LanguageSettings.js';
 import { AdminWorkspace } from './admin/AdminWorkspace.js';
+import { CatalogModel } from './catalog/CatalogModel.js';
+import { TableOrderModel } from './orders/TableOrderModel.js';
+import { demoCatalog } from './demo/catalog.js';
+import { demoOrders } from './demo/orders.js';
+import { demoSequence } from './demo/sequence.js';
 
 export class WaiterDemo extends React.Component {
   constructor(...a) {
-    super(...a); this._dataGeneration = 0; this.printing = new PrintingSession({ bridge: desktopBridge }); this.state = this.seed();
+    super(...a);
+    this.nextDemoId = demoSequence();
+    this.printing = new PrintingSession({ bridge: desktopBridge });
+    this.state = this.seed();
     this.settings = new LanguageSettings({ bridge: desktopBridge });
+    const catalog = desktopBridge ? undefined : demoCatalog();
+    this.catalog = new CatalogModel({ bridge: desktopBridge, demoCatalog: catalog });
+    this.tableOrders = new TableOrderModel({
+      bridge: desktopBridge, demoOrders: desktopBridge ? undefined : demoOrders(catalog, this.nextDemoId), nextId: this.nextDemoId,
+      canNavigate: () => !this._handoffInProgress && !this.state.modal?.unresolved,
+      notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
+      getLanguage: () => this.settings.state.language,
+      onOrderOpened: () => this.catalog.clearSearch(),
+      onDismiss: () => this.setState({ modal: null }),
+    });
     this.administration = new AdminWorkspace({ signOut: () => this.session.signOut(), refreshAccess: generation => this.session.refreshAdminAccess(generation) });
     this.session = new SessionModel({
       bridge: desktopBridge,
-      canLeave: ({ afterAction }) => !this._opening && !this._itemBusy && (!this._handoffInProgress || afterAction) && !this.state.modal?.unresolved && this.administration.canLeave(),
+      canLeave: ({ afterAction }) => !this.tableOrders.opening && !this.tableOrders.writeBusy && (!this._handoffInProgress || afterAction) && !this.state.modal?.unresolved && this.administration.canLeave(),
       clearProtectedData: () => this.clearDesktopData(),
-      dismissSelectedOrder: () => { this._dataGeneration++; this.setState({ modal: null, tableId: null, screen: 'tables' }); },
+      dismissSelectedOrder: () => this.tableOrders.dismissSelectedOrder(),
       loadProtectedData: () => this.loadDesktopData(),
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       getLanguage: () => this.settings.state.language,
       getDemoStaff: demoStaff,
     });
     const refresh = () => { if (this._mounted) this.forceUpdate?.(); };
-    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh)];
-    if (desktopBridge) {
-      this._menu = { ...this._menu, cats: [], catById: {}, products: [], byId: {} };
-      this.state.menuLoad = 'loading';
-    }
+    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh)];
   }
   componentDidMount() {
     this._mounted = true;
@@ -43,182 +57,31 @@ export class WaiterDemo extends React.Component {
     this._tick = setInterval(() => this.forceUpdate(), 20000);
   }
   clearDesktopData() {
-    this._dataGeneration++;
-    this._menu = { ...this._menu, cats: [], catById: {}, products: [], byId: {}, G: {} };
-    this.setState({ sections: [], orders: {}, items: [], tableId: null, modal: null, menuLoad: 'loading', tableLoad: 'loading' });
+    this.catalog.clearProtectedData();
+    this.tableOrders.clearProtectedData();
+    this.setState({ modal: null });
   }
-  loadDesktopData() {
-    const generation = ++this._dataGeneration;
-    if (desktopBridge) {
-      this.setState({ menuLoad: 'loading', tableLoad: 'loading' });
-      desktopBridge.getMenu().then(result => {
-        if (!this._mounted || generation !== this._dataGeneration) return;
-        if (!result.ok) { this._menu = { ...this._menu, cats: [], catById: {}, products: [], byId: {}, G: {} }; this.setState({ menuLoad: 'error' }); return; }
-        const categories = result.data.categories;
-        const cats = categories.filter(c => !c.parentId).map(c => {
-          const children = categories.filter(child => child.parentId === c.id);
-          const hasDirectProducts = result.data.products.some(p => p.categoryId === c.id);
-          const subs = [...(hasDirectProducts || !children.length ? [[c.id, c.name]] : []), ...children.map(child => [child.id, child.name])];
-          return { id: c.id, label: c.name, color: '#1D4ED8', tint: '#EAF1FF', route: c.id === 'drinks' ? 'bar' : 'kitchen', subs };
-        });
-        const catById = Object.fromEntries(cats.map(c => [c.id, c]));
-        const categoryById = Object.fromEntries(categories.map(c => [c.id, c]));
-        const groups = result.data.groups || [], options = result.data.options || [];
-        const G = Object.fromEntries(groups.map(g => [g.id, { label: g.name, req: !!g.required, opts: options.filter(o => o.groupId === g.id).map(o => [o.name, o.adjustment, o.id]) }]));
-        const products = result.data.products.map(p => ({ id: p.id, name: p.name, price: p.price,
-          cat: categoryById[p.categoryId].parentId || p.categoryId, sub: p.categoryId, groups: groups.filter(g => g.productId === p.id).map(g => g.id), route: catById[categoryById[p.categoryId].parentId || p.categoryId].route }));
-        this._menu = { ...this._menu, cats, catById, products, G,
-          byId: Object.fromEntries(products.map(p => [p.id, p])) };
-        this.setState({ menuLoad: 'ready', cat: cats[0]?.id || '', sub: cats[0]?.subs[0]?.[0] || '' });
-      }).catch(() => { if (this._mounted && generation === this._dataGeneration) { this._menu = { ...this._menu, cats: [], catById: {}, products: [], byId: {}, G: {} }; this.setState({ menuLoad: 'error' }); } });
-      desktopBridge.getTables().then(result => {
-        if (!this._mounted || generation !== this._dataGeneration) return;
-        if (!result.ok) { this.setState({ tableLoad: 'error', sections: [], orders: {}, items: [], tableId: null, modal: null }); return; }
-        const sections = [];
-        result.data.forEach(table => {
-          let section = sections.find(s => s.label === table.area);
-          if (!section) { section = { label: table.area, ids: [] }; sections.push(section); }
-          section.ids.push(table.id);
-        });
-        const orders = {};
-        result.data.forEach(table => {
-          if (table.orderId !== null) orders[table.id] = { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [], untouched: table.untouched === true };
-        });
-        this.setState({ sections, orders, tableLoad: 'ready' });
-      }).catch(() => { if (this._mounted && generation === this._dataGeneration) this.setState({ tableLoad: 'error', sections: [], orders: {}, items: [], tableId: null, modal: null }); });
-    }
-  }
+  loadDesktopData() { return Promise.all([this.catalog.load(), this.tableOrders.loadTables()]); }
   componentWillUnmount() {
     this._mounted = false;
     this._subscriptions.forEach(unsubscribe => unsubscribe());
-    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose();
+    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose();
     clearInterval(this._tick); clearTimeout(this._tt);
   }
 
-  menu() {
-    if (this._menu) return this._menu;
-    const G = {
-      side: { label: 'Side', req: true, opts: [['Fries', 0], ['Rice', 0], ['Grilled vegetables', 40], ['Mashed potatoes', 0], ['No side', 0]] },
-      cook: { label: 'Cooking', req: true, opts: [['Rare', 0], ['Medium rare', 0], ['Medium', 0], ['Well done', 0]] },
-      portion: { label: 'Portion', req: true, opts: [['5 pieces', 0], ['10 pieces', 120]] },
-      milk: { label: 'Milk', req: false, opts: [['Regular milk', 0], ['Lactose-free', 0], ['Oat milk', 30]] }
-    };
-    const cats = [
-      { id: 'food', label: 'Food', color: '#C2410C', tint: '#FFF1E6', route: 'kitchen', subs: [['grill', 'Grill'], ['salads', 'Salads'], ['pizza', 'Pizza & pasta'], ['starters', 'Starters']] },
-      { id: 'drinks', label: 'Drinks', color: '#1D4ED8', tint: '#EAF1FF', route: 'bar', subs: [['coffee', 'Coffee & tea'], ['soft', 'Soft drinks'], ['beer', 'Beer'], ['wine', 'Wine']] },
-      { id: 'desserts', label: 'Desserts', color: '#BE185D', tint: '#FDECF4', route: 'kitchen', subs: [['cakes', 'Cakes'], ['cold', 'Ice cream & fruit']] }
-    ];
-    const P = [
-      ['qebapa', 'grill', 'Qebapa', 220, ['portion', 'side']],
-      ['pljesk', 'grill', 'Pljeskavica', 280, ['side']],
-      ['steak', 'grill', 'Beef steak', 890, ['cook', 'side']],
-      ['chicken', 'grill', 'Chicken fillet', 360, ['side']],
-      ['mixed', 'grill', 'Mixed grill for 2', 1150, ['side']],
-      ['sujuk', 'grill', 'Sujuk', 260, ['side']],
-      ['shopska', 'salads', 'Shopska salad', 180, []],
-      ['greek', 'salads', 'Greek salad', 220, []],
-      ['caesar', 'salads', 'Caesar salad', 320, []],
-      ['season', 'salads', 'Seasonal salad', 160, []],
-      ['marg', 'pizza', 'Pizza Margherita', 320, []],
-      ['capri', 'pizza', 'Pizza Capricciosa', 390, []],
-      ['arrapz', 'pizza', 'Pizza Arra', 450, []],
-      ['carbo', 'pizza', 'Pasta Carbonara', 380, []],
-      ['bolo', 'pizza', 'Pasta Bolognese', 360, []],
-      ['fries', 'starters', 'Fries', 120, []],
-      ['ajvar', 'starters', 'Ajvar & white cheese', 220, []],
-      ['soup', 'starters', 'Soup of the day', 150, []],
-      ['peppers', 'starters', 'Grilled peppers', 160, []],
-      ['bread', 'starters', 'Bread basket', 60, []],
-      ['espresso', 'coffee', 'Espresso', 70, []],
-      ['macch', 'coffee', 'Macchiato', 80, ['milk']],
-      ['capp', 'coffee', 'Cappuccino', 100, ['milk']],
-      ['turk', 'coffee', 'Turkish coffee', 70, []],
-      ['tea', 'coffee', 'Tea', 70, []],
-      ['cola', 'soft', 'Coca-Cola', 100, []],
-      ['fanta', 'soft', 'Fanta', 100, []],
-      ['water', 'soft', 'Still water', 60, []],
-      ['spark', 'soft', 'Sparkling water', 80, []],
-      ['orange', 'soft', 'Fresh orange juice', 150, []],
-      ['lemon', 'soft', 'Lemonade', 140, []],
-      ['skopsko', 'beer', 'Skopsko', 120, []],
-      ['heineken', 'beer', 'Heineken', 150, []],
-      ['dab', 'beer', 'Zlaten Dab', 120, []],
-      ['red', 'wine', 'House red (glass)', 150, []],
-      ['white', 'wine', 'House white (glass)', 150, []],
-      ['vranec', 'wine', 'Vranec (bottle)', 1200, []],
-      ['baklava', 'cakes', 'Baklava', 150, []],
-      ['trilece', 'cakes', 'Trileçe', 180, []],
-      ['choc', 'cakes', 'Chocolate cake', 190, []],
-      ['icecream', 'cold', 'Ice cream (3 scoops)', 160, []],
-      ['fruit', 'cold', 'Fruit salad', 200, []]
-    ];
-    const subCat = {};
-    cats.forEach(c => c.subs.forEach(sb => { subCat[sb[0]] = c; }));
-    const products = P.map(([id, sub, name, price, groups]) => ({ id, sub, name, price, groups, cat: subCat[sub].id, route: subCat[sub].route }));
-    const byId = {}; products.forEach(p => { byId[p.id] = p; });
-    const catById = {}; cats.forEach(c => { catById[c.id] = c; });
-    const range = (a, b) => { const r = []; for (let i = a; i <= b; i++) r.push(i); return r; };
-    const sections = [{ label: 'Inside', ids: range(1, 10) }, { label: 'Terrace', ids: range(11, 16) }];
-    const allIds = range(1, 16);
-    this._menu = { G, cats, catById, products, byId, sections, allIds };
-    return this._menu;
-  }
 
   seed() {
     const now = Date.now(), m = 60000;
-    const st = {
-      screen: 'tables',
-      tableId: null, cat: 'food', sub: 'grill', search: '', tab: 'order', modal: null, toast: null,
-      printers: { kitchen: true, bar: true, A: true, B: true },
-      orders: {}, items: [], jobs: [], history: [], seq: 100, billNo: 1045,
-      sections: desktopBridge ? [] : this.menu().sections, tableLoad: desktopBridge ? 'loading' : 'ready'
-    };
-    const M = this.menu();
-    const add = (tid, pid, qty, mods, delta, note, round, ago, who) => {
-      const p = M.byId[pid];
-      st.items.push({ id: 'i' + (st.seq++), tableId: tid, pid, name: p.name, unit: p.price + delta, qty, mods: mods || '', note: note || '', route: p.route, status: 'sent', round, sentAt: now - ago * m, sentBy: who, cxQty: 0, cx: [] });
-    };
-    const open = (tid, who, ago, rounds) => { st.orders[tid] = { openedAt: now - ago * m, openedBy: who, rounds, log: [{ t: now - ago * m, who, text: 'Opened table' }] }; };
-    const lg = (tid, ago, who, text) => st.orders[tid].log.push({ t: now - ago * m, who, text });
-
-    open(3, 'Besnik', 38, 2);
-    add(3, 'qebapa', 2, '10 pieces · Fries', 120, '', 1, 35, 'Besnik');
-    add(3, 'shopska', 1, '', 0, '', 1, 35, 'Besnik');
-    add(3, 'skopsko', 2, '', 0, '', 1, 35, 'Besnik');
-    add(3, 'cola', 1, '', 0, '', 1, 35, 'Besnik');
-    lg(3, 35, 'Besnik', 'Sent round 1: Kitchen got 3 items, Bar got 3 items');
-    add(3, 'ajvar', 1, '', 0, '', 2, 12, 'Besnik');
-    lg(3, 12, 'Besnik', 'Sent round 2: Kitchen got 1 item');
-
-    open(7, 'Arta', 22, 1);
-    add(7, 'steak', 1, 'Medium rare · Grilled vegetables', 40, 'Sauce on the side', 1, 20, 'Arta');
-    add(7, 'caesar', 1, '', 0, '', 1, 20, 'Arta');
-    add(7, 'red', 2, '', 0, '', 1, 20, 'Arta');
-    lg(7, 20, 'Arta', 'Sent round 1: Kitchen got 2 items, Bar got 2 items');
-
-    open(9, 'Marko', 55, 1);
-    add(9, 'arrapz', 1, '', 0, '', 1, 52, 'Marko');
-    add(9, 'marg', 1, '', 0, '', 1, 52, 'Marko');
-    add(9, 'lemon', 2, '', 0, '', 1, 52, 'Marko');
-    add(9, 'spark', 1, '', 0, '', 1, 52, 'Marko');
-    lg(9, 52, 'Marko', 'Sent round 1: Kitchen got 2 items, Bar got 3 items');
-
-    open(12, 'Dita', 6, 1);
-    add(12, 'turk', 2, '', 0, '', 1, 5, 'Dita');
-    add(12, 'macch', 1, 'Oat milk', 30, '', 1, 5, 'Dita');
-    lg(12, 5, 'Dita', 'Sent round 1: Bar got 3 items');
-
+    const st = { modal: null, toast: null, printers: { kitchen: true, bar: true, A: true, B: true }, jobs: [], history: [], billNo: 1045 };
     st.history = [
       { no: 1044, table: 'Table 1', closedAt: now - 45 * m, waiter: 'Marko', method: 'Card', account: 'A', total: 2310, count: 9 },
       { no: 1043, table: 'Table 14', closedAt: now - 80 * m, waiter: 'Dita', method: 'Cash', account: 'B', total: 620, count: 4 },
       { no: 1042, table: 'Table 6', closedAt: now - 110 * m, waiter: 'Arta', method: 'Cash', account: 'A', total: 940, count: 5 },
       { no: 1041, table: 'Table 2', closedAt: now - 150 * m, waiter: 'Besnik', method: 'Card', account: 'A', total: 1860, count: 7 }
     ];
-    if (desktopBridge) { st.orders = {}; st.items = []; st.history = []; }
+    if (desktopBridge) st.history = [];
     return st;
   }
-
-  // ---------- helpers ----------
   fmt(v) { return Math.round(v).toLocaleString('en-US') + ' den'; }
   who() { return this.session.state.waiter?.name || ''; }
   mut(fn, callback) { this.setState(s => { const n = JSON.parse(JSON.stringify(s)); fn(n); return n; }, callback); }
@@ -227,47 +90,12 @@ export class WaiterDemo extends React.Component {
     clearTimeout(this._tt);
     this._tt = setTimeout(() => this.setState({ toast: null }), 4200);
   }
-  log(n, tid, text) { const o = n.orders[tid]; if (o) o.log.push({ t: Date.now(), who: this.who(n), text }); }
-  freeIfEmpty(n, tid) { if (desktopBridge) return; const o = n.orders[tid]; if (o && o.rounds === 0 && !n.items.some(x => x.tableId === tid)) delete n.orders[tid]; }
+  log(tableId, text) { this.tableOrders.appendActivity(tableId, text, this.who()); }
+
   rlabel(k) { return k === 'bar' ? 'Bar' : 'Kitchen'; }
 
-  goTables() {
-    if (this._itemBusy || this._handoffInProgress || this.state.modal?.unresolved) return;
-    this.mut(n => {
-      if (n.screen === 'order') {
-        const p = n.items.filter(i => i.tableId === n.tableId && i.status === 'pending').reduce((a, i) => a + i.qty, 0);
-        if (p > 0) this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.' + (p === 1 ? 'Table {id} still has {count} item not sent to the kitchen or bar.' : 'Table {id} still has {count} items not sent to the kitchen or bar.'), {id:n.tableId, count:p}), 'warn');
-      }
-      n.screen = 'tables'; n.modal = null;
-    });
-  }
-  async openTable(id) {
-    if (desktopBridge) {
-      if (this._opening || this._itemBusy || this._handoffInProgress) return;
-      this._opening = true;
-      try {
-        const result = await desktopBridge.openOrder(id);
-        if (!this._mounted) return;
-        if (!result.ok) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not open table. Try again."), 'err')); return; }
-        this.mut(n => {
-          const old = n.orders[id];
-          n.orders[id] = { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0,
-            log: old?.log || [], untouched: result.data.untouched === true, itemsLoaded: old?.id === result.data.id && !!old.itemsLoaded };
-        });
-        const items = await desktopBridge.orderItems('list', result.data.id);
-        if (!this._mounted) return;
-        if (!items.ok) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not load order items. Try again."), 'err')); return; }
-        this.mut(n => {
-          n.orders[id].itemsLoaded = true;
-          this.replaceDesktopItems(n, id, items.data.items);
-          n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = '';
-        });
-      } catch (_) { if (this._mounted) this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not open table. Try again."), 'err')); }
-      finally { this._opening = false; }
-      return;
-    }
-    this.mut(n => { n.tableId = id; n.screen = 'order'; n.tab = 'order'; n.search = ''; });
-  }
+
+
   togglePrinter(k) {
     const names = { kitchen: 'Kitchen', bar: 'Bar', A: 'Bill A', B: 'Bill B' };
     this.mut(n => {
@@ -277,58 +105,38 @@ export class WaiterDemo extends React.Component {
   }
 
   // ---------- order entry ----------
-  replaceDesktopItems(n, tableId, items) {
-    n.items = n.items.filter(i => i.tableId !== tableId).concat(items.map(i => ({
-      id: i.id, tableId, pid: i.productId, name: i.name, unit: i.unitPrice, qty: i.quantity,
-      mods: (i.modifiers || []).map(m => m.groupName + ': ' + m.optionName + ' (' + (m.adjustment >= 0 ? '+' : '') + m.adjustment + ')').join(' · '), note: i.note, status: i.status || 'pending', round: i.round || 0, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, cxQty: i.correctedQuantity || 0, cx: (i.corrections || []).map(c => ({ qty: c.quantity, reason: c.reason, who: c.actor, t: c.occurredAt }))
-    })));
-  }
+
   async changeDesktopItems(action, value) {
-    if (this._itemBusy || (this._handoffInProgress && action !== 'send')) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Please wait for the order to save."), 'warn')); return; }
-    const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
-    if (!orderId) return;
-    this._itemBusy = true;
+    if (this.tableOrders.writeBusy || (this._handoffInProgress && action !== 'send')) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Please wait for the order to save."), 'warn')); return; }
+    const target = this.tableOrders.captureTarget();
+    const lease = this.tableOrders.acquireWrite(action, target);
+    if (!lease) return;
     // A lost response may hide a committed add; remain conservative until refreshed.
-    if (action === 'add') this.mut(n => { n.orders[tableId].untouched = false; });
+    if (action === 'add') this.tableOrders.markAddAttempted(lease);
     try {
-      const result = await desktopBridge.orderItems(action, orderId, value);
-      if (!this._mounted) return;
+      const result = await desktopBridge.orderItems(action, lease.orderId, value);
+      if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
       if (!result.ok) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not save order items. Try again."), 'err')); return false; }
-      this.mut(n => { this.replaceDesktopItems(n, tableId, result.data.items); if (action === 'add') n.orders[tableId].untouched = false; });
-      if ((action === 'remove' || action === 'decrement') && result.data.items.length === 0) await this.refreshDesktopAvailability(tableId, orderId);
+      if (!this.tableOrders.applyConfirmedItems(lease, result.data.items)) return;
+      if (action === 'add') this.tableOrders.markAddAttempted(lease);
+      if ((action === 'remove' || action === 'decrement') && result.data.items.length === 0) await this.tableOrders.refreshAvailability(lease);
       return result.data;
-    } catch (_) { if (this._mounted) this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not save order items. Try again."), 'err')); }
-    finally { this._itemBusy = false; }
-  }
-  async refreshDesktopAvailability(tableId, orderId) {
-    let tables;
-    try { tables = await desktopBridge.getTables(); } catch (_) { tables = null; }
-    if (!this._mounted) return;
-    const table = tables?.ok && Array.isArray(tables.data) ? tables.data.find(t => t.id === tableId && t.orderId === orderId) : null;
-    if (table) this.mut(n => { if (n.orders[tableId]?.id === orderId) n.orders[tableId].untouched = table.untouched === true; });
+    } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Could not save order items. Try again."), 'err')); }
+    finally { this.tableOrders.releaseWrite(lease); }
   }
   addProduct(pid) {
     if (this._handoffInProgress) return;
-    if (desktopBridge && !this.menu().byId[pid]?.groups.length) return this.changeDesktopItems('add', pid);
-    this.mut(n => {
-      const p = this.menu().byId[pid];
-      if (!p) return;
-      if (p.groups.length) n.modal = { type: 'mods', pid, sel: {} };
-      else this.addItem(n, p, '', 0);
-    });
+    const p = this.catalog.state.byId[pid];
+    if (!p) return;
+    if (desktopBridge && !p.groups.length) return this.changeDesktopItems('add', pid);
+    if (p.groups.length) this.setState({ modal: { type: 'mods', pid, sel: {} } });
+    else this.tableOrders.appendPending(this.tableOrders.state.tableId, p, '', 0, this.who());
   }
-  addItem(n, p, mods, delta) {
-    const tid = n.tableId;
-    if (!n.orders[tid]) { n.orders[tid] = { openedAt: Date.now(), openedBy: this.who(n), rounds: 0, log: [] }; this.log(n, tid, 'Opened table'); }
-    const same = n.items.find(i => i.tableId === tid && i.status === 'pending' && i.pid === p.id && i.mods === mods && !i.note);
-    if (same) same.qty++;
-    else n.items.push({ id: 'i' + (n.seq++), tableId: tid, pid: p.id, name: p.name, unit: p.price + delta, qty: 1, mods, note: '', route: p.route, status: 'pending', round: 0, cxQty: 0, cx: [] });
-    this.log(n, tid, 'Added ' + p.name + (mods ? ' (' + mods + ')' : ''));
-  }
+
   async modAdd() {
     if (desktopBridge) {
-      if (this._itemBusy || this.state.modal?.saving) return;
-      const modal = this.state.modal, p = this.menu().byId[modal.pid], G = this.menu().G;
+      if (this.tableOrders.writeBusy || this.state.modal?.saving) return;
+      const modal = this.state.modal, p = this.catalog.state.byId[modal.pid], G = this.catalog.state.G;
       const optionIds = p.groups.filter(g => modal.sel[g] != null).map(g => G[g].opts[modal.sel[g]][2]);
       this.mut(n => { if (n.modal?.type === 'mods' && n.modal.pid === modal.pid) n.modal.saving = true; });
       const saved = await this.changeDesktopItems('add', { productId: p.id, optionIds });
@@ -340,57 +148,46 @@ export class WaiterDemo extends React.Component {
       });
       return;
     }
-    this.mut(n => {
-      const M = this.menu(); const p = M.byId[n.modal.pid];
-      let d = 0; const ls = [];
-      p.groups.forEach(g => { const k = n.modal.sel[g]; if (k != null) { ls.push(M.G[g].opts[k][0]); d += M.G[g].opts[k][1]; } });
-      this.addItem(n, p, ls.join(' · '), d);
-      n.modal = null;
-    });
+    const modal = this.state.modal, M = this.catalog.state, p = M.byId[modal.pid];
+    let delta = 0; const labels = [];
+    p.groups.forEach(group => { const selected = modal.sel[group]; if (selected != null) { labels.push(M.G[group].opts[selected][0]); delta += M.G[group].opts[selected][1]; } });
+    this.tableOrders.appendPending(this.tableOrders.state.tableId, p, labels.join(' · '), delta, this.who());
+    this.setState({ modal: null });
   }
-  incItem(id) { if (desktopBridge) return this.changeDesktopItems('increment', id); this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') i.qty++; }); }
-  decItem(id) {
-    if (desktopBridge) return this.changeDesktopItems('decrement', id);
-    this.mut(n => {
-      const i = n.items.find(x => x.id === id); if (!i || i.status !== 'pending') return;
-      if (i.qty > 1) i.qty--; else this.dropItem(n, i);
-    });
+  incItem(id) { if (desktopBridge) return this.changeDesktopItems('increment', id); this.tableOrders.changeQuantity(id, 1, this.who()); }
+  decItem(id) { if (desktopBridge) return this.changeDesktopItems('decrement', id); this.tableOrders.changeQuantity(id, -1, this.who()); }
+  removeItem(id) { if (desktopBridge) return this.changeDesktopItems('remove', id); this.tableOrders.removePending(id, this.who()); }
+
+  openNote(id) {
+    if (this._handoffInProgress) return;
+    const item = this.tableOrders.state.items.find(value => value.id === id && value.status === 'pending');
+    if (item) this.setState({ modal: { type: 'note', itemId: id, text: item.note } });
   }
-  removeItem(id) { if (desktopBridge) return this.changeDesktopItems('remove', id); this.mut(n => { const i = n.items.find(x => x.id === id); if (i && i.status === 'pending') this.dropItem(n, i); }); }
-  dropItem(n, i) {
-    n.items = n.items.filter(x => x.id !== i.id);
-    this.log(n, i.tableId, 'Removed ' + i.name + ' (was not sent yet)');
-    this.freeIfEmpty(n, i.tableId);
-  }
-  openNote(id) { if (this._handoffInProgress) return; this.mut(n => { const i = n.items.find(x => x.id === id && x.status === 'pending'); if (i) n.modal = { type: 'note', itemId: id, text: i.note }; }); }
   async saveNote() {
     if (desktopBridge) {
-      if (this._itemBusy) return;
-      const modal = this.state.modal, tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
-      if (!modal || modal.type !== 'note' || !orderId) return;
-      this._itemBusy = true;
+      const modal = this.state.modal;
+      if (!modal || modal.type !== 'note') return;
+      const lease = this.tableOrders.acquireWrite('note');
+      if (!lease) return;
       this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
       try {
-        const result = await desktopBridge.orderItems('note', orderId, { itemId: modal.itemId, note: modal.text.trim() });
-        if (!this._mounted) return;
+        const result = await desktopBridge.orderItems('note', lease.orderId, { itemId: modal.itemId, note: modal.text.trim() });
+        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
         if (!result.ok) { this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) { n.modal.saving = false; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Could not save note. Try again."); } }); return; }
-        this.mut(n => { this.replaceDesktopItems(n, tableId, result.data.items); if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) n.modal = null; });
-      } catch (_) { if (this._mounted) this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) { n.modal.saving = false; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Could not save note. Try again."); } }); }
-      finally { this._itemBusy = false; }
+        this.tableOrders.applyConfirmedItems(lease, result.data.items);
+        this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) n.modal = null; });
+      } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => { if (n.modal?.type === 'note' && n.modal.itemId === modal.itemId) { n.modal.saving = false; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Could not save note. Try again."); } }); }
+      finally { this.tableOrders.releaseWrite(lease); }
       return;
     }
-    this.mut(n => {
-      const i = n.items.find(x => x.id === n.modal.itemId);
-      if (i) { i.note = n.modal.text.trim(); this.log(n, i.tableId, i.note ? 'Note added to ' + i.name : 'Removed note from ' + i.name); }
-      n.modal = null;
-    });
+    const modal = this.state.modal;
+    this.tableOrders.saveNote(modal.itemId, modal.text.trim(), this.who());
+    this.setState({ modal: null });
   }
-
-  // ---------- send / print ----------
   send() {
     if (desktopBridge) {
-      if (this._itemBusy || this._handoffInProgress) return;
-      const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
+      if (this.tableOrders.writeBusy || this._handoffInProgress) return;
+      const target = this.tableOrders.captureTarget(), { tableId, orderId } = target;
       if (!orderId) return;
       this._handoffInProgress = true;
       this._sendRequests = this._sendRequests || {};
@@ -401,207 +198,178 @@ export class WaiterDemo extends React.Component {
         this.printing.jobsChanged();
         const pending = data.items.some(i => i.status === 'pending');
         const printNotice = await this.printing.handoffNotice(this.settings.state.language);
-        if (!this._mounted) return;
+        if (!this._mounted || !this.tableOrders.isCurrent(target)) return;
         const physicalNotice = data.testPrintEnabled ? waiterTranslate(this.settings.state.language, "waiter.Test print output is not confirmed. Check the printer and paper.") : waiterTranslate(this.settings.state.language, "waiter.No physical ticket was printed.");
         const notice = [pending ? waiterTranslate(this.settings.state.language, 'waiter.Table {id} has new items still pending. Select a waiter, reopen the table and send again.', {id:tableId}) : '', printNotice, physicalNotice].filter(Boolean).join(' ');
         await this.session.completeHandoff(notice);
       }).finally(() => { this._handoffInProgress = false; });
     }
-    let notice = '';
-    this.mut(n => {
-      const tid = n.tableId;
-      const pend = n.items.filter(i => i.tableId === tid && i.status === 'pending');
-      if (!pend.length) return;
-      const o = n.orders[tid]; o.rounds++;
-      const r = o.rounds, t = Date.now(), who = this.who(n);
-      pend.forEach(i => { i.status = 'sent'; i.round = r; i.sentAt = t; i.sentBy = who; });
-      const parts = [], bad = [], displayParts = [];
-      ['kitchen', 'bar'].forEach(k => {
-        const L = pend.filter(i => i.route === k); if (!L.length) return;
-        const c = L.reduce((a, i) => a + i.qty, 0); const ok = n.printers[k];
-        n.jobs.push({ id: 'j' + (n.seq++), tableId: tid, round: r, printer: k, count: c, status: ok ? 'ok' : 'failed', attempts: 1 });
-        parts.push(this.rlabel(k) + ' got ' + c + (c === 1 ? ' item' : ' items'));
-        displayParts.push(waiterTranslate(this.settings.state.language, c === 1 ? 'waiter.{destination} got {count} item' : 'waiter.{destination} got {count} items', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + this.rlabel(k)), count:c}));
-        if (!ok) bad.push(this.rlabel(k));
-      });
-      this.log(n, tid, 'Sent round ' + r + ': ' + parts.join(', ') + (bad.length ? ' (' + bad.join(' and ') + ' ticket did not print)' : ''));
-      if (bad.length) notice = waiterTranslate(this.settings.state.language, 'waiter.Round {round} is saved, but the {destinations} ticket did not print. Select a waiter to retry using the red bar.', {round:r,destinations:bad.map(x => waiterTranslate(this.settings.state.language, 'waiter.'+x)).join(this.settings.state.language === 'sq' ? ' dhe ' : ' and ')});
-      else notice = waiterTranslate(this.settings.state.language, 'waiter.Round {round} sent. {details}.', {round:r,details:displayParts.join(', ')});
-    }, () => { if (notice) this.session.switchWaiter(notice); });
+    const tid = this.tableOrders.state.tableId;
+    const sent = this.tableOrders.markPendingSent(tid, this.who());
+    if (!sent) return;
+    const pend = sent.items, r = sent.round, jobs = [], parts = [], bad = [], displayParts = [];
+    ['kitchen', 'bar'].forEach(k => {
+      const items = pend.filter(item => item.route === k); if (!items.length) return;
+      const count = items.reduce((sum, item) => sum + item.qty, 0), ok = this.state.printers[k];
+      jobs.push({ id: this.nextDemoId('j'), tableId: tid, round: r, printer: k, count, status: ok ? 'ok' : 'failed', attempts: 1 });
+      parts.push(this.rlabel(k) + ' got ' + count + (count === 1 ? ' item' : ' items'));
+      displayParts.push(waiterTranslate(this.settings.state.language, count === 1 ? 'waiter.{destination} got {count} item' : 'waiter.{destination} got {count} items', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + this.rlabel(k)), count}));
+      if (!ok) bad.push(this.rlabel(k));
+    });
+    this.log(tid, 'Sent round ' + r + ': ' + parts.join(', ') + (bad.length ? ' (' + bad.join(' and ') + ' ticket did not print)' : ''));
+    const notice = bad.length
+      ? waiterTranslate(this.settings.state.language, 'waiter.Round {round} is saved, but the {destinations} ticket did not print. Select a waiter to retry using the red bar.', {round:r,destinations:bad.map(value => waiterTranslate(this.settings.state.language, 'waiter.' + value)).join(this.settings.state.language === 'sq' ? ' dhe ' : ' and ')})
+      : waiterTranslate(this.settings.state.language, 'waiter.Round {round} sent. {details}.', {round:r,details:displayParts.join(', ')});
+    this.mut(n => { n.jobs.push(...jobs); }, () => this.session.switchWaiter(notice));
   }
   retryJob(id) {
+    const job = this.state.jobs.find(value => value.id === id); if (!job) return;
+    const destination = this.rlabel(job.printer), ok = this.state.printers[job.printer];
+    this.log(job.tableId, ok ? 'Reprinted ' + destination + ' ticket for round ' + job.round + ' (same items, nothing added twice)' : 'Retry of ' + destination + ' ticket failed');
     this.mut(n => {
-      const j = n.jobs.find(x => x.id === id); if (!j) return;
-      const l = this.rlabel(j.printer); j.attempts++;
-      if (n.printers[j.printer]) {
-        j.status = 'ok';
-        this.log(n, j.tableId, 'Reprinted ' + l + ' ticket for round ' + j.round + ' (same items, nothing added twice)');
-        this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} ticket printed. Nothing was added to the order twice.', {destination:waiterTranslate(this.settings.state.language, 'waiter.'+l)}));
-      } else {
-        this.log(n, j.tableId, 'Retry of ' + l + ' ticket failed');
-        this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} printer is still not responding. Try the backup printer.', {destination:waiterTranslate(this.settings.state.language, 'waiter.'+l)}), 'err');
-      }
+      const current = n.jobs.find(value => value.id === id); if (!current) return;
+      current.attempts++;
+      if (ok) {
+        current.status = 'ok';
+        this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} ticket printed. Nothing was added to the order twice.', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + destination)}));
+      } else this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} printer is still not responding. Try the backup printer.', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + destination)}), 'err');
     });
   }
   backupJob(id) {
+    const job = this.state.jobs.find(value => value.id === id); if (!job) return;
+    const destination = this.rlabel(job.printer);
+    this.log(job.tableId, 'Printed ' + destination + ' ticket for round ' + job.round + ' on the backup printer');
     this.mut(n => {
-      const j = n.jobs.find(x => x.id === id); if (!j) return;
-      j.status = 'ok'; j.attempts++;
-      const l = this.rlabel(j.printer);
-      this.log(n, j.tableId, 'Printed ' + l + ' ticket for round ' + j.round + ' on the backup printer');
-      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} ticket printed on the backup printer.', {destination:waiterTranslate(this.settings.state.language, 'waiter.'+l)}));
+      const current = n.jobs.find(value => value.id === id); if (!current) return;
+      current.status = 'ok'; current.attempts++;
+      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.{destination} ticket printed on the backup printer.', {destination:waiterTranslate(this.settings.state.language, 'waiter.' + destination)}));
     });
   }
-
-  // ---------- cancel ----------
   openCancel(id) { if (this._handoffInProgress) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
   async confirmCancel() {
     if (desktopBridge) {
       const m = this.state.modal;
-      if (!m || !m.reason || (m.reason === 'Other' && !m.other.trim()) || this._itemBusy) return;
+      if (!m || !m.reason || (m.reason === 'Other' && !m.other.trim())) return;
+      const lease = this.tableOrders.acquireWrite('correct');
+      if (!lease) return;
       const reason = m.reason === 'Other' ? m.other.trim() : m.reason;
       const requestId = m.requestId || crypto.randomUUID();
-      const tableId = this.state.tableId, orderId = this.state.orders[tableId]?.id;
-      if (!orderId) return;
-      this._itemBusy = true;
-      this.mut(n => { n.modal.requestId = requestId; n.modal.saving = true; n.modal.error = '';  });
+      this.mut(n => { n.modal.requestId = requestId; n.modal.saving = true; n.modal.error = ''; });
       try {
-        const result = await desktopBridge.orderItems('correct', orderId, { itemId: m.itemId, quantity: m.qty, reason, requestId });
-        if (!this._mounted) return;
-        if (result.ok) await this.refreshDesktopAvailability(tableId, orderId);
-        if (!this._mounted) return;
+        const result = await desktopBridge.orderItems('correct', lease.orderId, { itemId: m.itemId, quantity: m.qty, reason, requestId });
+        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
+        if (result.ok) await this.tableOrders.refreshAvailability(lease);
+        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
+        if (result.ok) this.tableOrders.applyConfirmedItems(lease, result.data.items);
         this.mut(n => {
-          if (result.ok) { this.replaceDesktopItems(n, tableId, result.data.items); n.modal = null; this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); }
+          if (result.ok) { n.modal = null; this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); }
           else if (result.rejected && !n.modal.unresolved) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; const messages = { access_denied:'waiter.Correction denied. Sign in as a waiter with order access.', already_billed:'waiter.This order has already been billed. The item cannot be cancelled here.', unavailable:'waiter.The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.', invalid_input:'waiter.Correction details are invalid. Check the quantity and explanation.' }; n.modal.error = waiterTranslate(this.settings.state.language, messages[result.code] || 'waiter.Correction rejected. Check authorization and quantity.'); }
           else { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Correction status unknown. Retry before leaving."); }
         });
-      } catch (_) { if (this._mounted) this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Correction status unknown. Retry before leaving."); }); }
-      finally { this._itemBusy = false; }
+      } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Correction status unknown. Retry before leaving."); }); }
+      finally { this.tableOrders.releaseWrite(lease); }
       return;
     }
-    this.mut(n => {
-      const m = n.modal; const i = n.items.find(x => x.id === m.itemId); if (!i) return;
-      if (!m.reason || (m.reason === 'Other' && !m.other.trim())) return;
-      const q = Math.min(m.qty, i.qty - i.cxQty);
-      const reason = m.reason === 'Other' ? m.other.trim() : m.reason;
-      i.cxQty += q; i.cx.push({ qty: q, reason, who: this.who(n), t: Date.now() });
-      if (i.cxQty >= i.qty) i.status = 'cancelled';
-      this.log(n, i.tableId, 'Cancelled ' + q + '× ' + i.name + '. Reason: ' + reason + '.');
-      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.'));
-      n.modal = null;
-    });
+    const m = this.state.modal;
+    const item = this.tableOrders.state.items.find(value => value.id === m.itemId);
+    if (!item || !m.reason || (m.reason === 'Other' && !m.other.trim())) return;
+    this.tableOrders.applyDemoCorrection(m.itemId, m.qty, m.reason === 'Other' ? m.other.trim() : m.reason, this.who());
+    this.mut(n => { this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); n.modal = null; });
   }
-
-  // ---------- move ----------
   async confirmMoveTable() {
     if (desktopBridge) {
-      if (this._itemBusy || this._handoffInProgress || this.state.modal?.saving) return;
-      const from = this.state.tableId, to = this.state.modal?.dest, orderId = this.state.orders[from]?.id;
-      if (!orderId || !to || to === from || (this.state.orders[to] && !this.state.orders[to].untouched)) return;
+      if (this._handoffInProgress || this.state.modal?.saving) return;
+      const target = this.tableOrders.captureTarget(), from = target.tableId, orderId = target.orderId, to = this.state.modal?.dest;
+      const destination = this.tableOrders.state.orders[to];
+      if (!orderId || !to || to === from || (destination && !destination.untouched)) return;
+      const lease = this.tableOrders.acquireWrite('move', target);
+      if (!lease) return;
       this._moveRequests = this._moveRequests || {};
       const key = [orderId, from, to].join(':');
       const token = this._moveRequests[key] || (this._moveRequests[key] = crypto.randomUUID());
-      this._itemBusy = true;
       this.mut(n => { n.modal.saving = true; n.modal.error = ''; });
       try {
         let result, reconciledTable;
         try { result = await desktopBridge.moveOrder(orderId, from, to, token); } catch (_) { result = { ok: false }; }
-        if (!this._mounted) return;
+        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
         if (!result.ok) {
           let tables;
           try { tables = await desktopBridge.getTables(); } catch (_) { tables = { ok: false }; }
-          if (!this._mounted) return;
+          if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
           if (!tables?.ok || !Array.isArray(tables.data)) {
             this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Move status is unknown. Retry to check it before leaving."); });
             return;
           }
-          const current = tables.data.find(t => t.orderId === orderId);
+          const current = tables.data.find(table => table.orderId === orderId);
           reconciledTable = current;
           if (current?.id !== to) {
-            this.mut(n => {
-              const previous = n.orders;
-              n.orders = {};
-              for (const table of tables.data) if (table.orderId !== null)
-                n.orders[table.id] = Object.values(previous).find(o => o.id === table.orderId) || { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [], untouched: table.untouched === true };
-              if (current?.id === from) {
-                n.modal.saving = false; n.modal.unresolved = false; n.modal.dest = null;
-                n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Order was not moved. Check the destination and try again.");
-              } else {
-                n.screen = 'tables'; n.tableId = null; n.modal = null; n.items = [];
-                this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Order location changed. Select a table to continue.'), 'warn');
-              }
-            });
+            this.tableOrders.reconcileOrderLocations(lease, tables.data);
+            if (current?.id === from) {
+              this.mut(n => { n.modal.saving = false; n.modal.unresolved = false; n.modal.dest = null; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Order was not moved. Check the destination and try again."); });
+            } else {
+              this.tableOrders.abandonChangedOrder(lease);
+              this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Order location changed. Select a table to continue.'), 'warn'));
+            }
             return;
           }
         }
         delete this._moveRequests[key];
-        this.mut(n => {
-          n.orders[to] = n.orders[from]; n.orders[to].untouched = false; delete n.orders[from];
-          n.items.forEach(i => { if (i.tableId === from) i.tableId = to; });
-          n.tableId = to; n.modal = null;
-          this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Everything moved to Table {to}. Table {from} is free now.', {to, from}));
-        });
-        if (reconciledTable) this.mut(n => { if (n.orders[to]?.id === orderId) n.orders[to].untouched = reconciledTable.untouched === true; });
-        else await this.refreshDesktopAvailability(to, orderId);
-      } finally { this._itemBusy = false; }
+        this.tableOrders.applyConfirmedMove(lease, to, reconciledTable ? reconciledTable.untouched === true : false);
+        this.mut(n => { n.modal = null; this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Everything moved to Table {to}. Table {from} is free now.', {to, from})); });
+        if (!reconciledTable) await this.tableOrders.refreshAvailability(lease);
+      } finally { this.tableOrders.releaseWrite(lease); }
       return;
     }
+    const from = this.tableOrders.state.tableId, to = this.state.modal.dest;
+    if (!this.tableOrders.moveDemoOrder(from, to, this.who())) return;
     this.mut(n => {
-      const from = n.tableId, to = n.modal.dest;
-      if (to == null || to === from || n.orders[to]) return;
-      n.orders[to] = n.orders[from]; delete n.orders[from];
-      n.items.forEach(i => { if (i.tableId === from) i.tableId = to; });
-      n.jobs.forEach(j => { if (j.tableId === from) j.tableId = to; });
-      n.tableId = to;
-      this.log(n, to, 'Moved the whole order from Table ' + from + ' to Table ' + to);
+      n.jobs.forEach(job => { if (job.tableId === from) job.tableId = to; });
       this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Everything moved to Table {to}. Table {from} is free now.', {to, from}));
       n.modal = null;
     });
   }
-  // ---------- bill ----------
   bSet(fn) { this.mut(n => { if (n.modal && n.modal.type === 'bill') fn(n.modal, n); }); }
   printBill(useBackup) {
+    const bill = this.state.modal;
+    if (!bill || bill.type !== 'bill') return;
+    const account = bill.method === 'Card' ? 'A' : bill.account;
+    const failed = !useBackup && !this.state.printers[account];
+    const where = 'Printer ' + account + (useBackup ? ' (backup)' : '');
+    this.log(this.tableOrders.state.tableId, failed
+      ? 'Bill did not print on Printer ' + account + '. No payment recorded'
+      : bill.printed > 0 ? 'Reprinted the bill on ' + where + ' (no new payment)' : 'Printed bill on ' + where + ': ' + bill.method + ', Account ' + account);
     this.mut(n => {
-      const b = n.modal; if (!b || b.type !== 'bill') return;
-      if (b.method === 'Card') b.account = 'A';
-      const where = 'Printer ' + b.account + (useBackup ? ' (backup)' : '');
-      if (!useBackup && !n.printers[b.account]) {
-        b.step = 'failed';
-        this.log(n, n.tableId, 'Bill did not print on Printer ' + b.account + '. No payment recorded');
-        return;
-      }
-      b.printed++; b.backup = !!useBackup; b.step = 'printed';
-      this.log(n, n.tableId, b.printed > 1 ? 'Reprinted the bill on ' + where + ' (no new payment)' : 'Printed bill on ' + where + ': ' + b.method + ', Account ' + b.account);
-      if (b.printed > 1) this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Bill reprinted. Still one payment."));
+      const current = n.modal;
+      current.account = account;
+      if (failed) { current.step = 'failed'; return; }
+      current.printed++; current.backup = !!useBackup; current.step = 'printed';
+      if (current.printed > 1) this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Bill reprinted. Still one payment."));
     });
   }
   paid() {
     if (desktopBridge) { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Closing orders is not available yet."), 'warn')); return; }
-    let completed = false;
+    const bill = this.state.modal, tid = this.tableOrders.state.tableId;
+    if (!bill || !bill.printed || tid == null || !this.tableOrders.state.orders[tid]) return;
+    if (bill.method === 'Card' && bill.account !== 'A') { this.mut(n => this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Blocked: card payments can only go to Account A."), 'err')); return; }
+    const items = this.tableOrders.state.items.filter(item => item.tableId === tid);
+    const total = items.reduce((sum, item) => sum + (item.qty - item.cxQty) * item.unit, 0);
+    const count = items.reduce((sum, item) => sum + (item.qty - item.cxQty), 0);
+    const at = Date.now(), actor = this.who();
+    this.tableOrders.completeDemoOrder(tid);
     this.mut(n => {
-      const b = n.modal; const tid = n.tableId;
-      if (!b || !b.printed) return;
-      if (b.method === 'Card' && b.account !== 'A') { this.toast(n, waiterTranslate(this.settings.state.language, "waiter.Blocked: card payments can only go to Account A."), 'err'); return; }
-      const its = n.items.filter(i => i.tableId === tid);
-      const total = its.reduce((a, i) => a + (i.qty - i.cxQty) * i.unit, 0);
-      const count = its.reduce((a, i) => a + (i.qty - i.cxQty), 0);
-      n.history.unshift({ no: n.billNo++, table: 'Table ' + tid, closedAt: Date.now(), waiter: this.who(n), method: b.method, account: b.account, total, count });
-      n.items = n.items.filter(i => i.tableId !== tid);
-      delete n.orders[tid];
-      n.jobs = n.jobs.filter(j => j.tableId !== tid);
-      n.modal = null; n.screen = 'tables'; n.tableId = null; completed = true;
-      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Table {id} is free. Payment saved once: {method}, Account {account}, {total}.', {id:tid,method:waiterTranslate(this.settings.state.language, 'waiter.'+b.method),account:b.account,total:this.fmt(total)}));
-    }, () => { if (completed) this.session.switchWaiter(); });
+      n.history.unshift({ no: n.billNo++, table: 'Table ' + tid, closedAt: at, waiter: actor, method: bill.method, account: bill.account, total, count });
+      n.jobs = n.jobs.filter(job => job.tableId !== tid);
+      n.modal = null;
+      this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Table {id} is free. Payment saved once: {method}, Account {account}, {total}.', {id:tid,method:waiterTranslate(this.settings.state.language, 'waiter.' + bill.method),account:bill.account,total:this.fmt(total)}));
+    }, () => this.session.switchWaiter());
   }
-
-  // ---------- render ----------
   renderVals() {
-    const s = this.state, M = this.menu(), now = Date.now();
+    const s = this.state, d = this.tableOrders.state, M = this.catalog.state, now = Date.now();
     const money = x => this.fmt(x);
     const hm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
     const bq = i => i.qty - i.cxQty;
     const av = (c, z) => 'width:' + z + 'px; height:' + z + 'px; border-radius:999px; background:' + c + '; color:#FFFFFF; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:' + Math.round(z * 0.42) + 'px; flex:none';
-    const scr = s.screen;
+    const scr = d.screen;
     const v = {};
     const t = (key, values) => waiterTranslate(this.settings.state.language, 'waiter.' + key, values);
     v.t = t;
@@ -617,8 +385,8 @@ export class WaiterDemo extends React.Component {
     v.clock = hm(now);
     const tab = on => 'height:48px; padding:0 18px; border-radius:12px; border:none; font-size:17px; font-weight:800; background:' + (on ? '#0F172A' : 'transparent') + '; color:' + (on ? '#FFFFFF' : '#334155');
     v.tabTablesStyle = tab(scr !== 'history'); v.tabHistoryStyle = tab(scr === 'history');
-    v.goTables = () => this.goTables();
-    v.goHistory = () => { if (!this._handoffInProgress) this.mut(n => { n.screen = 'history'; n.modal = null; }); };
+    v.goTables = () => this.tableOrders.showTables();
+    v.goHistory = () => this.tableOrders.showHistory();
     v.switchWaiter = () => this.session.switchWaiter();
     v.printers = [['kitchen', 'Kitchen'], ['bar', 'Bar'], ['A', 'Bill A'], ['B', 'Bill B']].map(([k, l]) => {
       const on = s.printers[k];
@@ -640,88 +408,23 @@ export class WaiterDemo extends React.Component {
       retry: () => this.retryJob(j.id), backup: () => this.backupJob(j.id)
     }));
 
-    // tables
-    const tTotal = tid => s.items.filter(i => i.tableId === tid).reduce((a, i) => a + bq(i) * i.unit, 0);
-    let free = 0, taken = 0;
-    v.tableMessage = s.tableLoad === 'loading' ? t("Loading tables…") :
-      s.tableLoad === 'error' ? t("Tables unavailable. Restart the app and try again.") :
-      s.sections.length === 0 ? t("No tables available. Set up sample tables to get started.") : '';
-    v.sections = s.sections.map(sec => ({
-      label: sec.label,
-      tables: sec.ids.map(id => {
-        const o = s.orders[id]; const tk = !!o && !o.untouched; if (tk) taken++; else free++;
-        const figuresKnown = !desktopBridge || !tk || !!o.itemsLoaded;
-        const its = s.items.filter(i => i.tableId === id);
-        const unsent = its.filter(i => i.status === 'pending').reduce((a, i) => a + i.qty, 0);
-        const cnt = its.reduce((a, i) => a + bq(i), 0);
-        const issue = s.jobs.some(j => j.tableId === id && j.status === 'failed');
-        const mins = tk ? Math.max(0, Math.round((now - o.openedAt) / 60000)) : 0;
-        return {
-          num: String(id), taken: tk, free: !tk, total: figuresKnown ? money(tTotal(id)) : '—', waiter: tk ? o.openedBy : '',
-          count: figuresKnown ? t(cnt === 1 ? '{count} item' : '{count} items', {count: cnt}) : t("Open to view items"), mins: mins + ' min',
-          hasUnsent: figuresKnown && unsent > 0, unsent: t('{count} not sent', {count: unsent}), hasIssue: issue,
-          aria: tk ? (figuresKnown ? t('Table {id}, taken, {total}', {id, total:money(tTotal(id))}) : t('Table {id}, taken, open to view items', {id})) : t('Table {id}, free', {id}),
-          style: 'min-height:156px; border-radius:22px; padding:16px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; gap:10px; text-align:left; ' + (tk ? 'background:#F97316; color:#1A0B00; border:2px solid #EA580C; box-shadow:0 10px 22px rgba(249,115,22,0.28)' : 'background:#FFFFFF; color:#0F172A; border:2px solid #E2E8F0; box-shadow:0 4px 12px rgba(15,23,42,0.04)'),
-          open: () => this.openTable(id)
-        };
-      })
-    }));
-    v.freeCount = t('{count} free', {count: free}); v.takenCount = t('{count} taken', {count: taken});
-
     // order screen
-    const tid = s.tableId; const o = tid ? s.orders[tid] : null;
+    const tid = d.tableId; const o = tid ? d.orders[tid] : null;
     v.tableName = tid ? t('Table {id}', {id: tid}) : '';
     v.orderMeta = o ? t(o.openedBy ? 'Opened {time} by {name} · {minutes} min' : 'Opened {time} · {minutes} min', {time:hm(o.openedAt), name:o.openedBy, minutes:Math.max(0, Math.round((now - o.openedAt) / 60000))}) : t("Free. Add products to open it.");
     v.statusLabel = o ? t("Taken") : t("Free");
     v.statusStyle = 'height:36px; padding:0 14px; border-radius:999px; display:inline-flex; align-items:center; font-size:15px; font-weight:800; ' + (o ? 'background:#F97316; color:#1A0B00' : 'background:#DCFCE7; color:#14532D');
-    const cat = M.catById[s.cat] || { subs: [] };
-    const q = s.search.trim().toLowerCase();
-    v.cats = M.cats.map(c => {
-      const on = c.id === s.cat && !q;
-      return {
-        label: c.label, pressed: String(on),
-        style: 'min-height:96px; width:100%; border-radius:18px; font-size:19px; font-weight:800; padding:8px; ' + (on ? 'background:' + c.color + '; color:#FFFFFF; border:2px solid ' + c.color + '; box-shadow:0 8px 18px rgba(15,23,42,0.15)' : 'background:' + c.tint + '; color:' + c.color + '; border:2px solid transparent'),
-        pick: () => this.mut(n => { n.cat = c.id; n.sub = c.subs[0][0]; n.search = ''; })
-      };
-    });
-    v.search = s.search; v.hasSearch = q.length > 0;
-    v.onSearch = e => this.setState({ search: e.target.value });
-    v.clearSearch = () => this.setState({ search: '' });
-    v.subs = cat.subs.map(([id, l]) => {
-      const on = id === s.sub && !q;
-      return {
-        label: l, pressed: String(on),
-        style: 'height:50px; padding:0 20px; border-radius:999px; font-size:17px; font-weight:800; white-space:nowrap; ' + (on ? 'background:#0F172A; color:#FFFFFF; border:2px solid #0F172A' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1'),
-        pick: () => this.mut(n => { n.sub = id; n.search = ''; })
-      };
-    });
-    const pendQ = {};
-    s.items.forEach(i => { if (i.tableId === tid && i.status === 'pending') pendQ[i.pid] = (pendQ[i.pid] || 0) + i.qty; });
-    const list = q ? M.products.filter(p => p.name.toLowerCase().includes(q)) : M.products.filter(p => p.sub === s.sub);
-    v.searchInfo = t(list.length === 1 ? '{count} match in the whole menu' : '{count} matches in the whole menu', {count: list.length});
-    v.products = list.map(p => {
-      const c = M.catById[p.cat]; const b = pendQ[p.id] || 0;
-      return {
-        name: p.name, price: money(p.price), hasOpts: p.groups.length > 0, hasBadge: b > 0, badge: String(b),
-        aria: t(p.groups.length ? 'Add {name}, {price}, has options' : 'Add {name}, {price}', {name:p.name, price:money(p.price)}),
-        style: 'position:relative; min-height:116px; border-radius:18px; padding:14px; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-start; gap:10px; text-align:left; background:' + c.tint + '; border:3px solid ' + (b > 0 ? c.color : '#94A3B8'),
-        priceStyle: 'font-size:16px; font-weight:800; color:' + c.color,
-        add: () => this.addProduct(p.id)
-      };
-    });
-    v.noProducts = list.length === 0;
-    v.menuMessage = s.menuLoad === 'loading' ? t("Loading menu…") : s.menuLoad === 'error' ?
-      t("Menu unavailable. Restart the app and try again.") : t("No products available.");
+    Object.assign(v, this.catalog.view({ language: this.settings.state.language, pendingItems: d.items.filter(item => item.tableId === tid && item.status === 'pending'), addProduct: id => this.addProduct(id) }));
 
-    const its = tid ? s.items.filter(i => i.tableId === tid) : [];
+    const its = tid ? d.items.filter(i => i.tableId === tid) : [];
     const pend = its.filter(i => i.status === 'pending');
     const pc = pend.reduce((a, i) => a + i.qty, 0);
     const tb = on => 'flex:1; height:48px; border:none; border-bottom:4px solid ' + (on ? '#F97316' : 'transparent') + '; background:transparent; font-size:16px; font-weight:800; color:' + (on ? '#0F172A' : '#475569');
-    v.tabOrder = s.tab === 'order'; v.tabAct = s.tab === 'activity';
+    v.tabOrder = d.tab === 'order'; v.tabAct = d.tab === 'activity';
     v.tabOrderSel = String(v.tabOrder); v.tabActSel = String(v.tabAct);
     v.tabOrderStyle = tb(v.tabOrder); v.tabActStyle = tb(v.tabAct);
-    v.setTabOrder = () => this.setState({ tab: 'order' });
-    v.setTabAct = () => this.setState({ tab: 'activity' });
+    v.setTabOrder = () => this.tableOrders.selectTab('order');
+    v.setTabAct = () => this.tableOrders.selectTab('activity');
     v.isEmpty = its.length === 0;
     v.hasPending = pend.length > 0;
     v.pendingCount = t(pc === 1 ? '{count} item' : '{count} items', {count: pc});
@@ -811,7 +514,7 @@ export class WaiterDemo extends React.Component {
             return {
               label: l, price: dd ? (dd > 0 ? '+' : '') + money(dd) : t("Included"), pressed: String(on), disabled: !!md.saving,
               style: 'min-height:84px; border-radius:16px; padding:12px; display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:6px; text-align:left; ' + (on ? 'background:#2563EB; color:#FFFFFF; border:2px solid #2563EB' : 'background:#F8FAFC; color:#0F172A; border:2px solid #CBD5E1'),
-              pick: () => { if (!this._itemBusy && !this.state.modal?.saving) this.mut(n => { if (n.modal.sel[gid] === k && !g.req) delete n.modal.sel[gid]; else n.modal.sel[gid] = k; }); }
+              pick: () => { if (!this.tableOrders.writeBusy && !this.state.modal?.saving) this.mut(n => { if (n.modal.sel[gid] === k && !g.req) delete n.modal.sel[gid]; else n.modal.sel[gid] = k; }); }
             };
           })
         };
@@ -823,7 +526,7 @@ export class WaiterDemo extends React.Component {
     }
 
     if (ty === 'note') {
-      const it = s.items.find(i => i.id === md.itemId);
+      const it = d.items.find(i => i.id === md.itemId);
       v.modalTitle = t('Note for {name}', {name: it ? it.name : ''});
       v.modalSub = md.error || (desktopBridge ? t('Save a note for this item. Leave blank to remove it.') : t('This prints on the kitchen or bar ticket.'));
       v.noteText = md.text; v.noteSaving = !!md.saving;
@@ -842,7 +545,7 @@ export class WaiterDemo extends React.Component {
     }
 
     if (ty === 'cancel') {
-      const it = s.items.find(i => i.id === md.itemId);
+      const it = d.items.find(i => i.id === md.itemId);
       const mx = it ? bq(it) : 1; const l = it ? t(this.rlabel(it.route)) : '';
       v.modalTitle = t("Cancel a sent item");
       v.modalSub = t("It was already sent, so it stays on record, crossed out.");
@@ -868,8 +571,8 @@ export class WaiterDemo extends React.Component {
     if (ty === 'moveTable') {
       v.modalTitle = t("Move the whole table");
       v.modalSub = md.error || t('Everything on Table {id} moves to the table you pick. Table {id} becomes free. Only free tables can be picked, so no order gets overwritten.', {id: tid});
-      v.mtTables = s.sections.flatMap(sec => sec.ids).filter(id => id !== tid).map(id => {
-        const tk = !!s.orders[id] && !s.orders[id].untouched; const on = md.dest === id;
+      v.mtTables = d.sections.flatMap(sec => sec.ids).filter(id => id !== tid).map(id => {
+        const tk = !!d.orders[id] && !d.orders[id].untouched; const on = md.dest === id;
         return {
           num: String(id), sub: tk ? t("Taken") : t("Free"), disabled: tk,
           aria: t(tk ? 'Table {id}, taken, not available' : 'Table {id}, free', {id}),
@@ -945,6 +648,6 @@ export class WaiterDemo extends React.Component {
     if (this.session.state.screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
     const v = this.renderVals();
     const t = v.t;
-    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.state.orders[this.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), (v.hasFailed ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"role": "alert", "style": style("flex: none; background: #DC2626; color: #FFFFFF; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px")} , "\n  ", (v.failed || []).map((f, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n    ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 14px; flex-wrap: wrap")} , "\n      ", React.createElement("svg", {"width": "26", "height": "26", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.4", "strokeLinecap": "round", "strokeLinejoin": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M6 9V3h12v6"}), React.createElement("rect", {"x": "6", "y": "14", "width": "12", "height": "7"}), React.createElement("path", {"d": "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"})), "\n      ", React.createElement("div", {"style": style("flex: 1 1 320px; font-size: 18px; font-weight: 700; line-height: 1.3")} , f.text), "\n      ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , f.attempts), "\n      ", React.createElement("button", {"onClick": f.retry, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: none; background: #FFFFFF; color: #B91C1C; font-size: 17px; font-weight: 800")} , t("Retry")), "\n      ", React.createElement("button", {"onClick": f.backup, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: 2px solid #FFFFFF; background: transparent; color: #FFFFFF; font-size: 17px; font-weight: 800")} , t("Print on backup printer")), "\n    "), "\n  "))), "\n"), "\n") : null), "\n\n", "\n", (v.isTables ? renderTables.call(this, v, style) : null), "\n\n", "\n", (v.isOrder ? renderOrder.call(this, v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", (v.hasModal ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"style": style("position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; z-index: 50")} , "\n  ", React.createElement("div", {"role": "dialog", "aria-modal": "true", "aria-label": v.modalTitle, "style": style(v.modalCardStyle)} , "\n\n    ", React.createElement("div", {"style": style("display: flex; align-items: flex-start; gap: 12px")} , "\n      ", React.createElement("div", {"style": style("flex: 1; min-width: 0")} , "\n        ", React.createElement("div", {"style": style("font-size: 28px; font-weight: 800; line-height: 1.15")} , v.modalTitle), "\n        ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 600; color: #475569; margin-top: 4px; line-height: 1.4")} , v.modalSub), "\n      "), "\n      ", React.createElement("button", {"onClick": v.closeModal, "aria-label": t("Close"), "style": style("width: 52px; height: 52px; flex: none; border-radius: 14px; border: none; background: #F1F5F9; color: #0F172A; display: flex; align-items: center; justify-content: center")} , React.createElement("svg", {"width": "24", "height": "24", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.6", "strokeLinecap": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M18 6L6 18M6 6l12 12"}))), "\n    "), "\n\n    ", "\n    ", (v.isMods ? React.createElement(React.Fragment, null, "\n      ", (v.modGroups || []).map((g, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n        ", React.createElement("div", {"style": style("display: flex; flex-direction: column; gap: 10px")} , "\n          ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n            ", React.createElement("span", {"style": style("font-size: 19px; font-weight: 800")} , g.label), "\n            ", React.createElement("span", {"style": style(g.reqStyle)} , g.reqLabel), "\n          "), "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px")} , "\n            ", (g.options || []).map((o, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n              ", React.createElement("button", {"onClick": o.pick, "disabled": o.disabled, "aria-pressed": o.pressed, "style": style(o.style)} , "\n                ", React.createElement("span", {"style": style("font-size: 18px; font-weight: 800")} , o.label), "\n                ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , o.price), "\n              "), "\n            "))), "\n          "), "\n        "), "\n      "))), "\n      ", React.createElement("button", {"onClick": v.modAdd, "disabled": v.modAddDisabled, "style": style(v.modAddStyle)} , v.modAddLabel), "\n    ") : null), "\n\n    ", "\n    ", (v.isNote ? React.createElement(React.Fragment, null, "\n      ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px")} , "\n        ", (v.noteChips || []).map((nc, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("button", {"onClick": nc.toggle, "disabled": v.noteSaving, "aria-pressed": nc.pressed, "style": style(nc.style)} , nc.label), "\n        "))), "\n      "), "\n      ", React.createElement("label", {"style": style("display: flex; flex-direction: column; gap: 8px; font-size: 16px; font-weight: 800")} , t('Or type the note'), React.createElement("input", {"type": "text", "value": v.noteText, "onChange": v.onNoteText, "disabled": v.noteSaving, "placeholder": t("e.g. medium rare, no onions"), "style": style("height: 60px; border-radius: 14px; border: 2px solid #CBD5E1; padding: 0 18px; font-size: 19px; font-weight: 600; color: #0F172A")}), "\n      "), "\n      ", React.createElement("div", {"style": style("display: flex; gap: 10px")} , "\n        ", React.createElement("button", {"onClick": v.closeModal, "style": style("flex: 1; height: 64px; border-radius: 16px; border: 2px solid #CBD5E1; background: #FFFFFF; color: #0F172A; font-size: 19px; font-weight: 800")} , t("Back")), "\n        ", React.createElement("button", {"onClick": v.saveNote, "disabled": v.noteSaving, "style": style("flex: 2; height: 64px; border-radius: 16px; border: none; background: #2563EB; color: #FFFFFF; font-size: 20px; font-weight: 800")} , t("Save note")), "\n      "), "\n    ") : null), "\n\n    ", "\n    ", (v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null), "\n\n", "\n    ", (v.isMoveTable ? renderMoveTable.call(this, v, style) : null), "\n\n    ", "\n    ", renderBill.call(this, v, style), "\n  "), "\n"), "\n") : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
+    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), (v.hasFailed ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"role": "alert", "style": style("flex: none; background: #DC2626; color: #FFFFFF; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px")} , "\n  ", (v.failed || []).map((f, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n    ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 14px; flex-wrap: wrap")} , "\n      ", React.createElement("svg", {"width": "26", "height": "26", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.4", "strokeLinecap": "round", "strokeLinejoin": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M6 9V3h12v6"}), React.createElement("rect", {"x": "6", "y": "14", "width": "12", "height": "7"}), React.createElement("path", {"d": "M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"})), "\n      ", React.createElement("div", {"style": style("flex: 1 1 320px; font-size: 18px; font-weight: 700; line-height: 1.3")} , f.text), "\n      ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , f.attempts), "\n      ", React.createElement("button", {"onClick": f.retry, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: none; background: #FFFFFF; color: #B91C1C; font-size: 17px; font-weight: 800")} , t("Retry")), "\n      ", React.createElement("button", {"onClick": f.backup, "style": style("height: 48px; padding: 0 20px; border-radius: 12px; border: 2px solid #FFFFFF; background: transparent; color: #FFFFFF; font-size: 17px; font-weight: 800")} , t("Print on backup printer")), "\n    "), "\n  "))), "\n"), "\n") : null), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.state.jobs.filter(job => job.status === 'failed').map(job => job.tableId), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", (v.hasModal ? React.createElement(React.Fragment, null, "\n", React.createElement("div", {"style": style("position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; z-index: 50")} , "\n  ", React.createElement("div", {"role": "dialog", "aria-modal": "true", "aria-label": v.modalTitle, "style": style(v.modalCardStyle)} , "\n\n    ", React.createElement("div", {"style": style("display: flex; align-items: flex-start; gap: 12px")} , "\n      ", React.createElement("div", {"style": style("flex: 1; min-width: 0")} , "\n        ", React.createElement("div", {"style": style("font-size: 28px; font-weight: 800; line-height: 1.15")} , v.modalTitle), "\n        ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 600; color: #475569; margin-top: 4px; line-height: 1.4")} , v.modalSub), "\n      "), "\n      ", React.createElement("button", {"onClick": v.closeModal, "aria-label": t("Close"), "style": style("width: 52px; height: 52px; flex: none; border-radius: 14px; border: none; background: #F1F5F9; color: #0F172A; display: flex; align-items: center; justify-content: center")} , React.createElement("svg", {"width": "24", "height": "24", "viewbox": "0 0 24 24", "fill": "none", "stroke": "currentColor", "strokeWidth": "2.6", "strokeLinecap": "round", "aria-hidden": "true"} , React.createElement("path", {"d": "M18 6L6 18M6 6l12 12"}))), "\n    "), "\n\n    ", "\n    ", (v.isMods ? React.createElement(React.Fragment, null, "\n      ", (v.modGroups || []).map((g, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n        ", React.createElement("div", {"style": style("display: flex; flex-direction: column; gap: 10px")} , "\n          ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n            ", React.createElement("span", {"style": style("font-size: 19px; font-weight: 800")} , g.label), "\n            ", React.createElement("span", {"style": style(g.reqStyle)} , g.reqLabel), "\n          "), "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px")} , "\n            ", (g.options || []).map((o, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n              ", React.createElement("button", {"onClick": o.pick, "disabled": o.disabled, "aria-pressed": o.pressed, "style": style(o.style)} , "\n                ", React.createElement("span", {"style": style("font-size: 18px; font-weight: 800")} , o.label), "\n                ", React.createElement("span", {"style": style("font-size: 14px; font-weight: 700")} , o.price), "\n              "), "\n            "))), "\n          "), "\n        "), "\n      "))), "\n      ", React.createElement("button", {"onClick": v.modAdd, "disabled": v.modAddDisabled, "style": style(v.modAddStyle)} , v.modAddLabel), "\n    ") : null), "\n\n    ", "\n    ", (v.isNote ? React.createElement(React.Fragment, null, "\n      ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px")} , "\n        ", (v.noteChips || []).map((nc, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("button", {"onClick": nc.toggle, "disabled": v.noteSaving, "aria-pressed": nc.pressed, "style": style(nc.style)} , nc.label), "\n        "))), "\n      "), "\n      ", React.createElement("label", {"style": style("display: flex; flex-direction: column; gap: 8px; font-size: 16px; font-weight: 800")} , t('Or type the note'), React.createElement("input", {"type": "text", "value": v.noteText, "onChange": v.onNoteText, "disabled": v.noteSaving, "placeholder": t("e.g. medium rare, no onions"), "style": style("height: 60px; border-radius: 14px; border: 2px solid #CBD5E1; padding: 0 18px; font-size: 19px; font-weight: 600; color: #0F172A")}), "\n      "), "\n      ", React.createElement("div", {"style": style("display: flex; gap: 10px")} , "\n        ", React.createElement("button", {"onClick": v.closeModal, "style": style("flex: 1; height: 64px; border-radius: 16px; border: 2px solid #CBD5E1; background: #FFFFFF; color: #0F172A; font-size: 19px; font-weight: 800")} , t("Back")), "\n        ", React.createElement("button", {"onClick": v.saveNote, "disabled": v.noteSaving, "style": style("flex: 2; height: 64px; border-radius: 16px; border: none; background: #2563EB; color: #FFFFFF; font-size: 20px; font-weight: 800")} , t("Save note")), "\n      "), "\n    ") : null), "\n\n    ", "\n    ", (v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null), "\n\n", "\n    ", (v.isMoveTable ? renderMoveTable.call(this, v, style) : null), "\n\n    ", "\n    ", renderBill.call(this, v, style), "\n  "), "\n"), "\n") : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
   }
 }
