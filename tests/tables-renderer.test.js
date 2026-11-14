@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -62,14 +63,14 @@ test('desktop renderer clears prior financial state across sign-out and denies s
   const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app = new context.Demo(); app.componentDidMount();
-  app.setState({screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
-  app.loadDesktopData(); await app.signOut();
-  assert.equal(app.state.screen,'login'); assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0); assert.equal(app.state.tableId,null);
-  owner=true; await app.chooseWaiter({id:2,name:'owner'},''); await new Promise(setImmediate);
+  arrange(app, {screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
+  app.loadDesktopData(); await app.session.signOut();
+  assert.equal(routeOf(app),'login'); assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0); assert.equal(app.state.tableId,null);
+  owner=true; await app.session.chooseWaiter({id:2,name:'owner'},''); await new Promise(setImmediate);
   assert.equal(app.state.tableLoad,'error'); assert.equal(app.state.sections.length,0); assert.equal(app.state.items.length,0);
   resolveOld({ok:true,data:[{id:1,area:'previous',orderId:4,openedAt:1}]}); await new Promise(setImmediate);
   assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0);
-  app.setState({sections:[{label:'stale',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',qty:1,unit:100}]});
+  arrange(app, {sections:[{label:'stale',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',qty:1,unit:100}]});
   app.loadDesktopData(); await new Promise(setImmediate);
   assert.equal(app.state.sections.length,0); assert.equal(Object.keys(app.state.orders).length,0); assert.equal(app.state.items.length,0);
 });

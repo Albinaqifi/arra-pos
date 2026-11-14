@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -17,7 +18,7 @@ test('correction summary distinguishes the total from the latest event', () => {
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
-  const app = new context.Demo(); app.state.tableId = 1; app.state.screen = 'order';
+  const app = new context.Demo(); app.state.tableId = 1; arrange(app, {screen: 'order'});
   app.replaceDesktopItems(app.state, 1, [{ id: 1, productId: 'p', name: 'Dish', unitPrice: 10, quantity: 4, note: '', status: 'sent', round: 1, sentAt: 1, sentBy: 'Waiter', route: 'kitchen', correctedQuantity: 3, corrections: [{ quantity: 2, reason: 'First', actor: 'One', occurredAt: 2 }, { quantity: 1, reason: 'Second', actor: 'Two', occurredAt: 3 }] }]);
   const text = app.renderVals().rounds[0].items[0].cxText;
   assert.match(text, /3 cancelled total · latest: 1 · Second · Two/);
@@ -109,7 +110,7 @@ test('a replay after a lost send response warns that newly added items remain pe
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.openTable(1);
   await app.addProduct('p'); await app.send(); await app.addProduct('p'); await app.send();
-  assert.equal(sends[0],sends[1]); assert.equal(app.state.screen,'waiters'); assert.match(app.state.handoffNotice,/still pending/);
-  await app.chooseWaiter({id:1,name:'Sample',color:'#123'},''); await app.openTable(1); assert.equal(app.state.items[1].status,'pending');
-  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(app.state.screen,'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.state.handoffNotice,/No physical ticket/);
+  assert.equal(sends[0],sends[1]); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/still pending/);
+  await app.session.chooseWaiter({id:1,name:'Sample',color:'#123'},''); await app.openTable(1); assert.equal(app.state.items[1].status,'pending');
+  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
 });

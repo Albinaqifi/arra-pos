@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 
 test('desktop bill review displays amounts and modifiers, decline leaves no bill, and confirmation generates it', async () => {
@@ -9,7 +10,7 @@ test('desktop bill review displays amounts and modifiers, decline leaves no bill
   vm.runInNewContext(require('./support/waiter-views')() + '\n' + require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo; this.Bill = DesktopBill;', context);
   const find = (n, predicate) => { if (!n || typeof n !== 'object') return null; if (predicate(n)) return n; for (const child of n.children || []) for (const c of Array.isArray(child) ? child : [child]) { const found = find(c, predicate); if (found) return found; } return null; };
   const button = (tree, text) => find(tree, n => n.type === 'button' && n.children.includes(text));
-  const app = new context.Demo(); app.setState({ screen: 'order', tableId: 1, orders: { 1: { id: 5, openedAt: 1, rounds: 1, log: [] } } });
+  const app = new context.Demo(); arrange(app, { screen: 'order', tableId: 1, orders: { 1: { id: 5, openedAt: 1, rounds: 1, log: [] } } });
   app.renderVals().openBill(); let element = find(app.render(), n => n.type === context.Bill); assert.ok(element);
   let bill = new element.type(element.props); bill.componentDidMount(); await new Promise(setImmediate);
   let tree = bill.render(); assert.ok(find(tree, n => n.type === 'li' && n.children.some(c => typeof c === 'string' && c.includes('2 × Dish snapshot · 460 den'))));

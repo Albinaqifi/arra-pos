@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), vm = require('node:vm');
 const { openDatabase } = require('../src/desktop/database');
@@ -44,14 +45,14 @@ test('switching immediately removes administration while a prior protected respo
   const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(),ctx);
   vm.runInNewContext(require('./support/waiter-views')() + require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',ctx);
-  const app=new ctx.Demo(); app.setState({screen:'tableConfig',adminAccess:true,waiter:{name:'Admin'}});
+  const app=new ctx.Demo(); arrange(app, {screen:'tableConfig',adminAccess:true,waiter:{name:'Admin'}});
   const pageElement=app.render().children[0], page=new pageElement.type(pageElement.props);
-  const pending=page.load(), switching=app.switchWaiter();
-  assert.equal(app.state.screen,'waiters'); assert.equal(app.state.adminAccess,false);
+  const pending=page.load(), switching=app.session.switchWaiter();
+  assert.equal(routeOf(app),'waiters'); assert.equal(app.session.state.adminAccess,false);
   releaseList({ok:true,data:{areas:[{name:'protected'}],tables:[]}}); await pending;
   assert.doesNotMatch(JSON.stringify(app.render()), /protected|Administration →/);
   releaseClear({ok:true}); await switching;
-  app.setState({screen:'tables',waiter:{name:'Waiter'}});
+  arrange(app, {screen:'tables',waiter:{name:'Waiter'}});
   assert.doesNotMatch(JSON.stringify(app.render()), /protected|Administration →/);
 });
 test('switch blocks selection and sign-out until clear and waiter loading finish, including failure', async () => {
@@ -62,15 +63,15 @@ test('switch blocks selection and sign-out until clear and waiter loading finish
     const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children}}};
     const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
     vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(require('./support/waiter-views')() + require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',ctx);
-    const app=new ctx.Demo(); app.setState({screen:'admin',adminAccess:true,waiter:{name:'Admin'}});
-    const pending=app.switchWaiter();
-    app.pickWaiter({id:2,name:'Waiter',pin:true}); await app.chooseWaiter({id:2},''); await app.signOut();
-    assert.equal(selected,0); assert.equal(signedOut,0); assert.equal(app.state.screen,'waiters'); assert.equal(app.state.switching,true);
+    const app=new ctx.Demo(); arrange(app, {screen:'admin',adminAccess:true,waiter:{name:'Admin'}});
+    const pending=app.session.switchWaiter();
+    app.session.pickWaiter({id:2,name:'Waiter',pin:true}); await app.session.chooseWaiter({id:2},''); await app.session.signOut();
+    assert.equal(selected,0); assert.equal(signedOut,0); assert.equal(routeOf(app),'waiters'); assert.equal(app.session.state.switching,true);
     releaseClear({ok:success});
-    if (success) { await new Promise(setImmediate); await app.chooseWaiter({id:2},''); await app.signOut(); assert.equal(selected,0); assert.equal(signedOut,0); releaseWaiters({ok:true,data:[]}); }
-    await pending; assert.equal(app.state.switching,false);
-    if (!success) assert.match(app.state.waiterMessage,/Could not switch/);
-    await app.signOut(); assert.equal(signedOut,1); assert.equal(app.state.screen,'login');
+    if (success) { await new Promise(setImmediate); await app.session.chooseWaiter({id:2},''); await app.session.signOut(); assert.equal(selected,0); assert.equal(signedOut,0); releaseWaiters({ok:true,data:[]}); }
+    await pending; assert.equal(app.session.state.switching,false);
+    if (!success) assert.match(app.session.state.waiterMessage,/Could not switch/);
+    await app.session.signOut(); assert.equal(signedOut,1); assert.equal(routeOf(app),'login');
   }
 });
 test('employee mutation rechecks access and removes revoked or invalidated sessions', async () => {
@@ -81,9 +82,9 @@ test('employee mutation rechecks access and removes revoked or invalidated sessi
     const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children}}};
     const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},clearTimeout(){}};
     vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(require('./support/waiter-views')() + require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',ctx);
-    const app=new ctx.Demo(); app.componentDidMount(); app.setState({screen:'employeeConfig',adminAccess:true,waiter:{id:1,name:'Admin'}});
+    const app=new ctx.Demo(); app.componentDidMount(); arrange(app, {screen:'employeeConfig',adminAccess:true,waiter:{id:1,name:'Admin'}});
     const element=app.render().children[0], page=new element.type(element.props); await page.save({action:'permissions'});
-    assert.equal(app.state.adminAccess,false); assert.equal(app.state.screen,result.signedIn?'tables':'login');
+    assert.equal(app.session.state.adminAccess,false); assert.equal(routeOf(app),result.signedIn?'tables':'login');
     await new Promise(setImmediate);
     assert.equal(menuLoads,result.signedIn?1:0); assert.equal(tableLoads,result.signedIn?1:0);
     if (result.signedIn) { assert.equal(app.state.tableLoad,'ready'); assert.equal(app.state.sections[0].ids[0],42); }

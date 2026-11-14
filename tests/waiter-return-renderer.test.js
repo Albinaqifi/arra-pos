@@ -1,3 +1,4 @@
+const { arrange, routeOf } = require('./support/renderer-fixture');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -10,7 +11,7 @@ function harness(api) {
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Bill=DesktopBill;',context);
   context.DesktopBill = context.Bill;
   const app = new context.App(); app.componentDidMount();
-  Object.assign(app.state, {screen:'order', waiter:{id:1,name:'First'}, tableId:1, orders:{1:{id:5,log:[]}}, items:[]});
+  arrange(app, {screen:'order', waiter:{id:1,name:'First'}, tableId:1, orders:{1:{id:5,log:[]}}, items:[]});
   return {app, context};
 }
 const row = status => ({id:1,productId:'p',name:'Dish',unitPrice:10,quantity:1,status,note:'',modifiers:[]});
@@ -23,11 +24,11 @@ test('confirmed send switches identity and shows a print issue; failed send stay
     getWaiters: async () => ({ok:true,data:[{id:2,name:'Next',hasPin:false}]}), selectWaiter: async () => {select++; return {ok:true};},
     getMenu: async () => ({ok:true,data:{categories:[],products:[]}}), getTables: async () => ({ok:true,data:[]})};
   const {app}=harness(api);
-  await app.send(); assert.equal(app.state.screen,'order'); assert.equal(clears,0); assert.match(app.state.toast.msg,/Could not save/);
+  await app.send(); assert.equal(routeOf(app),'order'); assert.equal(clears,0); assert.match(app.state.toast.msg,/Could not save/);
   outcome='ok'; const sending=app.send(); await tick(); await app.send(); assert.equal(sends,2);
   resolveJobs({ok:true,data:{jobs:[{result:'uncertain'}]}}); await sending;
-  assert.equal(app.state.screen,'waiters'); assert.equal(clears,1); assert.match(app.state.handoffNotice,/print job needs attention/i);
-  await app.chooseWaiter({id:2,name:'Next',color:'#123'},''); assert.equal(select,1); assert.equal(app.state.screen,'tables');
+  assert.equal(routeOf(app),'waiters'); assert.equal(clears,1); assert.match(app.session.state.handoffNotice,/print job needs attention/i);
+  await app.session.chooseWaiter({id:2,name:'Next',color:'#123'},''); assert.equal(select,1); assert.equal(routeOf(app),'tables');
 });
 
 test('payment uncertainty remains in bill until same selection succeeds, then switches waiter', async () => {
@@ -36,16 +37,16 @@ test('payment uncertainty remains in bill until same selection succeeds, then sw
   const {app,context}=harness(api); app.state.modal={type:'desktopBill'};
   const tree=app.render(), billNode=tree.children[0]; assert.equal(billNode.type,context.Bill);
   const bill=new context.Bill(billNode.props); Object.assign(bill.state,{data:{id:7},method:'card',account:'A'});
-  await bill.pay(); assert.equal(app.state.screen,'order'); assert.equal(bill.state.uncertain,true); assert.equal(clear,0);
-  await bill.pay(); await tick(); assert.deepEqual(calls[0],calls[1]); assert.equal(calls.length,2); assert.equal(clear,1); assert.equal(app.state.screen,'waiters');
-  await app.chooseWaiter({id:2,name:'Next'},''); assert.equal(app.state.screen,'tables');
+  await bill.pay(); assert.equal(routeOf(app),'order'); assert.equal(bill.state.uncertain,true); assert.equal(clear,0);
+  await bill.pay(); await tick(); assert.deepEqual(calls[0],calls[1]); assert.equal(calls.length,2); assert.equal(clear,1); assert.equal(routeOf(app),'waiters');
+  await app.session.chooseWaiter({id:2,name:'Next'},''); assert.equal(routeOf(app),'tables');
 });
 
 test('demo send preserves failed print warning and paid completion returns to selection', async () => {
-  const {app}=harness(undefined); Object.assign(app.state,{screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{rounds:0,log:[]}},items:[{id:'x',tableId:1,status:'pending',qty:1,unit:10,route:'kitchen',cxQty:0}],printers:{kitchen:false,bar:true,A:true,B:true}});
-  app.send(); assert.equal(app.state.screen,'waiters'); assert.match(app.state.handoffNotice,/ticket did not print/);
-  await app.chooseWaiter({name:'Next'},''); assert.equal(app.state.screen,'tables'); assert.equal(app.renderVals().hasFailed,true);
-  app.state.screen='order'; app.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(app.state.screen,'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
+  const {app}=harness(undefined); arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{rounds:0,log:[]}},items:[{id:'x',tableId:1,status:'pending',qty:1,unit:10,route:'kitchen',cxQty:0}],printers:{kitchen:false,bar:true,A:true,B:true}});
+  app.send(); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/ticket did not print/);
+  await app.session.chooseWaiter({name:'Next'},''); assert.equal(routeOf(app),'tables'); assert.equal(app.renderVals().hasFailed,true);
+  arrange(app, {screen: 'order'}); app.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
 });
 
 
@@ -53,11 +54,11 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   let release, opened=0, clears=0;
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
   const {app}=harness(api); const sending=app.send(); await tick();
-  app.goTables(); await app.openTable(2); await app.switchWaiter();
+  app.goTables(); await app.openTable(2); await app.session.switchWaiter();
   const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.openNote(1);
-  assert.equal(app.state.screen,'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
+  assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
   release({ok:true,data:{jobs:[]}}); await sending;
-  assert.equal(app.state.screen,'waiters'); assert.equal(clears,1);
+  assert.equal(routeOf(app),'waiters'); assert.equal(clears,1);
 });
 
 test('a lost print retry response keeps its token through automatic handoff and reselection', async () => {
@@ -66,13 +67,13 @@ test('a lost print retry response keeps its token through automatic handoff and 
   const {app,context}=harness(api); context.crypto.randomUUID=()=>`retry-${++sequence}`;
   function panelFromRender(){const find=x=>{if(!x || typeof x!=='object')return; if(x.type===context.Jobs)return x; for(const child of x.children||[]){const found=find(child);if(found)return found;}}; return new context.Jobs(find(app.render()).props);}
   let panel=panelFromRender(); await panel.retry(12); assert.equal(ids.length,1);
-  await app.switchWaiter(); await app.chooseWaiter({id:2,name:'Next'},'');
+  await app.session.switchWaiter(); await app.session.chooseWaiter({id:2,name:'Next'},'');
   panel=panelFromRender(); await panel.retry(12); assert.deepEqual(ids,['retry-1','retry-1']); assert.equal(committed.size,1);
 });
 test('demo cancellation never claims a printed notice', async () => {
   for (const printer of [true,false]) {
     const {app}=harness(undefined);
-    Object.assign(app.state,{screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
+    arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
     await app.confirmCancel(); assert.match(app.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.state.toast.msg,/print/i);
   }
 });
@@ -92,5 +93,5 @@ test('correction rejection shows safe, translated reasons without changing uncer
   const en=JSON.parse(fs.readFileSync(require.resolve('../src/admin/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/admin/sq.json'),'utf8'));
   context.ArraComponents.translate=(lang,key)=> (lang==='sq'?sq:en)[key] || key;
   const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashmë është faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','të pavlefshme']};
-  for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.state.language=language; app.state.modal={type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}; await app.confirmCancel(); assert.ok(app.state.modal.error.includes(texts[language==='sq'?1:0]),app.state.modal.error); assert.equal(app.state.modal.requestId,null); }
+  for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.settings.state.language=language; app.state.modal={type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}; await app.confirmCancel(); assert.ok(app.state.modal.error.includes(texts[language==='sq'?1:0]),app.state.modal.error); assert.equal(app.state.modal.requestId,null); }
 });
