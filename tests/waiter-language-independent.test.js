@@ -20,7 +20,7 @@ test('switching language during send and uncertain payment does not repeat eithe
   let sends=0,payments=0,releaseSend;
   const api={language:async r=>({ok:true,language:r.language}),orderItems:()=>{sends++;return new Promise(resolve=>{releaseSend=resolve;});},payment:async()=>{payments++;return {ok:false,uncertain:true};}};
   const {app,ctx}=setup(api);
-  const pending=app.send(); await app.settings.changeLanguage('sq'); app.renderVals(); assert.equal(sends,1);
+  const pending=app.sendWorkflow.send(); await app.settings.changeLanguage('sq'); app.renderVals(); assert.equal(sends,1);
   releaseSend({ok:false}); await pending; assert.equal(sends,1);
   const bill=new ctx.Bill({language:'sq',onPaid(){},onClose(){}}); Object.assign(bill.state,{data:{id:7,total:100,lines:[]},method:'card',account:'A'});
   await bill.pay(); assert.equal(payments,1); assert.equal(bill.state.uncertain,true);

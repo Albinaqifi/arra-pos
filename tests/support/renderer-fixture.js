@@ -19,6 +19,7 @@ function arrange(app, values) {
     } else if (sessionFields.has(name)) app.session.state[name] = value;
     else if (tableOrderFields.has(name)) app.tableOrders.state[name] = value;
     else if (catalogFields.has(name)) app.catalog.state[name] = value;
+    else if (name === 'printers' || name === 'jobs') app.demoPrinting.state[name] = value;
     else if (name === 'language') app.settings.state.language = value;
     else app.state[name] = value;
   }

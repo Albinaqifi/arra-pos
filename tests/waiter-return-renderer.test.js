@@ -24,8 +24,8 @@ test('confirmed send switches identity and shows a print issue; failed send stay
     getWaiters: async () => ({ok:true,data:[{id:2,name:'Next',hasPin:false}]}), selectWaiter: async () => {select++; return {ok:true};},
     getMenu: async () => ({ok:true,data:{categories:[],products:[]}}), getTables: async () => ({ok:true,data:[]})};
   const {app}=harness(api);
-  await app.send(); assert.equal(routeOf(app),'order'); assert.equal(clears,0); assert.match(app.state.toast.msg,/Could not save/);
-  outcome='ok'; const sending=app.send(); await tick(); await app.send(); assert.equal(sends,2);
+  await app.sendWorkflow.send(); assert.equal(routeOf(app),'order'); assert.equal(clears,0); assert.match(app.state.toast.msg,/Could not save/);
+  outcome='ok'; const sending=app.sendWorkflow.send(); await tick(); await app.sendWorkflow.send(); assert.equal(sends,2);
   resolveJobs({ok:true,data:{jobs:[{result:'uncertain'}]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1); assert.match(app.session.state.handoffNotice,/print job needs attention/i);
   await app.session.chooseWaiter({id:2,name:'Next',color:'#123'},''); assert.equal(select,1); assert.equal(routeOf(app),'tables');
@@ -44,8 +44,8 @@ test('payment uncertainty remains in bill until same selection succeeds, then sw
 
 test('demo send preserves failed print warning and paid completion returns to selection', async () => {
   const {app}=harness(undefined); arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{rounds:0,log:[]}},items:[{id:'x',tableId:1,status:'pending',qty:1,unit:10,route:'kitchen',cxQty:0}],printers:{kitchen:false,bar:true,A:true,B:true}});
-  app.send(); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/ticket did not print/);
-  await app.session.chooseWaiter({name:'Next'},''); assert.equal(routeOf(app),'tables'); assert.equal(app.renderVals().hasFailed,true);
+  app.sendWorkflow.send(); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/ticket did not print/);
+  await app.session.chooseWaiter({name:'Next'},''); assert.equal(routeOf(app),'tables'); assert.equal(app.demoPrinting.failedView().hasFailed,true);
   arrange(app, {screen: 'order'}); app.tableOrders.state.tableId=1; app.state.modal={type:'bill',printed:1,method:'Card',account:'A'}; const before=app.state.history.length; app.paid(); assert.equal(routeOf(app),'waiters'); assert.equal(app.state.history.length,before+1); app.paid(); assert.equal(app.state.history.length,before+1);
 });
 
@@ -53,7 +53,7 @@ test('demo send preserves failed print warning and paid completion returns to se
 test('navigation cannot interrupt a confirmed send while print status is loading', async () => {
   let release, opened=0, clears=0;
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
-  const {app}=harness(api); const sending=app.send(); await tick();
+  const {app}=harness(api); const sending=app.sendWorkflow.send(); await tick();
   app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
   const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.pending.openNote(1);
   assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);

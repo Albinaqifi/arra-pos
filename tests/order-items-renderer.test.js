@@ -63,7 +63,7 @@ test('desktop screen loads and saves items, shows failures, and does not send de
   app.pending.dismiss(); assert.equal(app.pending.state.dialog.text, 'Changed');
   release(); await pending; release = null;
   assert.equal(app.tableOrders.state.items[0].note, 'Changed'); assert.equal(app.pending.state.dialog, null);
-  app.send(); assert.equal(app.tableOrders.state.items[0].status, 'pending');
+  app.sendWorkflow.send(); assert.equal(app.tableOrders.state.items[0].status, 'pending');
   app = await load(); assert.equal(app.tableOrders.state.items[0].qty, 2); assert.equal(app.tableOrders.state.items[0].note, 'Changed'); assert.match(app.renderVals().total, /240/);
   fail = true; await app.pending.removeItem(7); assert.equal(app.tableOrders.state.items.length, 1); assert.match(app.state.toast.msg, /Could not save/);
   fail = false; await app.pending.removeItem(7); assert.equal(app.tableOrders.state.items.length, 0);
@@ -109,8 +109,8 @@ test('a replay after a lost send response warns that newly added items remain pe
   const context={crypto:{randomUUID:()=>`request-${++token}`},React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.tableOrders.openTable(1);
-  await app.pending.addProduct('p'); await app.send(); await app.pending.addProduct('p'); await app.send();
+  await app.pending.addProduct('p'); await app.sendWorkflow.send(); await app.pending.addProduct('p'); await app.sendWorkflow.send();
   assert.equal(sends[0],sends[1]); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/still pending/);
   await app.session.chooseWaiter({id:1,name:'Sample',color:'#123'},''); await app.tableOrders.openTable(1); assert.equal(app.tableOrders.state.items[1].status,'pending');
-  await app.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
+  await app.sendWorkflow.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
 });

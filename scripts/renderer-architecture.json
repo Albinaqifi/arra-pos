@@ -1,7 +1,7 @@
 {
   "phase": "migration",
   "coordinator": {
-    "sha256": "01a32685f1d9a95469f35de8b51718e4f7a5da8155ff7b1be4cf77fb9bfac488",
+    "sha256": "6662e05af9581f1c5f9267c3d2453224c069305bc30562de346b83b902362977",
     "methods": [
       "constructor",
       "componentDidMount",
@@ -15,11 +15,6 @@
       "toast",
       "log",
       "rlabel",
-      "togglePrinter",
-      "submitSend",
-      "send",
-      "retryJob",
-      "backupJob",
       "openCancel",
       "confirmCancel",
       "confirmMoveTable",
@@ -33,5 +28,5 @@
   "legacySharedEdges": [
     "src/shared/waiter-ui.js -> src/admin/i18n.js"
   ],
-  "baseRevision": "b3bf32f"
+  "baseRevision": "6ff2e51"
 }

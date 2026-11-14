@@ -180,14 +180,14 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   let entered = app.tableOrders.state.items.filter(value => value.tableId === 1);
   assert.equal(entered.length, 1); assert.equal(entered[0].qty, 1); assert.equal(entered[0].id, 'i114');
   app.pending.incItem(entered[0].id);
-  app.setState({ printers: { kitchen: false, bar: true, A: true, B: true } });
-  app.send();
-  assert.equal(app.state.jobs.length, 1); assert.equal(app.state.jobs[0].id, 'j115');
+  app.demoPrinting.toggle('kitchen');
+  app.sendWorkflow.send();
+  assert.equal(app.demoPrinting.state.jobs.length, 1); assert.equal(app.demoPrinting.state.jobs[0].id, 'j115');
   assert.equal(app.tableOrders.state.orders[1].rounds, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Added ')).length, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Sent round ')).length, 1);
-  app.retryJob('j115'); app.backupJob('j115');
-  assert.equal(app.state.jobs[0].attempts, 3);
+  app.demoPrinting.retry('j115'); app.demoPrinting.backup('j115');
+  assert.equal(app.demoPrinting.state.jobs[0].attempts, 3);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Retry of ')).length, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.includes('on the backup printer')).length, 1);
   await app.session.chooseWaiter({ name: 'Sample' }, ''); await app.tableOrders.openTable(1);
@@ -206,7 +206,7 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   app.paid(); app.paid();
   assert.equal(app.state.history.length, history + 1);
   assert.equal(app.tableOrders.state.orders[2], undefined);
-  assert.equal(app.state.jobs.length, 0);
+  assert.equal(app.demoPrinting.state.jobs.length, 0);
   assert.equal(reentrantRenders, 0, 'owner notifications never execute within a root updater');
   app.componentWillUnmount();
 });
