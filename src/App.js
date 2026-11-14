@@ -98,6 +98,7 @@ export class WaiterDemo extends React.Component {
       },
     });
     this.correction = new CorrectionWorkflow({
+      jobsChanged: () => this.printing.jobsChanged(),
       bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
       canOpen: () => !this.sendWorkflow.state.busy && !this.billing?.openDialog && !this.billing?.locked && this.pending.dismiss() && this.moveWorkflow.dismiss(),
       notify: (message, kind) => this.shell.notify(message, kind),
@@ -171,7 +172,7 @@ export class WaiterDemo extends React.Component {
   render() {
     const identity = this.session.identity(), language = this.settings.state.language, screen = this.session.state.screen;
     if (screen === 'transferCorrection') return React.createElement(TransferCorrection, { language, onBack: () => this.session.switchWaiter() });
-    if (screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
+    if (screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), jobsChanged: () => this.printing.jobsChanged(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
     const shell = this.shell.view();
     let content = null;
     if (screen === 'waiter') {

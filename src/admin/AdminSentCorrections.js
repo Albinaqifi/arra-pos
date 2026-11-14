@@ -21,7 +21,7 @@ export class AdminSentCorrections extends React.Component {
     this.setState({busy:true,pending:req,error:'',notice:''});
     try {
       const result=await window.arra.adminSentCorrection(req);
-      if (result.ok) { this.setState({busy:false,pending:null,selected:null,quantity:1,reason:'',notice:this.t('Correction saved.')}); await this.load(); }
+      if (result.ok) { this.props.onJobsChanged?.(); this.setState({busy:false,pending:null,selected:null,quantity:1,reason:'',notice:this.t(result.testPrintEnabled ? 'Correction saved.' : 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.')}); await this.load(); }
       else if (result.uncertain) this.setState({busy:false,error:this.t('The result is uncertain. Retry the same correction.')});
       else { this.setState({busy:false,pending:null}); await this.load(); this.setState({error:this.t('Correction was rejected. Refresh and check the order.')}); }
     } catch (_) { this.setState({busy:false,error:this.t('The result is uncertain. Retry the same correction.')}); }

@@ -264,6 +264,20 @@ const migrations = [
   CREATE TRIGGER order_cancellations_no_update BEFORE UPDATE ON order_cancellations BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;
   CREATE TRIGGER order_cancellations_no_delete BEFORE DELETE ON order_cancellations BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;
   CREATE TRIGGER order_cancellations_no_replace BEFORE INSERT ON order_cancellations WHEN EXISTS(SELECT 1 FROM order_cancellations WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT,'Cancellations are immutable'); END;` },
+  { version: 33, sql: `CREATE TABLE IF NOT EXISTS cancellation_notice_jobs (id INTEGER PRIMARY KEY, correction_id INTEGER NOT NULL UNIQUE REFERENCES sent_item_corrections(id), destination TEXT NOT NULL CHECK(destination IN ('kitchen','bar')), snapshot TEXT NOT NULL, created_at INTEGER NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS cancellation_notice_attempts (id INTEGER PRIMARY KEY, job_id INTEGER NOT NULL REFERENCES cancellation_notice_jobs(id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER NOT NULL REFERENCES local_users(id), queue TEXT NOT NULL, beep INTEGER NOT NULL CHECK(beep IN (0,1)), started_at INTEGER NOT NULL) STRICT;
+  CREATE TABLE IF NOT EXISTS cancellation_alert_settings (destination TEXT PRIMARY KEY CHECK(destination IN ('kitchen','bar')), beep INTEGER NOT NULL DEFAULT 0 CHECK(beep IN (0,1))) STRICT;
+  INSERT OR IGNORE INTO cancellation_alert_settings(destination) VALUES('kitchen'),('bar');
+  CREATE TABLE IF NOT EXISTS cancellation_notice_results (attempt_id INTEGER PRIMARY KEY REFERENCES cancellation_notice_attempts(id), result TEXT NOT NULL CHECK(result IN ('failed','accepted')), occurred_at INTEGER NOT NULL) STRICT;
+  CREATE TRIGGER IF NOT EXISTS cancellation_jobs_no_update BEFORE UPDATE ON cancellation_notice_jobs BEGIN SELECT RAISE(ABORT,'Notices are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_jobs_no_delete BEFORE DELETE ON cancellation_notice_jobs BEGIN SELECT RAISE(ABORT,'Notices are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_jobs_no_replace BEFORE INSERT ON cancellation_notice_jobs WHEN EXISTS(SELECT 1 FROM cancellation_notice_jobs WHERE id=NEW.id OR correction_id=NEW.correction_id) BEGIN SELECT RAISE(ABORT,'Notices are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_attempts_no_update BEFORE UPDATE ON cancellation_notice_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_attempts_no_delete BEFORE DELETE ON cancellation_notice_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_attempts_no_replace BEFORE INSERT ON cancellation_notice_attempts WHEN EXISTS(SELECT 1 FROM cancellation_notice_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_results_no_update BEFORE UPDATE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_results_no_delete BEFORE DELETE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+  CREATE TRIGGER IF NOT EXISTS cancellation_results_no_replace BEFORE INSERT ON cancellation_notice_results WHEN EXISTS(SELECT 1 FROM cancellation_notice_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
 ];
 
 function migrate(db) {

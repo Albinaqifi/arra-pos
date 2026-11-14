@@ -7,6 +7,7 @@ export class PrintingSession {
   #uuid;
   #retryTokens = new Map();
   #testRetryTokens = new Map();
+  #noticeRetryTokens = new Map();
   #billTokens = new Map();
   #busy = { printJobs: false, testPrinting: false };
   #revision = 0;
@@ -67,11 +68,20 @@ export class PrintingSession {
     return this.#change('testPrinting', () => ({ action: 'configure', destination, queue }));
   }
 
+  configureAlert(destination, beep) {
+    return this.#change('testPrinting', () => ({ action:'configureAlert', destination, beep }));
+  }
+
   retryTestJob(jobId, checked) {
     if (checked !== true) return Promise.resolve({ ok: false });
     return this.#change('testPrinting', () => ({
       action: 'retry', jobId, checked: true, requestId: this.#retryToken(this.#testRetryTokens, jobId),
     }), () => this.#testRetryTokens.delete(jobId));
+  }
+
+  retryNotice(jobId, checked) {
+    if (checked !== true) return Promise.resolve({ ok: false });
+    return this.#change('testPrinting', () => ({ action:'retryNotice', jobId, checked:true, requestId:this.#retryToken(this.#noticeRetryTokens, jobId) }), () => this.#noticeRetryTokens.delete(jobId));
   }
 
   submitTestBill(billId) {

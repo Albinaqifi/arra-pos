@@ -12,9 +12,9 @@ const rejections = {
 };
 
 export class CorrectionWorkflow extends FeatureState {
-  constructor({ bridge, orders, getLanguage, getActor, canOpen, notify, requestId = () => crypto.randomUUID() }) {
+  constructor({ bridge, orders, getLanguage, getActor, canOpen, notify, jobsChanged = () => {}, requestId = () => crypto.randomUUID() }) {
     super({ dialog: null });
-    Object.assign(this, { bridge, orders, getLanguage, getActor, canOpen, notify, requestId });
+    Object.assign(this, { bridge, orders, getLanguage, getActor, canOpen, notify, jobsChanged, requestId });
     this.draftSequence = 0;
   }
   t(key, values) { return waiterTranslate(this.getLanguage(), 'waiter.' + key, values); }
@@ -81,8 +81,9 @@ export class CorrectionWorkflow extends FeatureState {
         await this.orders.refreshAvailability(lease);
         if (!this._current(dialog)) return;
         this.orders.applyConfirmedItems(lease, result.data.items);
+        this.jobsChanged();
         this._set({ dialog: null });
-        this.notify(this.t('Correction saved. Tell preparation staff in person.'));
+        this.notify(this.t(result.data.testPrintEnabled ? 'Correction saved. Tell preparation staff in person.' : 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.'));
       } else if (result?.rejected && !dialog.unresolved) {
         this._set({ dialog: { ...this.state.dialog, saving: false, unresolved: false, payload: null, requestId: null, error: this.t(rejections[result.code] || 'Correction rejected. Check authorization and quantity.') } });
       } else this._unknown(dialog);
@@ -107,7 +108,7 @@ export class CorrectionWorkflow extends FeatureState {
       cxReasons: reasons.map(reason => ({ label: t(reason), pressed: String(dialog.reason === reason), pick: () => this.chooseReason(reason) })),
       cxReasonLabel: dialog.reason === 'Other' ? dialog.other.trim() : t(dialog.reason), cxIsOther: dialog.reason === 'Other', cxOther: dialog.other,
       onCxOther: event => this.setOther(event.target.value), cxDisabled: !dialog.reason || (dialog.reason === 'Other' && !dialog.other.trim()),
-      cxInfo: t('Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.'),
+      cxInfo: t(this.bridge ? 'Tell preparation staff in person. Check cancellation print status; earlier output may still arrive.' : 'Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.'),
       cxConfirm: () => this.confirm(), cxReview: () => this.review(), cxEditOrDismiss: () => this.editOrDismiss(), closeModal: () => this.dismiss(),
     };
   }

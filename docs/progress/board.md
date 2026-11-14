@@ -80,3 +80,4 @@ The S-052 local recovery exercise worked and no longer blocks local verification
 | S-072 | Done | Independent review and focused tests passed; owner reports desktop and offline checks worked; PR #98 merged as `5875b4d`. |
 
 | S-073 | Done | Independent review and testing passed; PR #100 merged as `b96c239`. Sample Electron offline/restart and browser-demo flows passed; physical printing remains unverified. |
+| S-074 | In progress | Independent review and focused tests passed; owner reports English, offline, physical ticket and three-beep checks work; PR pending. |
