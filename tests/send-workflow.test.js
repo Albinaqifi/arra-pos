@@ -32,7 +32,7 @@ test('send lock spans the item response, print lookup, waiter clearing and staff
   item.resolve({ ok: true, data: { items: [row()], testPrintEnabled: true } }); await tick();
   assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, true);
   await app.tableOrders.openTable(2); await app.session.switchWaiter();
-  app.renderVals().openBill(); app.renderVals().openMoveTable(); app.openCancel(1); app.pending.openNote(1);
+  app.renderVals().openBill(); app.renderVals().openMoveTable(); app.correction.open(1); app.pending.openNote(1);
   assert.equal(opens, 0); assert.equal(clears, 0); assert.equal(app.state.modal, null); assert.equal(app.pending.state.dialog, null);
   print.resolve({ ok: true, data: { jobs: [] } }); await tick();
   assert.equal(clears, 1); assert.equal(app.sendWorkflow.state.busy, true); assert.equal(routeOf(app), 'waiters');

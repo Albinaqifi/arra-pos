@@ -22,6 +22,7 @@ export * from './src/catalog/CatalogModel.js';
 export * from './src/orders/TableOrderModel.js';
 export * from './src/pending/PendingItems.js';
 export * from './src/movement/MoveWorkflow.js';
+export * from './src/correction/CorrectionWorkflow.js';
 export * from './src/waiter/SendWorkflow.js';
 export * from './src/printing/DemoPrinting.js';
 export * from './src/printing/PrintingSession.js';

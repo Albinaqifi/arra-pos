@@ -55,7 +55,7 @@ test('navigation cannot interrupt a confirmed send while print status is loading
   const api={orderItems:async()=>({ok:true,data:{items:[row('sent')]}}),printJobs:()=>new Promise(r=>{release=r;}),openOrder:async()=>{opened++;return {ok:true,data:{id:6}};},clearWaiter:async()=>{clears++;return {ok:true};},getWaiters:async()=>({ok:true,data:[]})};
   const {app}=harness(api); const sending=app.sendWorkflow.send(); await tick();
   app.tableOrders.showTables(); await app.tableOrders.openTable(2); await app.session.switchWaiter();
-  const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.openCancel(1); app.pending.openNote(1);
+  const controls=app.renderVals(); controls.openBill(); controls.openMoveTable(); controls.goHistory(); app.correction.open(1); app.pending.openNote(1);
   assert.equal(routeOf(app),'order'); assert.equal(app.state.modal,null); assert.equal(opened,0); assert.equal(clears,0);
   release({ok:true,data:{jobs:[]}}); await sending;
   assert.equal(routeOf(app),'waiters'); assert.equal(clears,1);
@@ -74,24 +74,43 @@ test('demo cancellation never claims a printed notice', async () => {
   for (const printer of [true,false]) {
     const {app}=harness(undefined);
     arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
-    await app.confirmCancel(); assert.match(app.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.state.toast.msg,/print/i);
+    await app.correction.confirm(); assert.match(app.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.state.toast.msg,/print/i);
   }
 });
 
 test('definite rejection unlocks correction, but an earlier unknown result stays locked', async () => {
   let outcome={ok:false,rejected:true};
   const api={orderItems:async()=>outcome}; const {app}=harness(api);
+  app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [row('sent')]);
   const modal=()=>({type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''});
-  app.state.modal=modal(); await app.confirmCancel(); assert.equal(app.state.modal.unresolved,false); assert.equal(app.state.modal.requestId,null); assert.match(app.state.modal.error,/rejected/i);
-  app.state.modal=modal(); outcome={ok:false}; await app.confirmCancel(); const token=app.state.modal.requestId; assert.equal(app.state.modal.unresolved,true);
-  outcome={ok:false,rejected:true}; await app.confirmCancel(); assert.equal(app.state.modal.unresolved,true); assert.equal(app.state.modal.requestId,token); app.renderVals().closeModal(); assert.ok(app.state.modal);
+  arrange(app, {modal:modal()}); await app.correction.confirm(); assert.equal(app.correction.state.dialog.unresolved,false); assert.equal(app.correction.state.dialog.requestId,null); assert.match(app.correction.state.dialog.error,/rejected/i);
+  arrange(app, {modal:modal()}); outcome={ok:false}; await app.correction.confirm(); const token=app.correction.state.dialog.requestId; assert.equal(app.correction.state.dialog.unresolved,true);
+  outcome={ok:false,rejected:true}; await app.correction.confirm(); assert.equal(app.correction.state.dialog.unresolved,true); assert.equal(app.correction.state.dialog.requestId,token); app.correction.dismiss(); assert.ok(app.correction.state.dialog);
+});
+
+test('an uncertain correction blocks conflicting commands until the exact retry resolves', async () => {
+  const calls = []; let clears = 0;
+  const { app } = harness({ orderItems: async (action, id, payload) => { calls.push({ action, id, payload }); return { ok: false }; }, clearWaiter: async () => { clears++; return { ok: true }; } });
+  app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [row('sent'), { ...row('pending'), id: 2 }]);
+  app.correction.open(1); app.correction.chooseReason('Entered by mistake'); await app.correction.confirm();
+  assert.equal(app.correction.locked, true); assert.equal(app.tableOrders.writeBusy, false);
+  const dialog = app.correction.state.dialog;
+  await app.sendWorkflow.send(); await app.pending.incItem(2); app.pending.openNote(2);
+  app.moveWorkflow.open(); app.renderVals().openBill(); app.tableOrders.showTables(); await app.session.switchWaiter();
+  assert.equal(calls.length, 1); assert.equal(clears, 0); assert.equal(routeOf(app), 'order');
+  assert.equal(app.pending.state.dialog, null); assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.state.modal, null);
+  assert.equal(app.correction.state.dialog, dialog);
+  app.correction.chooseReason('Other'); app.correction.changeQuantity(1); app.correction.dismiss();
+  await app.correction.confirm();
+  assert.equal(calls[1].payload, calls[0].payload); assert.equal(app.correction.locked, true);
 });
 
 
 test('correction rejection shows safe, translated reasons without changing uncertain retries', async () => {
   let code; const api={orderItems:async()=>({ok:false,rejected:true,code})}; const {app,context}=harness(api);
+  app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [row('sent')]);
   const en=JSON.parse(fs.readFileSync(require.resolve('../src/admin/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/admin/sq.json'),'utf8'));
   context.ArraComponents.translate=(lang,key)=> (lang==='sq'?sq:en)[key] || key;
   const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashmë është faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','të pavlefshme']};
-  for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.settings.state.language=language; app.state.modal={type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}; await app.confirmCancel(); assert.ok(app.state.modal.error.includes(texts[language==='sq'?1:0]),app.state.modal.error); assert.equal(app.state.modal.requestId,null); }
+  for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.settings.state.language=language; arrange(app, {modal:{type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}}); await app.correction.confirm(); assert.ok(app.correction.state.dialog.error.includes(texts[language==='sq'?1:0]),app.correction.state.dialog.error); assert.equal(app.correction.state.dialog.requestId,null); }
 });

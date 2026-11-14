@@ -191,8 +191,8 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Retry of ')).length, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.includes('on the backup printer')).length, 1);
   await app.session.chooseWaiter({ name: 'Sample' }, ''); await app.tableOrders.openTable(1);
-  app.setState({ modal: { type: 'cancel', itemId: 'i114', qty: 1, reason: 'Entered by mistake', other: '' } });
-  await app.confirmCancel();
+  app.correction.open('i114'); app.correction.chooseReason('Entered by mistake');
+  await app.correction.confirm();
   entered = app.tableOrders.state.items.filter(value => value.tableId === 1);
   assert.equal(entered[0].cxQty, 1); assert.equal(entered[0].cx.length, 1);
   app.moveWorkflow.open(); app.moveWorkflow.chooseDestination(2); await app.moveWorkflow.confirm();

@@ -9,6 +9,7 @@ function arrange(app, values) {
   let pendingDialog;
   let hasPendingDialog = false;
   let moveDialog;
+  let correctionDialog;
   for (const [name, value] of Object.entries(values)) {
     if (name === 'screen') {
       if (adminPages.has(value)) { app.session.state.screen = 'admin'; app.administration.state.page = value; }
@@ -17,7 +18,9 @@ function arrange(app, values) {
     } else if (name === 'modal') {
       app.pending.state.dialog = null;
       app.moveWorkflow.state.dialog = null;
+      app.correction.state.dialog = null;
       if (value && ['mods', 'note'].includes(value.type)) { pendingDialog = value; hasPendingDialog = true; app.state.modal = null; }
+      else if (value?.type === 'cancel') { correctionDialog = value; app.state.modal = null; }
       else if (value?.type === 'moveTable') { moveDialog = value; app.state.modal = null; }
       else app.state.modal = value;
     } else if (sessionFields.has(name)) app.session.state[name] = value;
@@ -30,6 +33,7 @@ function arrange(app, values) {
   }
   if (hasPendingDialog) app.pending.state.dialog = { ...pendingDialog, target: app.tableOrders.captureTarget(), draftId: ++app.pending.draftSequence };
   if (moveDialog) app.moveWorkflow.state.dialog = { ...moveDialog, target: app.tableOrders.captureTarget(), draftId: ++app.moveWorkflow.draftSequence };
+  if (correctionDialog) app.correction.state.dialog = { other: '', ...correctionDialog, target: app.tableOrders.captureTarget(), draftId: ++app.correction.draftSequence };
   return app.state;
 }
 

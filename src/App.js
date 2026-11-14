@@ -3,6 +3,7 @@ import { desktopBridge } from './shared/desktop-bridge.js';
 import { waiterTranslate, style } from './shared/waiter-ui.js';
 import { renderTables } from './waiter/Tables.js';
 import { renderOrder } from './waiter/Order.js';
+import { CorrectionWorkflow } from './correction/CorrectionWorkflow.js';
 import { MoveWorkflow } from './movement/MoveWorkflow.js';
 import { renderBill } from './waiter/Bill.js';
 import { DesktopBill } from './waiter/DesktopBill.js';
@@ -36,16 +37,16 @@ export class WaiterDemo extends React.Component {
     this.catalog = new CatalogModel({ bridge: desktopBridge, demoCatalog: catalog });
     this.tableOrders = new TableOrderModel({
       bridge: desktopBridge, demoOrders: desktopBridge ? undefined : demoOrders(catalog, this.nextDemoId), nextId: this.nextDemoId,
-      canNavigate: () => !this.sendWorkflow?.state.busy && !this.state.modal?.unresolved && !this.moveWorkflow?.locked,
+      canNavigate: () => !this.sendWorkflow?.state.busy && !this.correction?.locked && !this.moveWorkflow?.locked,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       getLanguage: () => this.settings.state.language,
       onOrderOpened: () => this.catalog.clearSearch(),
-      onDismiss: () => { this.pending?.dismiss(); this.moveWorkflow?.dismiss(); this.setState({ modal: null }); },
+      onDismiss: () => { this.pending?.dismiss(); this.moveWorkflow?.dismiss(); this.correction?.dismiss(); this.setState({ modal: null }); },
     });
     this.pending = new PendingItems({
       bridge: desktopBridge,
       getCatalog: () => this.catalog.state, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
-      canEdit: () => !this.sendWorkflow?.state.busy && !this.state.modal && !this.moveWorkflow?.state.dialog,
+      canEdit: () => !this.sendWorkflow?.state.busy && !this.state.modal && !this.moveWorkflow?.state.dialog && !this.correction?.state.dialog,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       orders: {
         snapshot: () => this.tableOrders.state, writeBusy: () => this.tableOrders.writeBusy,
@@ -66,7 +67,7 @@ export class WaiterDemo extends React.Component {
     });
     this.sendWorkflow = new SendWorkflow({
       bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
-      canSend: () => !this.state.modal?.unresolved && !this.moveWorkflow?.locked,
+      canSend: () => !this.correction?.locked && !this.moveWorkflow?.locked,
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       completeHandoff: notice => this.session.completeHandoff(notice),
       submitDemoRound: round => this.demoPrinting.submitRound(round),
@@ -81,8 +82,8 @@ export class WaiterDemo extends React.Component {
     });
     this.moveWorkflow = new MoveWorkflow({
       bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
-      isHandoffPending: () => this.sendWorkflow.state.busy, canOpen: () => !this.state.modal?.unresolved,
-      dismissOtherDialogs: () => { if (!this.pending.dismiss()) return false; this.setState({ modal: null }); return true; },
+      isHandoffPending: () => this.sendWorkflow.state.busy, canOpen: () => !this.correction?.locked,
+      dismissOtherDialogs: () => { if (!this.pending.dismiss() || !this.correction.dismiss()) return false; this.setState({ modal: null }); return true; },
       notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
       onDemoMoved: (from, to) => this.demoPrinting.moveJobs(from, to), createRequestId: () => crypto.randomUUID(),
       orders: {
@@ -95,10 +96,22 @@ export class WaiterDemo extends React.Component {
         moveDemoOrder: (from, to, actor) => this.tableOrders.moveDemoOrder(from, to, actor),
       },
     });
+    this.correction = new CorrectionWorkflow({
+      bridge: desktopBridge, getLanguage: () => this.settings.state.language, getActor: () => this.session.state.waiter?.name || '',
+      canOpen: () => !this.sendWorkflow.state.busy && !this.state.modal && this.pending.dismiss() && this.moveWorkflow.dismiss(),
+      notify: (message, kind) => this.mut(state => this.toast(state, message, kind)),
+      orders: {
+        snapshot: () => this.tableOrders.state, captureTarget: () => this.tableOrders.captureTarget(), tableForOrder: target => this.tableOrders.tableForOrder(target),
+        writeBusy: () => this.tableOrders.writeBusy, isCurrent: target => this.tableOrders.isCurrent(target),
+        acquireWrite: (kind, target) => this.tableOrders.acquireWrite(kind, target), releaseWrite: lease => this.tableOrders.releaseWrite(lease),
+        applyConfirmedItems: (target, items) => this.tableOrders.applyConfirmedItems(target, items), refreshAvailability: target => this.tableOrders.refreshAvailability(target),
+        applyDemoCorrection: (id, quantity, reason, actor) => this.tableOrders.applyDemoCorrection(id, quantity, reason, actor),
+      },
+    });
     this.administration = new AdminWorkspace({ signOut: () => this.session.signOut(), refreshAccess: generation => this.session.refreshAdminAccess(generation) });
     this.session = new SessionModel({
       bridge: desktopBridge,
-      canLeave: ({ afterAction }) => !this.tableOrders.opening && !this.tableOrders.writeBusy && (!this.sendWorkflow?.state.busy || afterAction) && !this.state.modal?.unresolved && !this.moveWorkflow.locked && this.administration.canLeave(),
+      canLeave: ({ afterAction }) => !this.tableOrders.opening && !this.tableOrders.writeBusy && (!this.sendWorkflow?.state.busy || afterAction) && !this.correction?.locked && !this.moveWorkflow.locked && this.administration.canLeave(),
       clearProtectedData: () => this.clearDesktopData(),
       dismissSelectedOrder: () => this.tableOrders.dismissSelectedOrder(),
       loadProtectedData: () => this.loadDesktopData(),
@@ -107,7 +120,7 @@ export class WaiterDemo extends React.Component {
       getDemoStaff: demoStaff,
     });
     const refresh = () => { if (this._mounted) this.forceUpdate?.(); };
-    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh), this.pending.subscribe(refresh), this.sendWorkflow.subscribe(refresh), this.demoPrinting.subscribe(refresh), this.moveWorkflow.subscribe(refresh)];
+    this._subscriptions = [this.session.subscribe(() => { this.administration.setIdentity(this.session.identity()); refresh(); }), this.settings.subscribe(refresh), this.administration.subscribe(refresh), this.catalog.subscribe(refresh), this.tableOrders.subscribe(refresh), this.pending.subscribe(refresh), this.sendWorkflow.subscribe(refresh), this.demoPrinting.subscribe(refresh), this.moveWorkflow.subscribe(refresh), this.correction.subscribe(refresh)];
   }
   componentDidMount() {
     this._mounted = true;
@@ -118,14 +131,14 @@ export class WaiterDemo extends React.Component {
     this.catalog.clearProtectedData();
     this.tableOrders.clearProtectedData();
     this.pending.reset();
-    this.moveWorkflow.reset();
+    this.moveWorkflow.reset(); this.correction.reset();
     this.setState({ modal: null });
   }
   loadDesktopData() { return Promise.all([this.catalog.load(), this.tableOrders.loadTables()]); }
   componentWillUnmount() {
     this._mounted = false;
     this._subscriptions.forEach(unsubscribe => unsubscribe());
-    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose(); this.pending.dispose(); this.sendWorkflow.dispose(); this.demoPrinting.dispose(); this.moveWorkflow.dispose();
+    this.session.dispose(); this.settings.dispose(); this.administration.dispose(); this.printing.dispose(); this.catalog.dispose(); this.tableOrders.dispose(); this.pending.dispose(); this.sendWorkflow.dispose(); this.demoPrinting.dispose(); this.moveWorkflow.dispose(); this.correction.dispose();
     clearInterval(this._tick); clearTimeout(this._tt);
   }
 
@@ -156,37 +169,6 @@ export class WaiterDemo extends React.Component {
 
 
 
-  openCancel(id) { if (this.sendWorkflow?.state.busy || !this.pending.dismiss() || !this.moveWorkflow.dismiss()) return; this.mut(n => { n.modal = { type: 'cancel', itemId: id, qty: 1, reason: '', other: '' }; }); }
-  async confirmCancel() {
-    if (desktopBridge) {
-      const m = this.state.modal;
-      if (!m || !m.reason || (m.reason === 'Other' && !m.other.trim())) return;
-      const lease = this.tableOrders.acquireWrite('correct');
-      if (!lease) return;
-      const reason = m.reason === 'Other' ? m.other.trim() : m.reason;
-      const requestId = m.requestId || crypto.randomUUID();
-      this.mut(n => { n.modal.requestId = requestId; n.modal.saving = true; n.modal.error = ''; });
-      try {
-        const result = await desktopBridge.orderItems('correct', lease.orderId, { itemId: m.itemId, quantity: m.qty, reason, requestId });
-        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
-        if (result.ok) await this.tableOrders.refreshAvailability(lease);
-        if (!this._mounted || !this.tableOrders.isCurrent(lease)) return;
-        if (result.ok) this.tableOrders.applyConfirmedItems(lease, result.data.items);
-        this.mut(n => {
-          if (result.ok) { n.modal = null; this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); }
-          else if (result.rejected && !n.modal.unresolved) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; const messages = { access_denied:'waiter.Correction denied. Sign in as a waiter with order access.', already_billed:'waiter.This order has already been billed. The item cannot be cancelled here.', unavailable:'waiter.The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.', invalid_input:'waiter.Correction details are invalid. Check the quantity and explanation.' }; n.modal.error = waiterTranslate(this.settings.state.language, messages[result.code] || 'waiter.Correction rejected. Check authorization and quantity.'); }
-          else { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Correction status unknown. Retry before leaving."); }
-        });
-      } catch (_) { if (this._mounted && this.tableOrders.isCurrent(lease)) this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.settings.state.language, "waiter.Correction status unknown. Retry before leaving."); }); }
-      finally { this.tableOrders.releaseWrite(lease); }
-      return;
-    }
-    const m = this.state.modal;
-    const item = this.tableOrders.state.items.find(value => value.id === m.itemId);
-    if (!item || !m.reason || (m.reason === 'Other' && !m.other.trim())) return;
-    this.tableOrders.applyDemoCorrection(m.itemId, m.qty, m.reason === 'Other' ? m.other.trim() : m.reason, this.who());
-    this.mut(n => { this.toast(n, waiterTranslate(this.settings.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); n.modal = null; });
-  }
   bSet(fn) { this.mut(n => { if (n.modal && n.modal.type === 'bill') fn(n.modal, n); }); }
   printBill(useBackup) {
     const bill = this.state.modal;
@@ -285,7 +267,7 @@ export class WaiterDemo extends React.Component {
             routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
             hasCx: i.cxQty > 0,
             cxText: c ? t('{count} cancelled total · latest: {qty} · {reason} · {who} {time}', {count:i.cxQty, qty:c.qty, reason:['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'].includes(c.reason) ? t(c.reason) : c.reason, who:c.who, time:hm(c.t)}) + (desktopBridge ? '' : t(' · waiting for owner review')) : '',
-            canCancel: qq > 0, cancel: () => this.openCancel(i.id), cancelAria: t('Cancel {name}', {name: i.name})
+            canCancel: qq > 0, cancel: () => this.correction.open(i.id), cancelAria: t('Cancel {name}', {name: i.name})
           };
         })
       };
@@ -297,7 +279,7 @@ export class WaiterDemo extends React.Component {
     v.billDisabled = !o || (!desktopBridge && billable.length === 0);
     v.billStyle = 'flex:1; height:72px; border-radius:18px; border:none; display:flex; align-items:center; justify-content:center; gap:10px; font-size:21px; font-weight:800; ' + (v.billDisabled ? 'background:#E2E8F0; color:#475569' : 'background:#2563EB; color:#FFFFFF; box-shadow:0 10px 22px rgba(37,99,235,0.3)');
     Object.assign(v, this.moveWorkflow.buttonView());
-    v.openBill = () => { if (!this.sendWorkflow?.state.busy && this.pending.dismiss() && this.moveWorkflow.dismiss()) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
+    v.openBill = () => { if (!this.sendWorkflow?.state.busy && this.pending.dismiss() && this.moveWorkflow.dismiss() && this.correction.dismiss()) this.mut(n => { n.modal = { type: desktopBridge ? 'desktopBill' : 'bill', step: 'confirm', method: null, account: null, printed: 0, backup: false }; }); };
     v.activity = o ? o.log.slice().reverse().map(e => ({ time: hm(e.t), who: e.who, text: e.text })) : [];
     v.noActivity = v.activity.length === 0;
 
@@ -316,38 +298,13 @@ export class WaiterDemo extends React.Component {
     // modals: defaults
     const md = s.modal; const ty = md ? md.type : '';
     v.hasModal = !!md && ty !== 'desktopBill';
-    v.isCancel = ty === 'cancel';
     v.isBill = ty === 'bill';
-    v.closeModal = () => { if (!this.state.modal?.saving && !this.state.modal?.unresolved) this.setState({ modal: null }); };
+    v.closeModal = () => { if (!this.state.modal?.saving && !this.correction?.locked) this.setState({ modal: null }); };
     v.modalTitle = ''; v.modalSub = '';
     v.modalCardStyle = modalCardStyle(ty === 'bill' ? '880px' : '760px');
     v.cxReasons = []; v.billLines = [];
     const bigBtn = (on, bg, fg) => 'height:72px; border-radius:18px; border:none; font-size:21px; font-weight:800; ' + (on ? 'background:' + bg + '; color:' + fg + '; box-shadow:0 10px 22px rgba(15,23,42,0.18)' : 'background:#E2E8F0; color:#475569');
     const chip = on => 'min-height:60px; border-radius:16px; padding:10px 14px; font-size:17px; font-weight:800; text-align:center; ' + (on ? 'background:#0F172A; color:#FFFFFF; border:2px solid #0F172A' : 'background:#FFFFFF; color:#0F172A; border:2px solid #CBD5E1');
-
-    if (ty === 'cancel') {
-      const it = d.items.find(i => i.id === md.itemId);
-      const mx = it ? bq(it) : 1; const l = it ? t(this.rlabel(it.route)) : '';
-      v.modalTitle = t("Cancel a sent item");
-      v.modalSub = t("It was already sent, so it stays on record, crossed out.");
-      v.cxName = it ? it.name : ''; v.cxMods = it ? it.mods : ''; v.cxHasMods = !!(it && it.mods);
-      v.cxMeta = it ? t('Round {round} · sent {time} to {destination}', {round:it.round,time:hm(it.sentAt),destination:l}) : '';
-      v.cxMulti = mx > 1; v.cxQty = String(md.qty); v.cxMax = t('of {count}', {count: mx}); v.cxMaxNumber = mx;
-      v.cxInc = () => this.mut(n => { if (!n.modal.requestId) n.modal.qty = Math.min(mx, n.modal.qty + 1); });
-      v.cxDec = () => this.mut(n => { if (!n.modal.requestId) n.modal.qty = Math.max(1, n.modal.qty - 1); });
-      v.cxReasons = ['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'].map(r => ({
-        label: t(r), pressed: String(md.reason === r), style: chip(md.reason === r),
-        pick: () => this.mut(n => { if (!n.modal.requestId) n.modal.reason = r; })
-      }));
-      v.cxReasonLabel = md.reason === 'Other' ? md.other.trim() : t(md.reason);
-      v.cxIsOther = md.reason === 'Other'; v.cxOther = md.other;
-      v.onCxOther = e => { const val = e.target.value; this.setState(st => st.modal.requestId ? null : ({ modal: Object.assign({}, st.modal, { other: val }) })); };
-      const ok = !!md.reason && (md.reason !== 'Other' || md.other.trim().length > 0);
-      v.cxDisabled = !ok;
-      v.cxStyle = 'flex:2; ' + bigBtn(ok, '#DC2626', '#FFFFFF').replace('height:72px', 'height:64px');
-      v.cxInfo = t('Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.');
-      v.cxConfirm = () => this.confirmCancel();
-    }
 
     if (ty === 'bill') {
       const pc = its.filter(item => item.status === 'pending').reduce((sum, item) => sum + item.qty, 0);
@@ -412,8 +369,7 @@ export class WaiterDemo extends React.Component {
     if (this.session.state.screen === 'admin' && identity.adminAccess) return this.administration.render({ identity, language, settings: this.settings.render(), printing: desktopBridge ? React.createElement(TestPrintJobs, { key: identity.generation, language, printing: this.printing }) : null });
     const v = this.renderVals();
     const t = v.t;
-    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), renderDemoPrintStatus(this.demoPrinting.failedView()), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.demoPrinting.failedTableIds(), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", this.pending.render(), this.moveWorkflow.render(), (v.hasModal ? ModalFrame({ title: v.modalTitle, subtitle: v.modalSub, cardStyle: v.modalCardStyle, onClose: v.closeModal, closeLabel: t('Close'), children: React.createElement(React.Fragment, null,
-      v.isCancel ? React.createElement(ArraComponents.SentItemCorrection, { v, modal: this.state.modal }) : null,
+    return React.createElement(React.Fragment, null, (desktopBridge && this.state.modal?.type === 'desktopBill' ? React.createElement(DesktopBill, { language: this.settings.state.language, orderId: this.tableOrders.state.orders[this.tableOrders.state.tableId]?.id, onClose: () => this.setState({ modal: null }), onPaid: () => this.session.switchWaiter() }) : null), "\n", React.createElement("div", {"style": style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden")} , "\n\n", "\n", renderAccountEntry(this.session.accountView()), "\n\n", "\n", null, "\n\n", "\n", null, "\n\n", "\n", (v.isApp ? React.createElement(React.Fragment, null, "\n", React.createElement("header", {"style": style("min-height: 72px; flex: none; display: flex; align-items: center; gap: 14px; padding: 10px 20px; box-sizing: border-box; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; flex-wrap: wrap")} , "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px")} , "\n    ", React.createElement("div", {"style": style("width: 42px; height: 42px; border-radius: 13px; background: #F97316; color: #1A0B00; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px")} , "A"), "\n    ", React.createElement("div", {"style": style("font-weight: 800; font-size: 20px")} , "Arra"), "\n  "), "\n  ", React.createElement("div", {"style": style("flex: 1")}), "\n  ", React.createElement("div", {"style": style("font-size: 20px; font-weight: 800; color: #334155; padding: 0 6px")} , v.clock), "\n  ", React.createElement("div", {"style": style("display: flex; align-items: center; gap: 10px; padding: 4px 4px 4px 4px; border-radius: 999px; background: #F1F5F9")} , "\n    ", React.createElement("div", {"style": style(v.waiterAv)} , v.waiterInitial), "\n    ", React.createElement("div", {"style": style("font-size: 17px; font-weight: 800; padding-right: 4px")} , v.waiterName), "\n    ", React.createElement("button", {"onClick": v.switchWaiter, "style": style("height: 44px; padding: 0 16px; border-radius: 999px; border: none; background: #0F172A; color: #FFFFFF; font-size: 15px; font-weight: 800")} , t("Switch waiter")), "\n  "), "\n"), "\n\n", (desktopBridge ? React.createElement(PrintJobs, { language: this.settings.state.language, printing: this.printing }) : null), renderDemoPrintStatus(this.demoPrinting.failedView()), "\n\n", "\n", (v.isTables ? renderTables(this.tableOrders.tableView({ language: this.settings.state.language, failedTables: this.demoPrinting.failedTableIds(), canAdmin: this.session.state.adminAccess, openAdmin: () => this.session.openAdministration() }), style) : null), "\n\n", "\n", (v.isOrder ? renderOrder(v, style) : null), "\n\n", "\n", (v.isHistory ? React.createElement(React.Fragment, null, "\n", React.createElement("main", {"style": style("flex: 1; min-height: 0; overflow: auto; padding: 24px; box-sizing: border-box")} , "\n  ", React.createElement("div", {"style": style("max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px")} , "\n    ", React.createElement("div", {} , "\n      ", React.createElement("h1", {"style": style("margin: 0; font-size: 34px; font-weight: 800")} , t("Today's bills")), "\n      ", React.createElement("p", {"style": style("margin: 6px 0 0; font-size: 17px; color: #475569; max-width: 760px; line-height: 1.45")} , t("Every closed table, paid once. If a bill went to the wrong account, the owner moves it later from the admin side. That never creates a second payment.")), "\n    "), "\n    ", React.createElement("div", {"style": style("display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px")} , "\n      ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; padding: 20px; border: 1px solid #E2E8F0")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #475569")} , t("Bills closed")), "\n        ", React.createElement("div", {"style": style("font-size: 36px; font-weight: 800; margin-top: 6px")} , v.hCount), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #EAF1FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #1E40AF")} , t("Cash · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashA), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #F3E8FF; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #6B21A8")} , t("Cash · Account B")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCashB), "\n      "), "\n      ", React.createElement("div", {"style": style("background: #DCFCE7; border-radius: 20px; padding: 20px")} , "\n        ", React.createElement("div", {"style": style("font-size: 15px; font-weight: 800; color: #166534")} , t("Card · Account A")), "\n        ", React.createElement("div", {"style": style("font-size: 32px; font-weight: 800; margin-top: 6px")} , v.hCardA), "\n      "), "\n    "), "\n    ", React.createElement("div", {"style": style("background: #FFFFFF; border-radius: 20px; border: 1px solid #E2E8F0; overflow-x: auto")} , "\n      ", React.createElement("div", {"style": style("min-width: 820px")} , "\n        ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; font-size: 13px; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #E2E8F0")} , "\n          ", React.createElement("span", {} , t("Bill")), React.createElement("span", {} , t("Table")), React.createElement("span", {} , t("Closed")), React.createElement("span", {} , t("Waiter")), React.createElement("span", {} , t("Items")), React.createElement("span", {} , t("Payment")), React.createElement("span", {} , t("Account")), React.createElement("span", {"style": style("text-align: right")} , t("Total")), "\n        "), "\n        ", (v.hist || []).map((h, index) => React.createElement(React.Fragment, {key: index}, React.createElement(React.Fragment, null, "\n          ", React.createElement("div", {"style": style("display: grid; grid-template-columns: 90px 110px 90px 120px 80px 110px 130px 1fr; gap: 12px; padding: 14px 20px; align-items: center; font-size: 17px; font-weight: 700; border-bottom: 1px solid #F1F5F9")} , "\n            ", React.createElement("span", {"style": style("color: #475569")} , h.no), "\n            ", React.createElement("span", {"style": style("font-weight: 800")} , h.table), "\n            ", React.createElement("span", {} , h.time), "\n            ", React.createElement("span", {} , h.waiter), "\n            ", React.createElement("span", {} , h.items), "\n            ", React.createElement("span", {} , h.method), "\n            ", React.createElement("span", {} , React.createElement("span", {"style": style(h.accStyle)} , h.account)), "\n            ", React.createElement("span", {"style": style("text-align: right; font-weight: 800")} , h.total), "\n          "), "\n        "))), "\n      "), "\n    "), "\n  "), "\n"), "\n") : null), "\n") : null), "\n\n", "\n", this.pending.render(), this.moveWorkflow.render(), this.correction.render(), (v.hasModal ? ModalFrame({ title: v.modalTitle, subtitle: v.modalSub, cardStyle: v.modalCardStyle, onClose: v.closeModal, closeLabel: t('Close'), children: React.createElement(React.Fragment, null,
       renderBill(v, style)) }) : null), "\n\n", "\n", (v.hasToast ? React.createElement(React.Fragment, null, "\n  ", React.createElement("div", {"role": "status", "style": style(v.toastStyle)} , v.toastText), "\n") : null), "\n\n"), "\n");
   }
 }

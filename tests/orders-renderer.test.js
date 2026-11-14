@@ -71,7 +71,7 @@ test('correcting the final sent item refreshes the card and preserves uncertaint
  const context={React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}}}},document:{getElementById(){}},window:{arra:api},crypto:{randomUUID:()=> 'correction-token'},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',context);
  const app=new context.Demo();app.componentDidMount(); const init=()=>arrange(app, {screen:'order',tableId:1,sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}},items:[{id:1,tableId:1,status:'sent',qty:1,unit:100,cxQty:0}],modal:{type:'cancel',itemId:1,qty:1,reason:'Mistake'}});
- init(); await app.confirmCancel(); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
- init(); failTables=true; await app.confirmCancel(); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
- init(); failTables=false; loseResponse=true; await app.confirmCancel(); app.tableOrders.showTables(); assert.equal(routeOf(app),'order'); assert.equal(app.state.modal.unresolved,true);
+ init(); await app.correction.confirm(); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].free,true);
+ init(); failTables=true; await app.correction.confirm(); app.tableOrders.showTables(); assert.equal(app.tableOrders.tableView({language:app.settings.state.language}).sections[0].tables[0].taken,true);
+ init(); failTables=false; loseResponse=true; await app.correction.confirm(); app.tableOrders.showTables(); assert.equal(routeOf(app),'order'); assert.equal(app.correction.state.dialog.unresolved,true);
 });
