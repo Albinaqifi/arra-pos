@@ -12,6 +12,7 @@ function project(row) {
     case 'send': return { ...base, number: c.number, itemIds: c.itemIds };
     case 'move': return { ...base, sourceId: c.sourceId, destinationId: c.destinationId };
     case 'move_items': return { ...base, sourceId: c.sourceId, destinationId: c.destinationId, destinationOrderId: c.destinationOrderId, itemIds: c.itemIds };
+    case 'cancel_order': return { ...base, reason: c.reason, items: c.items };
     case 'correct_sent': return { ...base, quantity: c.quantity, reason: c.reason };
     default: return null;
   }
@@ -52,9 +53,9 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
         }
         return true;
       };
-      if (req.orderId === null) return { ok: true, data: { orders: db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders ORDER BY id DESC").all().filter(order => permitted(order.id)) } };
+      if (req.orderId === null) return { ok: true, data: { orders: db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=orders.id) THEN 'cancelled' WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders ORDER BY id DESC").all().filter(order => permitted(order.id)) } };
       if (!permitted(req.orderId)) return { ok:false };
-      const order = db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders WHERE id=?").get(req.orderId);
+      const order = db.prepare("SELECT id, table_id AS tableId, opened_at AS openedAt, CASE WHEN EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=orders.id) THEN 'cancelled' WHEN retired_empty = 1 THEN 'retired empty' ELSE status END AS status FROM orders WHERE id=?").get(req.orderId);
       if (!order) return { ok: false };
       const items = db.prepare('SELECT i.id, i.name, i.quantity, i.status, COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id), 0) AS correctedQuantity FROM order_items i WHERE i.order_id=? ORDER BY i.id').all(req.orderId);
       const rows = db.prepare(`SELECT a.id, a.action, a.entity_type, a.entity_id, a.order_id, a.occurred_at, a.context, u.username AS actor FROM application_audit a JOIN local_users u ON u.id=a.actor_id
@@ -66,7 +67,7 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
         const c = JSON.parse(row.context);
         if (c.destinationOrderId === req.orderId || row.order_id === req.orderId) for (const id of c.itemIds) relevant.add(id);
       }
-      const allowed = { open:'order', add:'order_item', quantity_changed:'order_item', remove:'order_item', note_changed:'order_item', send:'preparation_round', move:'order', move_items:'order', correct_sent:'order_item' };
+      const allowed = { open:'order', add:'order_item', quantity_changed:'order_item', remove:'order_item', note_changed:'order_item', send:'preparation_round', move:'order', move_items:'order', correct_sent:'order_item', cancel_order:'order' };
       const events = [];
       for (const row of rows) {
         if (allowed[row.action] !== row.entity_type) continue;

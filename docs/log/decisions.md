@@ -98,3 +98,15 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** An active waiter administrator may, after password verification, create a Combined account through a documented local recovery procedure for a legacy waiter-only database. Combined alone may inspect unbilled open orders and make reasoned sent-item corrections under the new entry flow.
 - **Why:** Preserve an authorized recovery route and sent-item correction while maintaining the owner and staff access boundaries.
 - **Revisit if:** The owner changes these rules or production recovery requirements are established.
+
+## D-017 — Waiter order cancellation
+- **Origin:** Owner direction, 2026-11-13.
+- **What:** A waiter may cancel an order with a required explanation, recorded for administrator review. This supersedes the earlier admin-only rule where it conflicts with whole-order cancellation; it does not decide separate individual sent-item correction or paid-order handling.
+- **Why:** Allow staff to handle cancelled orders during service while preserving accountability.
+- **Revisit if:** The owner changes this direction or defines additional cancellation cases.
+
+## D-018 — Waiter cancellation of individual products
+- **Origin:** Owner clarification, 2026-11-14; supersedes the whole-order interpretation in D-017 and the conflicting admin-only sent-item rule.
+- **What:** A waiter can cancel an individual product entered by mistake, including after it was sent, with an explanation recorded for administrator review. Other products in the order remain.
+- **Why:** Staff need to correct an incorrectly entered product during service with accountability.
+- **Revisit if:** The owner changes this direction or defines additional cancellation cases.

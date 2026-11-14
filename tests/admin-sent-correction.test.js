@@ -42,9 +42,9 @@ test('upgrade preserves a previously revoked Combined correction grant', t=>{
  seedSampleIdentities(db,passwords,String(randomInt(10000)).padStart(4,'0'),String(randomInt(1000000)).padStart(6,'0'));
  const actor=db.prepare("SELECT user_id AS id FROM financial_scopes WHERE scope='combined'").get().id;
  db.prepare("DELETE FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").run(actor);
- db.exec('DROP TABLE restaurant_accounts; PRAGMA user_version=30');db.close();db=openDatabase(dir);
+ db.exec('DROP TABLE order_cancellations; DROP TABLE restaurant_accounts; PRAGMA user_version=30');db.close();db=openDatabase(dir);
  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
- assert.equal(db.prepare('PRAGMA user_version').get().user_version,31);
+ assert.equal(db.prepare('PRAGMA user_version').get().user_version,32);
  assert.equal(db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor),undefined);
 });
 

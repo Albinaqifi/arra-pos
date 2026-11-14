@@ -33,3 +33,17 @@ test('preload and IPC round trip restrict the exposed API and reject untrusted r
   ipcRenderer.invoke = () => Promise.resolve({ ok: true, data: { name: 'bad', mode: 'development' } });
   assert.equal((await api.getApplicationInfo()).ok, false);
 });
+
+test('preload forwards only known correction rejection codes and keeps failures uncertain', async () => {
+  let api, response;
+  const ipcRenderer={invoke: async () => {if (response instanceof Error) throw response; return response;}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'),'utf8'), {require:()=>({contextBridge:{exposeInMainWorld:(_name,value)=>api=value},ipcRenderer})});
+  const request={itemId:1,quantity:1,reason:'Sample',requestId:'sample'};
+  for (const code of ['invalid_input','access_denied','already_billed','unavailable']) {
+    response={ok:false,rejected:true,code}; assert.deepEqual(JSON.parse(JSON.stringify(await api.orderItems('correct',1,request))),{ok:false,rejected:true,code});
+  }
+  response={ok:false,rejected:true,code:'sensitive database detail'}; assert.deepEqual(JSON.parse(JSON.stringify(await api.orderItems('correct',1,request))),{ok:false,rejected:true});
+  response={ok:false,rejected:false,code:'access_denied'}; assert.deepEqual(JSON.parse(JSON.stringify(await api.orderItems('correct',1,request))),{ok:false,rejected:false});
+  response=new Error('private detail'); const uncertain=await api.orderItems('correct',1,request); assert.equal(uncertain.rejected,undefined); assert.equal(JSON.stringify(uncertain).includes('private detail'),false);
+  assert.equal((await api.orderItems('correct',1,{...request,quantity:'bad'})).code,'invalid_input');
+});

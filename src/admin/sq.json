@@ -300,5 +300,20 @@
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Duke ngarkuar faturën…",
   "waiter.Working…": "Duke punuar…",
-  "waiter.Enter your 6-digit PIN": "Shkruani PIN-in tuaj me 6 shifra"
+  "waiter.Enter your 6-digit PIN": "Shkruani PIN-in tuaj me 6 shifra",
+  "waiter.Cancel order": "Anulo porosinë",
+  "waiter.Explanation required": "Shpjegimi është i detyrueshëm",
+  "waiter.Retry cancellation": "Provo anulimin përsëri",
+  "waiter.Confirm cancellation": "Konfirmo anulimin",
+  "waiter.Cancellation status unknown. Retry before leaving.": "Statusi i anulimit nuk dihet. Provoni përsëri para se të largoheni.",
+  "waiter.Cancellation rejected. The order may already be billed or unavailable.": "Anulimi u refuzua. Porosia mund të jetë faturuar ose nuk është e disponueshme.",
+  "waiter.Tell preparation staff in person about sent items. No cancellation notice is sent; earlier output may still arrive.": "Njoftoni personalisht stafin e përgatitjes për artikujt e dërguar. Nuk dërgohet njoftim anulimi; printimi i mëparshëm mund të mbërrijë ende.",
+  "waiter.Order cancelled. Tell preparation staff in person; no cancellation notice was sent and earlier output may still arrive.": "Porosia u anulua. Njoftoni personalisht stafin e përgatitjes; nuk u dërgua njoftim anulimi dhe printimi i mëparshëm mund të mbërrijë ende.",
+  "waiter.Cancelled order: do not retry. Earlier output may still arrive; tell preparation staff in person.": "Porosi e anuluar: mos provoni përsëri. Printimi i mëparshëm mund të mbërrijë ende; njoftoni personalisht stafin e përgatitjes.",
+  "waiter.Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.": "Njoftoni personalisht personelin e përgatitjes; nuk printohet njoftim anulimi dhe printimi i mëparshëm mund të mbërrijë ende.",
+  "waiter.A ticket contains a cancelled item: do not retry. Earlier output may still arrive; tell preparation staff in person.": "Një fletë përmban një artikull të anuluar: mos e riprovoni. Printimi i mëparshëm mund të mbërrijë ende; njoftoni personalisht personelin e përgatitjes.",
+  "waiter.Correction denied. Sign in as a waiter with order access.": "Korrigjimi u refuzua. Hyni si kamarier me qasje në porosi.",
+  "waiter.This order has already been billed. The item cannot be cancelled here.": "Kjo porosi tashmë është faturuar. Artikulli nuk mund të anulohet këtu.",
+  "waiter.The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.": "Porosia ose artikulli nuk është i disponueshëm, ose sasia e mbetur ka ndryshuar. Kthehuni te porosia dhe kontrollojeni.",
+  "waiter.Correction details are invalid. Check the quantity and explanation.": "Të dhënat e korrigjimit janë të pavlefshme. Kontrolloni sasinë dhe shpjegimin."
 }

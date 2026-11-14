@@ -48,8 +48,8 @@ class TestPrintJobs extends React.Component {
       (d?.queues || []).map(q=>h('div',{key:q.destination},h('label',null,waiterTranslate(this.props?.language, 'waiter.{destination} queue', {destination:printDestination(this.props?.language, q.destination)}) + ' ',h('input',{defaultValue:q.queue,id:'test-queue-'+q.destination,maxLength:255})),h('button',{disabled:this.state.busy,onClick:()=>this.change({action:'configure',destination:q.destination,queue:document.getElementById('test-queue-'+q.destination).value})},waiterTranslate(this.props?.language, "waiter.Save queue")))),
       h('p',null,waiterTranslate(this.props?.language, "waiter.Changing queues requires employee management permission.")),
       h('button',{disabled:this.state.busy,onClick:()=>this.load()},waiterTranslate(this.props?.language, "waiter.Refresh test jobs")),
-      (d?.jobs || []).map(j=>h('div',{key:j.id},waiterTranslate(this.props?.language, j.ticketId ? 'waiter.{destination} job #{id} · Table {table} · Round {round} · {attempts} attempt(s) · {queue} · ' : 'waiter.{destination} job #{id} · Bill #{bill} · {attempts} attempt(s) · {queue} · ', {destination:printDestination(this.props?.language, j.destination),id:j.id,table:j.tableId,round:j.round,bill:j.billId,attempts:j.attempts,queue:j.queue})+(j.result==='accepted'?waiterTranslate(this.props?.language, "waiter.Accepted by Windows; check paper"):j.result==='failed'?waiterTranslate(this.props?.language, "waiter.Queue missing"):waiterTranslate(this.props?.language, "waiter.Output uncertain; check paper")),
-        h('button',{disabled:this.state.busy,onClick:()=>{if (!window.confirm(waiterTranslate(this.props?.language, "waiter.Have you checked the printer and paper? Retrying may print a duplicate."))) return; const requestId=this.tokens[j.id] || (this.tokens[j.id]=crypto.randomUUID()); this.change({action:'retry',jobId:j.id,requestId,checked:true});}},waiterTranslate(this.props?.language, "waiter.Retry after checking")))));
+      (d?.jobs || []).map(j=>h('div',{key:j.id},waiterTranslate(this.props?.language, j.ticketId ? 'waiter.{destination} job #{id} · Table {table} · Round {round} · {attempts} attempt(s) · {queue} · ' : 'waiter.{destination} job #{id} · Bill #{bill} · {attempts} attempt(s) · {queue} · ', {destination:printDestination(this.props?.language, j.destination),id:j.id,table:j.tableId,round:j.round,bill:j.billId,attempts:j.attempts,queue:j.queue})+(j.cancelled ? waiterTranslate(this.props?.language, 'waiter.A ticket contains a cancelled item: do not retry. Earlier output may still arrive; tell preparation staff in person.') : j.result==='accepted'?waiterTranslate(this.props?.language, "waiter.Accepted by Windows; check paper"):j.result==='failed'?waiterTranslate(this.props?.language, "waiter.Queue missing"):waiterTranslate(this.props?.language, "waiter.Output uncertain; check paper")),
+        !j.cancelled && h('button',{disabled:this.state.busy,onClick:()=>{if (!window.confirm(waiterTranslate(this.props?.language, "waiter.Have you checked the printer and paper? Retrying may print a duplicate."))) return; const requestId=this.tokens[j.id] || (this.tokens[j.id]=crypto.randomUUID()); this.change({action:'retry',jobId:j.id,requestId,checked:true});}},waiterTranslate(this.props?.language, "waiter.Retry after checking")))));
   }
 }
 class PrintJobs extends React.Component {
@@ -83,9 +83,9 @@ class PrintJobs extends React.Component {
         h('select', { value: p.result, disabled: this.state.busy, onChange: e => this.change({ action: 'simulate', destination: p.destination, result: e.target.value }) },
           h('option', { value: 'success' }, waiterTranslate(this.props?.language, "waiter.Success")), h('option', { value: 'failed' }, waiterTranslate(this.props?.language, "waiter.Failure")), h('option', { value: 'uncertain' }, waiterTranslate(this.props?.language, "waiter.Uncertain")))))),
       this.state.jobs.map(j => h('div', { key: j.id }, waiterTranslate(this.props?.language, 'waiter.{destination} · Table {table} · Round {round} · {attempts} attempt(s) · ', {destination:printDestination(this.props?.language, j.destination),table:j.tableId,round:j.round,attempts:j.attempts}),
-        j.result === 'uncertain' ? waiterTranslate(this.props?.language, "waiter.Output uncertain; check before retrying.") : j.result === 'failed' ? waiterTranslate(this.props?.language, "waiter.Simulated failure.") : waiterTranslate(this.props?.language, "waiter.Simulated success."),
+        j.cancelled ? waiterTranslate(this.props?.language, 'waiter.A ticket contains a cancelled item: do not retry. Earlier output may still arrive; tell preparation staff in person.') : j.result === 'uncertain' ? waiterTranslate(this.props?.language, "waiter.Output uncertain; check before retrying.") : j.result === 'failed' ? waiterTranslate(this.props?.language, "waiter.Simulated failure.") : waiterTranslate(this.props?.language, "waiter.Simulated success."),
         j.hadUncertain && j.result !== 'uncertain' && waiterTranslate(this.props?.language, "waiter. An earlier attempt was uncertain; duplicate output is possible."),
-        j.result !== 'success' && h('button', { disabled: this.state.busy, onClick: () => this.retry(j.id), style: { marginLeft: 10 } }, waiterTranslate(this.props?.language, "waiter.Retry simulated job")))), h(TestPrintJobs,{revision:this.props?.revision,language:this.props?.language}));
+        !j.cancelled && j.result !== 'success' && h('button', { disabled: this.state.busy, onClick: () => this.retry(j.id), style: { marginLeft: 10 } }, waiterTranslate(this.props?.language, "waiter.Retry simulated job")))), h(TestPrintJobs,{revision:this.props?.revision,language:this.props?.language}));
   }
 }
 
@@ -648,7 +648,7 @@ class WaiterDemo extends React.Component {
         if (!this._mounted) return;
         this.mut(n => {
           if (result.ok) { this.replaceDesktopItems(n, tableId, result.data.items); n.modal = null; this.toast(n, waiterTranslate(this.state.language, 'waiter.Correction saved. Tell preparation staff in person.')); }
-          else if (result.rejected) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; n.modal.error = waiterTranslate(this.state.language, "waiter.Correction rejected. Check authorization and quantity."); }
+          else if (result.rejected && !n.modal.unresolved) { n.modal.saving = false; n.modal.unresolved = false; n.modal.requestId = null; const messages = { access_denied:'waiter.Correction denied. Sign in as a waiter with order access.', already_billed:'waiter.This order has already been billed. The item cannot be cancelled here.', unavailable:'waiter.The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.', invalid_input:'waiter.Correction details are invalid. Check the quantity and explanation.' }; n.modal.error = waiterTranslate(this.state.language, messages[result.code] || 'waiter.Correction rejected. Check authorization and quantity.'); }
           else { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.state.language, "waiter.Correction status unknown. Retry before leaving."); }
         });
       } catch (_) { if (this._mounted) this.mut(n => { n.modal.saving = false; n.modal.unresolved = true; n.modal.error = waiterTranslate(this.state.language, "waiter.Correction status unknown. Retry before leaving."); }); }
@@ -662,10 +662,8 @@ class WaiterDemo extends React.Component {
       const reason = m.reason === 'Other' ? m.other.trim() : m.reason;
       i.cxQty += q; i.cx.push({ qty: q, reason, who: this.who(n), t: Date.now() });
       if (i.cxQty >= i.qty) i.status = 'cancelled';
-      const l = this.rlabel(i.route);
-      this.log(n, i.tableId, 'Cancelled ' + q + '× ' + i.name + '. Reason: ' + reason + '. Waiting for owner review');
-      if (n.printers[i.route]) this.toast(n, 'Cancelled. A cancel notice printed at the ' + l + '.');
-      else this.toast(n, 'Cancelled and saved. The ' + l + ' printer is offline, so tell them in person.', 'warn');
+      this.log(n, i.tableId, 'Cancelled ' + q + '× ' + i.name + '. Reason: ' + reason + '.');
+      this.toast(n, waiterTranslate(n.language, 'waiter.Correction saved. Tell preparation staff in person.'));
       n.modal = null;
     });
   }
@@ -1060,7 +1058,7 @@ class WaiterDemo extends React.Component {
       const ok = !!md.reason && (md.reason !== 'Other' || md.other.trim().length > 0);
       v.cxDisabled = !ok;
       v.cxStyle = 'flex:2; ' + bigBtn(ok, '#DC2626', '#FFFFFF').replace('height:72px', 'height:64px');
-      v.cxInfo = desktopBridge ? t('Only an authorized administrator signed in under their own name can save this correction. Tell preparation staff in person; no notice is printed.') : 'The ' + l + ' already has this ticket. A cancel notice prints there, but if they already started, tell them in person too. This is saved under your name and goes to the owner for review.';
+      v.cxInfo = t('Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.');
       v.cxConfirm = () => this.confirmCancel();
     }
 

@@ -78,12 +78,12 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
           attempt = reserveAttempt(db,job.id,requestId,session.currentUserId());
         }
         if (req.action === 'retry') {
-          const job = db.prepare(`SELECT j.bill_id AS billId, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
-          if (!job || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
+          const job = db.prepare(`SELECT j.bill_id AS billId, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
+          if (!job || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
           attempt = reserveAttempt(db,req.jobId,'retry-' + req.requestId,session.currentUserId());
         }
         const queues = db.prepare('SELECT destination,queue FROM test_printer_queues ORDER BY destination').all();
-        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,a.queue,a.started_at AS startedAt,COALESCE(r.result,'uncertain') AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : operational);
+        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,a.queue,a.started_at AS startedAt,COALESCE(r.result,'uncertain') AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : operational);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
         return {ok:true,data:{queues,jobs}};

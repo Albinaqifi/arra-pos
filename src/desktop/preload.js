@@ -91,10 +91,10 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   },
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
-        !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send', 'correct'].includes(action)) return { ok: false };
+        !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send', 'correct'].includes(action)) return action === 'correct' ? {ok:false, rejected:true, code:'invalid_input'} : { ok: false };
     const request = { action, orderId };
     if (action === 'correct') {
-      if (!value || !Number.isSafeInteger(value.itemId) || !Number.isSafeInteger(value.quantity) || typeof value.reason !== 'string' || typeof value.requestId !== 'string') return { ok: false };
+      if (!value || !Number.isSafeInteger(value.itemId) || !Number.isSafeInteger(value.quantity) || typeof value.reason !== 'string' || typeof value.requestId !== 'string') return { ok: false, rejected: true, code: 'invalid_input' };
       Object.assign(request, { itemId: value.itemId, quantity: value.quantity, reason: value.reason, requestId: value.requestId });
     } else if (action === 'send') {
       if (typeof value !== 'string') return { ok: false };
@@ -122,7 +122,11 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
           id: i.id, productId: i.productId, name: i.name, unitPrice: i.unitPrice, quantity: i.quantity, note: i.note, status: i.status, round: i.round, sentAt: i.sentAt, sentBy: i.sentBy, route: i.route, modifiers: i.modifiers || [], correctedQuantity: i.correctedQuantity || 0, corrections: i.corrections || []
         })) } };
       }
-      if (action === 'correct' && response?.ok === false) return { ok: false, rejected: true };
+      if (action === 'correct' && response?.ok === false) {
+        const rejected = response.rejected === true;
+        const code = rejected && ['invalid_input', 'access_denied', 'already_billed', 'unavailable'].includes(response.code) ? response.code : undefined;
+        return code ? { ok: false, rejected, code } : { ok: false, rejected };
+      }
     } catch (_) {}
     return { ok: false, error: 'Could not update order items' };
   },

@@ -27,7 +27,7 @@ async function recoverLegacyCombined(sourceFile, destination, username, password
   try {
     source = new DatabaseSync(sourceFile, { readOnly: true });
     const version = source.prepare('PRAGMA user_version').get().user_version;
-    if (version < 24 || version > 31) throw Error('Unsupported database version');
+    if (version < 24 || version > 32) throw Error('Unsupported database version');
     authorize(source, username, password, version);
     // mkdir is exclusive: no existing directory, data or source file is overwritten.
     fs.mkdirSync(destination); created = true;

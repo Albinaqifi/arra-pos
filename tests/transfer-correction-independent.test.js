@@ -17,7 +17,7 @@ test('upgraded data, restricted requests, failure rollback and account visibilit
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-transfer-independent-'));
   let db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  db.exec(`DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO local_users(id,username,salt,password_hash,pin_salt,pin_hash) VALUES
+  db.exec(`DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; INSERT INTO local_users(id,username,salt,password_hash,pin_salt,pin_hash) VALUES
     (1,'manager',x'01',x'01',x'01',x'01'), (2,'admin',x'01',x'01',NULL,NULL);
     INSERT INTO financial_scopes VALUES(2,'combined');
     INSERT INTO user_permissions VALUES(2,'employees.view');
@@ -30,7 +30,7 @@ test('upgraded data, restricted requests, failure rollback and account visibilit
     DROP TRIGGER payment_corrections_no_update; DROP TRIGGER payment_correction_validate;
     DROP TABLE payment_account_corrections; DROP TABLE transfer_managers; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version=23;`);
   db.close(); db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 31);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 32);
   assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 3);
   db.prepare('INSERT INTO transfer_managers VALUES(1)').run();
   let current = 1, authenticated = 2, transfer, financial;
