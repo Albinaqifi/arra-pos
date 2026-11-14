@@ -1,4 +1,7 @@
-class DesktopBill extends React.Component {
+import { desktopBridge } from '../shared/desktop-bridge.js';
+import { waiterTranslate } from '../shared/waiter-ui.js';
+
+export class DesktopBill extends React.Component {
   constructor(props) { super(props); this.state = { data: null, error: '', busy: false, loading: true, uncertain: false, method: '', account: '' }; }
   componentDidMount() {
     this.previousFocus = document.activeElement;
@@ -24,19 +27,19 @@ class DesktopBill extends React.Component {
   }
   async review() {
     this.setState({ loading: true });
-    const r = await window.arra.bill({ action: 'review', orderId: this.props.orderId });
+    const r = await desktopBridge.bill({ action: 'review', orderId: this.props.orderId });
     this.setState(r.ok ? { data: r.data, error: '', loading: false } : { data: null, error: this.serviceError(r.error, 'Could not prepare bill'), loading: false });
   }
   async generate() {
     if (this.state.busy || !this.state.data) return;
     this.setState({ busy: true });
-    const r = await window.arra.bill({ action: 'generate', orderId: this.props.orderId, fingerprint: this.state.data.fingerprint });
+    const r = await desktopBridge.bill({ action: 'generate', orderId: this.props.orderId, fingerprint: this.state.data.fingerprint });
     this.setState(r.ok ? { data: r.data, error: '', busy: false } : { error: this.serviceError(r.error, 'Could not prepare bill'), busy: false });
   }
   async pay() {
     if (this.state.busy || !this.state.data?.id || !this.state.method || !this.state.account) return;
     this.setState({ busy: true, error: '' });
-    const r = await window.arra.payment({ billId: this.state.data.id, method: this.state.method, account: this.state.account });
+    const r = await desktopBridge.payment({ billId: this.state.data.id, method: this.state.method, account: this.state.account });
     if (r.ok) this.props.onPaid();
     else this.setState({ busy: false, uncertain: this.state.uncertain || !!r.uncertain, error: this.serviceError(r.error, 'Could not record payment. Retry the same selection.') });
   }
@@ -45,10 +48,10 @@ class DesktopBill extends React.Component {
     return known.includes(error) ? error : fallback;
   }
   async printTestBill() {
-    if (this.state.busy || !this.state.data?.id || !window.arra.testPrinting) return;
+    if (this.state.busy || !this.state.data?.id || !desktopBridge.testPrinting) return;
     this.printToken = this.printToken || crypto.randomUUID();
     this.setState({busy:true,error:''});
-    const r = await window.arra.testPrinting({action:'bill',billId:this.state.data.id,requestId:this.printToken});
+    const r = await desktopBridge.testPrinting({action:'bill',billId:this.state.data.id,requestId:this.printToken});
     this.setState({busy:false, printNotice:r.ok ? waiterTranslate(this.props.language, "waiter.Test print submitted. Check the printer and paper; queue acceptance is not proof of printing. Use the test jobs list to retry.") : waiterTranslate(this.props.language, "waiter.Test print status unavailable. Check paper and the test jobs list before retrying.")});
   }
   render() {
@@ -70,7 +73,7 @@ class DesktopBill extends React.Component {
             h('ul', { className: 'bill-lines' }, d.lines.map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
             h('div', { className: 'bill-total' }, h('strong', null, t('Total: {total}', {total:money(d.total)})))),
           d?.id && h('div', { className: 'bill-payment' },
-            h('button',{className:'bill-print',disabled:this.state.busy || !window.arra.testPrinting,onClick:()=>this.printTestBill()},t("Print test bill — not a fiscal receipt")),
+            h('button',{className:'bill-print',disabled:this.state.busy || !desktopBridge.testPrinting,onClick:()=>this.printTestBill()},t("Print test bill — not a fiscal receipt")),
             this.state.printNotice && h('p',{role:'status',className:'bill-status'},this.state.printNotice),
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),
             h('div', { className: 'bill-choices' },

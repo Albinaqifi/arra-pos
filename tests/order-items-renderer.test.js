@@ -6,7 +6,7 @@ const vm = require('node:vm');
 test('a later simulated success retains the earlier uncertain-output warning', () => {
   class Component { setState(update) { Object.assign(this.state, update); } }
   const context = { React: { Component, createElement: (type, props, ...children) => ({ type, props, children }) }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} } };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.PrintJobs = PrintJobs;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.PrintJobs = PrintJobs;', context);
   const panel = new context.PrintJobs({});
   panel.state.jobs = [{ id: 1, destination: 'kitchen', tableId: 1, round: 1, attempts: 2, result: 'success', hadUncertain: 1 }];
   assert.match(JSON.stringify(panel.render()), /earlier attempt was uncertain; duplicate output is possible/);
@@ -15,7 +15,7 @@ test('a later simulated success retains the earlier uncertain-output warning', (
 test('correction summary distinguishes the total from the latest event', () => {
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const app = new context.Demo(); app.state.tableId = 1; app.state.screen = 'order';
   app.replaceDesktopItems(app.state, 1, [{ id: 1, productId: 'p', name: 'Dish', unitPrice: 10, quantity: 4, note: '', status: 'sent', round: 1, sentAt: 1, sentBy: 'Waiter', route: 'kitchen', correctedQuantity: 3, corrections: [{ quantity: 2, reason: 'First', actor: 'One', occurredAt: 2 }, { quantity: 1, reason: 'Second', actor: 'Two', occurredAt: 3 }] }]);
   const text = app.renderVals().rounds[0].items[0].cxText;
@@ -43,7 +43,7 @@ test('desktop screen loads and saves items, shows failures, and does not send de
   };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { crypto: { randomUUID: () => 'request-id' }, React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const load = async () => { const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1); return app; };
   let app = await load();
   await app.addProduct('p'); await app.incItem(7);
@@ -76,7 +76,7 @@ test('modifier dialog locks during save, closes after success and remains retrya
   };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve => setImmediate(resolve)); await app.openTable(1);
   app.addProduct('p'); app.renderVals().modGroups[0].options[0].pick();
   const pending=app.modAdd(); assert.equal(calls,1); assert.equal(app.renderVals().modAddDisabled,true); assert.equal(app.renderVals().modGroups[0].options[0].disabled,true);
@@ -105,7 +105,7 @@ test('a replay after a lost send response warns that newly added items remain pe
   };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context={crypto:{randomUUID:()=>`request-${++token}`},React:{Component,createElement(){}},ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.openTable(1);
   await app.addProduct('p'); await app.send(); await app.addProduct('p'); await app.send();
   assert.equal(sends[0],sends[1]); assert.equal(app.state.screen,'waiters'); assert.match(app.state.handoffNotice,/still pending/);

@@ -25,7 +25,7 @@ test('waiter menu keeps active subcategories under their parent and direct produ
   assert.equal(handler({},{}).ok,false);
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = {React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}}}}, document:{getElementById(){}},window:{arra:{getMenu:()=>Promise.resolve(result),getTables:async()=>({ok:true,data:[]})}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo=WaiterDemo;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',context);
   const app = new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve));
   const food = app._menu.cats.find(c=>c.id==='food');
   assert.deepEqual(JSON.parse(JSON.stringify(food.subs)), [['food','Food'],['grill','Grill']]);

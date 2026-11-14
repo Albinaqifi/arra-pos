@@ -7,8 +7,8 @@ function setup(api) {
   class Component { constructor(props) { this.props=props; } setState(u, cb) { Object.assign(this.state, typeof u === 'function' ? u(this.state) : u); if(cb) cb(); } forceUpdate() {} }
   const React={Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})};
   const ctx={React,ReactDOM:{createRoot:()=>({render(){}})},window:{arra:api},document:{getElementById(){}},crypto:{randomUUID:()=> 'sample-token'},setTimeout(){},clearTimeout(){},setInterval(){},clearInterval(){},renderTables(){},renderOrder(){},renderBill(){},renderMoveTable(){}};
-  vm.runInNewContext(fs.readFileSync('dist/admin-shell.js','utf8'),ctx);
-  vm.runInNewContext(fs.readFileSync('src/waiter/DesktopBill.js','utf8')+'\n'+fs.readFileSync('src/App.js','utf8')+'\nthis.App=WaiterDemo; this.Bill=DesktopBill;',ctx);
+  vm.runInNewContext(require('./support/renderer-bundle')(),ctx);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\n'+require('./support/renderer-bundle')()+'\nthis.App=WaiterDemo; this.Bill=DesktopBill;',ctx);
   const app=new ctx.App(); app._mounted=true; Object.assign(app.state,{screen:'order',waiter:{id:1,name:'Sample'},tableId:1,orders:{1:{id:5,log:[]}},items:[]});
   return {ctx,app};
 }

@@ -12,7 +12,7 @@ test('financial screen displays scoped results and clears them on a failed refre
   const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children};}};
   const context={React,ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial = ArraComponents.FinancialVisibility;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({onBack(){}}); await screen.load();
   assert.equal(screen.state.records[0].account,'A'); assert.equal(screen.state.totals.total,100);
   await screen.detail(1); assert.equal(screen.state.detail.lines[0].name,'Sample A');
@@ -34,7 +34,7 @@ test('unpaid history opens a bill and handles a paid-before-open race', async ()
   const React={Component,Fragment:'fragment',createElement(type,props,...children){return {type,props:props||{},children};}};
   const context={React,ReactDOM:{createRoot(){return {render(){}};}},document:{getElementById(){}},window:{arra:api},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Financial = ArraComponents.FinancialVisibility;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Financial = ArraComponents.FinancialVisibility;', context);
   const screen = new context.Financial({onBack(){}}); screen.state.view='history'; await screen.load();
   assert.equal(screen.state.unpaid[0].id,7);
   await screen.unpaidDetail(7); assert.equal(screen.state.detail.lines[0].name,'Sample');

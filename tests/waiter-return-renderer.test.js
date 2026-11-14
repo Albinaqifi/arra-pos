@@ -6,8 +6,8 @@ const vm = require('node:vm');
 function harness(api) {
   class Component { constructor(props) { this.props = props; } setState(update, callback) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); if (callback) callback(); } forceUpdate() {} }
   const context = { React: { Component, Fragment: 'fragment', createElement: (type, props, ...children) => ({type, props: props || {}, children}) }, ReactDOM: { createRoot: () => ({render(){}}) }, document: {getElementById(){}}, window: {arra:api}, crypto: {randomUUID: () => 'send-token'}, setInterval(){}, clearInterval(){}, setTimeout(){}, clearTimeout(){}, renderOrder(){}, renderTables(){}, renderBill(){}, renderMoveTable(){}, ArraComponents:{} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8') + '\nthis.App=WaiterDemo; this.Jobs=PrintJobs;',context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/DesktopBill.js'),'utf8') + '\nthis.Bill=DesktopBill;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.App=WaiterDemo; this.Jobs=PrintJobs;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Bill=DesktopBill;',context);
   context.DesktopBill = context.Bill;
   const app = new context.App(); app.componentDidMount();
   Object.assign(app.state, {screen:'order', waiter:{id:1,name:'First'}, tableId:1, orders:{1:{id:5,log:[]}}, items:[]});

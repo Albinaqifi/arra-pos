@@ -22,7 +22,7 @@ test('unknown keys and missing values do not expose keys or placeholders', () =>
 
 test('bill service errors use known messages and safe fallback', () => {
   const context = { React: { Component: class {} }, window: {} };
-  vm.runInNewContext(fs.readFileSync('src/waiter/DesktopBill.js', 'utf8') + '\nthis.Bill = DesktopBill;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Bill = DesktopBill;', context);
   const bill = new context.Bill({});
   assert.equal(bill.serviceError('Access denied', 'Could not prepare bill'), 'Access denied');
   assert.equal(bill.serviceError('untrusted internal error', 'Could not prepare bill'), 'Could not prepare bill');
@@ -48,10 +48,11 @@ test('configuration and finance text references exist and retain placeholders', 
   }
 });
 
-test('startup shows bilingual recovery if the translation bundle is missing', async () => {
+test('startup shows bilingual recovery if a vendor runtime is missing', async () => {
   const status = { dataset: {}, setAttribute() {}, textContent: '' };
   const context = { document: { getElementById: () => status, body: { dataset: { mode: 'desktop' } } }, window: { addEventListener() {} } };
-  await vm.runInNewContext(fs.readFileSync('src/desktop-status.js', 'utf8'), context);
+  vm.runInNewContext(require('./support/renderer-bundle').moduleSource(require.resolve('../src/desktop-status.js'), 'Startup'), context);
+  await context.Startup.startRenderer(async () => { throw Error('Must not load without the runtime'); });
   assert.match(status.textContent, /Desktop application unavailable/);
   assert.match(status.textContent, /Aplikacioni nuk është i disponueshëm/);
 });
@@ -69,7 +70,7 @@ test('literal waiter translation references exist in both dictionaries', () => {
 test('print destinations translate without modifying their identifiers', () => {
   const context = { window: {}, React: { Component: class {} }, ArraComponents: {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  vm.runInNewContext(fs.readFileSync('src/App.js', 'utf8') + '\nthis.destination = printDestination;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.destination = printDestination;', context);
   assert.equal(context.destination('sq', 'kitchen'), 'Kuzhina');
   assert.equal(context.destination('sq', 'bill'), 'Fatura');
   assert.equal(context.destination('sq', 'unexpected'), 'Destinacion i panjohur');

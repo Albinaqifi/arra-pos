@@ -32,7 +32,7 @@ test('desktop login and sign-out traverse the bridge and clear credentials', asy
   });
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, ArraComponents: {}, renderTables() {}, renderOrder() {}, renderMoveTable() {}, renderBill() {}, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const app = new context.Demo();
   app._mounted = true;
   app.state.user = 'sample-restaurant'; app.state.pass = 'wrong';

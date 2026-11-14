@@ -49,7 +49,7 @@ test('language is shared, authorized, validated and persisted across restart', t
 
  test('bundled dictionaries interpolate values and the language control reflects both selections', () => {
   const vm = require('node:vm');
-  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../dist/admin-shell.js'), 'utf8');
+  const source = require('./support/renderer-bundle')();
   const React = { Component: class {}, createElement: (type, props, ...children) => ({type, props: props || {}, children}) };
   const context = { React }; vm.runInNewContext(source, context);
   const { translate, LanguageSetting } = context.ArraComponents;

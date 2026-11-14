@@ -7,8 +7,8 @@ test('extracted waiter views connect table, order and move controls to the exist
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } forceUpdate() {} }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ArraComponents: {}, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: {}, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
-  for (const name of ['Tables', 'Order', 'MoveTable', 'Bill', 'DesktopBill']) vm.runInNewContext(fs.readFileSync(require.resolve('../src/waiter/' + name + '.js'), 'utf8'), context);
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  for (const name of ['Tables', 'Order', 'MoveTable', 'Bill', 'DesktopBill']) vm.runInNewContext(require('./support/renderer-bundle')(), context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const app = new context.Demo();
   function nodes(node) { if (!node || typeof node !== 'object') return []; if (Array.isArray(node)) return node.flatMap(nodes); return [node, ...nodes(node.children)]; }
   function label(node) { return (node.children || []).map(child => typeof child === 'string' ? child : child && typeof child === 'object' ? label(child) : '').join(''); }

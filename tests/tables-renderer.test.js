@@ -24,7 +24,7 @@ test('desktop renderer displays persisted table identities, empty and failed sta
   });
   class Component { setState(update) { Object.assign(this.state, update); } }
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, clearTimeout() {} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'), 'utf8') + '\nthis.Demo = WaiterDemo;', context);
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   async function load() {
     const app = new context.Demo();
     app.componentDidMount(); app.loadDesktopData();
@@ -60,7 +60,7 @@ test('desktop renderer clears prior financial state across sign-out and denies s
   const api = { signOut:async()=>({ok:true}), selectWaiter:async()=>({ok:true}), getMenu:async()=>({ok:false}), getTables:()=>owner ? Promise.resolve({ok:false}) : oldTables };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
-  vm.runInNewContext(fs.readFileSync(require.resolve('../src/App.js'),'utf8')+'\nthis.Demo = WaiterDemo;',context);
+  vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app = new context.Demo(); app.componentDidMount();
   app.setState({screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
   app.loadDesktopData(); await app.signOut();

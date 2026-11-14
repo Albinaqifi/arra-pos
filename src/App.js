@@ -1,29 +1,13 @@
-// Capture the bridge once so a lost desktop connection cannot select demo behavior.
-const desktopBridge = window.arra;
-function waiterTranslate(language, key, values = {}) {
-  if (typeof ArraComponents !== 'undefined' && ArraComponents.translate) {
-    const result = ArraComponents.translate(language, key, values);
-    if (result !== key) return result;
-  }
-  return key.replace(/^waiter\./, '').replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
-}
-function printDestination(language, destination) {
-  const keys = { kitchen: 'Kitchen', bar: 'Bar', bill: 'Bill' };
-  return Object.hasOwn(keys, destination) ? waiterTranslate(language, 'waiter.' + keys[destination]) : waiterTranslate(language, 'waiter.Unknown destination');
-}
-// Convert the design's CSS declarations to React's style object.
-function style(text) {
-  const result = {};
-  for (const declaration of (text || '').split(';')) {
-    const colon = declaration.indexOf(':');
-    if (colon < 0) continue;
-    const name = declaration.slice(0, colon).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-    if (name) result[name] = declaration.slice(colon + 1).trim();
-  }
-  return result;
-}
+import * as ArraComponents from './admin/index.js';
+import { desktopBridge } from './shared/desktop-bridge.js';
+import { waiterTranslate, printDestination, style } from './shared/waiter-ui.js';
+import { renderTables } from './waiter/Tables.js';
+import { renderOrder } from './waiter/Order.js';
+import { renderMoveTable } from './waiter/MoveTable.js';
+import { renderBill } from './waiter/Bill.js';
+import { DesktopBill } from './waiter/DesktopBill.js';
 
-class TestPrintJobs extends React.Component {
+export class TestPrintJobs extends React.Component {
   constructor(props) { super(props); this.state = { data:null, error:'', busy:false }; this.tokens = {}; }
   componentDidMount() { this.load(); }
   componentDidUpdate(prev) { if (prev.revision !== this.props.revision) this.load(); }
@@ -52,7 +36,7 @@ class TestPrintJobs extends React.Component {
         !j.cancelled && h('button',{disabled:this.state.busy,onClick:()=>{if (!window.confirm(waiterTranslate(this.props?.language, "waiter.Have you checked the printer and paper? Retrying may print a duplicate."))) return; const requestId=this.tokens[j.id] || (this.tokens[j.id]=crypto.randomUUID()); this.change({action:'retry',jobId:j.id,requestId,checked:true});}},waiterTranslate(this.props?.language, "waiter.Retry after checking")))));
   }
 }
-class PrintJobs extends React.Component {
+export class PrintJobs extends React.Component {
   constructor(props) { super(props); this.state = { jobs: [], printers: [], error: '', busy: false }; this.tokens = props.tokens || {}; }
   componentDidMount() { this.load(); }
   componentDidUpdate(previous) { if (previous.revision !== this.props.revision) this.load(); }
@@ -89,7 +73,7 @@ class PrintJobs extends React.Component {
   }
 }
 
-class WaiterDemo extends React.Component {
+export class WaiterDemo extends React.Component {
   constructor(...a) {
     super(...a); this._dataGeneration = 0; this._printRetryTokens = {}; this.state = this.seed();
     if (desktopBridge) {

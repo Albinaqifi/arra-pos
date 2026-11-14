@@ -12,10 +12,10 @@ test('sent item correction requires review and tells preparation in both languag
     class Component { setState(update, cb) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); if (cb) cb(); } forceUpdate() {} }
     const React = {Component, Fragment:'fragment', createElement:(type,props,...children)=>({type,props:props||{},children}), useState:()=>[confirming, value=>{confirming=value;}], useRef:()=>({current:null}), useEffect:()=>{}};
     const ctx = {React,ReactDOM:{createRoot:()=>({render(){}})},window:{},document:{getElementById(){}},setTimeout(){},clearTimeout(){},setInterval(){},clearInterval(){},renderTables(){},renderBill(){},renderMoveTable(){}};
-    vm.runInNewContext(fs.readFileSync('dist/admin-shell.js','utf8'),ctx);
-    vm.runInNewContext(fs.readFileSync('src/waiter/Order.js','utf8'),ctx);
-    vm.runInNewContext(fs.readFileSync('src/App.js','utf8')+'\nthis.App=WaiterDemo',ctx);
-    vm.runInNewContext(fs.readFileSync('src/waiter/SentItemCorrection.js','utf8').replaceAll('export function','function')+'\nthis.Correction=SentItemCorrection',ctx);
+    vm.runInNewContext(require('./support/renderer-bundle')(),ctx);
+    vm.runInNewContext(require('./support/renderer-bundle')(),ctx);
+    vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.App=WaiterDemo',ctx);
+    vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Correction=SentItemCorrection',ctx);
     const app = new ctx.App();
     Object.assign(app.state,{language,screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{openedAt:Date.now(),log:[]}},items:[{id:1,tableId:1,name:'Dish',qty:2,unit:10,status:'sent',cxQty:0,cx:[],route:'kitchen',round:1,sentAt:Date.now()},{id:2,tableId:1,name:'Other dish',qty:1,unit:20,status:'sent',cxQty:0,cx:[],route:'kitchen',round:1,sentAt:Date.now()}]});
     const visit=(node,out=[])=>{if(Array.isArray(node))node.forEach(x=>visit(x,out));else if(node&&typeof node==='object'){out.push(node);visit(node.children,out)}return out};
