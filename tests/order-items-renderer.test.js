@@ -4,10 +4,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 
 test('a later simulated success retains the earlier uncertain-output warning', () => {
-  class Component { setState(update) { Object.assign(this.state, update); } }
+  class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   const context = { React: { Component, createElement: (type, props, ...children) => ({ type, props, children }) }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: {} } };
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.PrintJobs = PrintJobs;', context);
-  const panel = new context.PrintJobs({});
+  const printing = new context.RendererModules.PrintingSession({ bridge: context.window.arra });
+  const panel = new context.PrintJobs({ printing });
   panel.state.jobs = [{ id: 1, destination: 'kitchen', tableId: 1, round: 1, attempts: 2, result: 'success', hadUncertain: 1 }];
   assert.match(JSON.stringify(panel.render()), /earlier attempt was uncertain; duplicate output is possible/);
 });

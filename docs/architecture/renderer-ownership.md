@@ -65,3 +65,7 @@ This is the check plan, not a claim that checks or independent reviews passed. R
 | 12. Integration verification and handoff | Run final `npm run build` and `npm test` after integration; obtain fresh-context review and testing of the complete diff and fixes. Exercise desktop and explicit demo, English/Albanian, representative login → order → send → move/correct → bill → handoff flows, keyboard/dialog behavior and offline local startup. Record precisely which rendered/Electron/offline/printer checks were performed and any limitations. Do not claim a merge. |
 
 The targeted lists identify existing coverage; add focused tests for any newly exposed race or lifetime boundary. Do not repeatedly run the complete suite between unchanged slices. No database migration, service permission change, payment policy change or new product behavior is authorized by this refactor.
+
+### Temporary migration boundary
+
+Step 3 moves both desktop printing panels and their persistent retry/refresh/status owner. Browser-demo `printers`/`jobs` and their send/move/payment mutations remain explicitly legacy until steps 7–10 move the corresponding demo operations. This follows the approved plan's incremental demo migration and avoids introducing generic cross-owner mutations merely to move the fields early. This is not final acceptance of demo printing in App: step 11 must remove these fields, commands and view-model calculations from App, with demo failure/backup/reprint/handoff tests retained.
