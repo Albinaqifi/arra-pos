@@ -50,13 +50,10 @@ export class DesktopBill extends React.Component {
     if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain) return;
     this.props.onClose?.();
   }
-  selectMethod(method) {
+  selectMethod(method, account = 'A') {
     if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain) return;
-    if (method === 'cash' || method === 'card') this.setState({ method, account: method === 'card' ? 'A' : '' });
-  }
-  selectAccount(account) {
-    if (this.disposed || this.operation || this.confirmed || this.paymentSelection || this.state.uncertain || this.state.method !== 'cash') return;
-    if (account === 'A' || account === 'B') this.setState({ account });
+    if (method === 'card') this.setState({ method, account: 'A' });
+    else if (method === 'cash' && (account === 'A' || account === 'B')) this.setState({ method, account });
   }
   async review() {
     if (this.paymentSelection || this.state.uncertain) return;
@@ -129,9 +126,9 @@ export class DesktopBill extends React.Component {
             h('p', null, t("Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.")),
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),
             h('div', { className: 'bill-choices' },
-              h('button', { 'aria-pressed': this.state.method === 'cash', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash') }, t("Cash")),
+              h('button', { 'aria-pressed': this.state.method === 'cash' && this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash', 'A') }, t("Cash")),
+              h('button', { 'aria-pressed': this.state.method === 'cash' && this.state.account === 'B', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash', 'B') }, t("Cash B")),
               h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card"))),
-            this.state.method === 'cash' && h('div', { className: 'bill-choices' }, h('button', { 'aria-pressed': this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('A') }, t("Account A")), h('button', { 'aria-pressed': this.state.account === 'B', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('B') }, t("Account B"))),
             this.state.account && h('p', { className: 'bill-selection' }, t('Selected: {method} · Account {account}', {method:t(this.state.method === 'cash' ? 'Cash' : 'Card'), account:this.state.account})))),
         h('footer', { className: 'bill-actions' },
           h('button', { onClick: () => this.close(), disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),

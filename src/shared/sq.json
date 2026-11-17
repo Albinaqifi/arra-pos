@@ -89,6 +89,7 @@
   "waiter.Print test bill — not a fiscal receipt": "Printo faturën testuese — nuk është kupon fiskal",
   "waiter.Choose payment method and account:": "Zgjidhni mënyrën e pagesës dhe llogarinë:",
   "waiter.Cash": "Para në dorë",
+  "waiter.Cash B": "Para në dorë B",
   "waiter.Card (Account A)": "Kartë (Llogaria A)",
   "waiter.Account A": "Llogaria A",
   "waiter.Account B": "Llogaria B",

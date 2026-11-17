@@ -89,6 +89,7 @@
   "waiter.Print test bill — not a fiscal receipt": "Print test bill — not a fiscal receipt",
   "waiter.Choose payment method and account:": "Choose payment method and account:",
   "waiter.Cash": "Cash",
+  "waiter.Cash B": "Cash B",
   "waiter.Card (Account A)": "Card (Account A)",
   "waiter.Account A": "Account A",
   "waiter.Account B": "Account B",

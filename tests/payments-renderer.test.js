@@ -1,19 +1,27 @@
 const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), vm = require('node:vm');
 test('test payment selection confirms card A or cash account and closes only after success', async () => {
   const calls = []; let paid = 0;
-  const api = { bill: async () => ({ ok: true, data: { id: 7, total: 100, lines: [] } }), payment: async r => { calls.push(r); return { ok: calls.length > 1, error: 'Retry' }; } };
+  const api = { bill: async () => ({ ok: true, data: { id: 7, total: 100, lines: [] } }), payment: async r => { calls.push(r); return { ok: calls.length > 2, error: 'Retry' }; } };
   class Component { constructor(props) { this.props = props; } setState(u) { Object.assign(this.state, u); } }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/renderer-bundle')() + '\n' + require('./support/renderer-bundle')() + '\nthis.Bill = DesktopBill;', context);
   const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
   const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
-  find(b.render(), 'Cash').props.onClick(); assert.equal(find(b.render(), 'Record full test payment and close table'), null);
-  find(b.render(), 'Account B').props.onClick(); await find(b.render(), 'Record full test payment and close table').props.onClick();
-  assert.equal(paid, 0); assert.equal(calls[0].account, 'B'); assert.equal(calls[0].method, 'cash');
-  find(b.render(), 'Card').props.onClick(); assert.equal(find(b.render(), 'Account B'), null);
+  find(b.render(), 'Cash').props.onClick(); assert.equal(b.state.account, 'A');
+  assert.equal(find(b.render(), 'Cash').props['aria-pressed'], true);
+  assert.ok(find(b.render(), 'Record full test payment and close table'));
   await find(b.render(), 'Record full test payment and close table').props.onClick();
-  assert.equal(calls[1].method, 'card'); assert.equal(calls[1].account, 'A'); assert.equal(paid, 1);
+  assert.equal(calls[0].method, 'cash'); assert.equal(calls[0].account, 'A'); assert.equal(paid, 0);
+  find(b.render(), 'Cash B').props.onClick(); assert.equal(b.state.account, 'B');
+  assert.equal(find(b.render(), 'Cash').props['aria-pressed'], false);
+  assert.equal(find(b.render(), 'Cash B').props['aria-pressed'], true);
+  assert.equal(find(b.render(), 'Account A'), null); assert.equal(find(b.render(), 'Account B'), null);
+  await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(paid, 0); assert.equal(calls[1].account, 'B'); assert.equal(calls[1].method, 'cash');
+  find(b.render(), 'Card').props.onClick(); assert.equal(b.state.account, 'A');
+  await find(b.render(), 'Record full test payment and close table').props.onClick();
+  assert.equal(calls[2].method, 'card'); assert.equal(calls[2].account, 'A'); assert.equal(paid, 1);
 });
 
 test('unknown response locks the selection and retries it before allowing navigation', async () => {
@@ -25,12 +33,13 @@ test('unknown response locks the selection and retries it before allowing naviga
   vm.runInNewContext(require('./support/renderer-bundle')() + '\n' + require('./support/renderer-bundle')() + '\nthis.Bill = DesktopBill;', context);
   const find = (n, text) => { if (!n || typeof n !== 'object') return null; if (n.type === 'button' && n.children.includes(text)) return n; for (const c of n.children || []) for (const x of Array.isArray(c) ? c : [c]) { const f = find(x, text); if (f) return f; } return null; };
   const b = new context.Bill({ orderId: 1, onPaid: () => paid++, onClose() {} }); await b.review();
-  find(b.render(), 'Cash').props.onClick(); find(b.render(), 'Account B').props.onClick();
+  find(b.render(), 'Cash B').props.onClick();
   await find(b.render(), 'Record full test payment and close table').props.onClick();
   assert.equal(find(b.render(), 'Close').props.disabled, true);
   assert.ok(JSON.stringify(b.render()).includes('Retry the same selection to recover the result; do not repeat the separate terminal payment.'));
   assert.equal(find(b.render(), 'Card').props.disabled, true);
-  assert.equal(find(b.render(), 'Account A').props.disabled, true);
+  assert.equal(find(b.render(), 'Cash').props.disabled, true);
+  assert.equal(find(b.render(), 'Cash B').props.disabled, true);
   await find(b.render(), 'Record full test payment and close table').props.onClick();
   assert.equal(JSON.stringify(calls[0]), JSON.stringify(calls[1])); assert.equal(paid, 1);
 });
