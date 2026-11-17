@@ -49,7 +49,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             if (pending.length) {
               const number = db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM preparation_rounds WHERE order_id = ?').get(request.orderId).number;
               const roundId = db.prepare('INSERT INTO preparation_rounds (order_id, request_id, number, actor_id, sent_at, table_id) VALUES (?, ?, ?, ?, ?, (SELECT table_id FROM orders WHERE id = ?))').run(request.orderId, request.requestId, number, session.currentUserId(), Date.now(), request.orderId).lastInsertRowid;
-              for (const destination of ['kitchen', 'bar']) {
+              for (const destination of ['kitchen', 'kitchen2', 'bar']) {
                 const selected = pending.filter(i => i.destination === destination);
                 if (!selected.length) continue;
                 const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;

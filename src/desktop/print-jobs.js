@@ -7,7 +7,7 @@ function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
     const fields = { list: ['action'], simulate: ['action', 'destination', 'result'], retry: ['action', 'jobId', 'requestId'] };
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(fields, request.action) || Reflect.ownKeys(request).length !== fields[request.action].length || !fields[request.action].every(k => Object.hasOwn(request, k)) ||
-        (request.action === 'simulate' && (!['kitchen', 'bar'].includes(request.destination) || !['success', 'failed', 'uncertain'].includes(request.result))) ||
+        (request.action === 'simulate' && (!['kitchen', 'kitchen2', 'bar'].includes(request.destination) || !['success', 'failed', 'uncertain'].includes(request.result))) ||
         (request.action === 'retry' && (!Number.isSafeInteger(request.jobId) || request.jobId <= 0 || typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId)))) return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, error: 'Access denied' };
     try {

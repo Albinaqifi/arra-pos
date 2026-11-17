@@ -102,7 +102,7 @@ export class CorrectionWorkflow extends FeatureState {
     return {
       t, modalTitle: t('Cancel a sent item'), modalSub: t('It was already sent, so it stays on record, crossed out.'),
       cxName: item?.name || '', cxMods: item?.mods || '', cxHasMods: !!item?.mods,
-      cxMeta: item ? t('Round {round} · sent {time} to {destination}', { round: item.round, time: time(item.sentAt), destination: t(item.route === 'bar' ? 'Bar' : 'Kitchen') }) : '',
+      cxMeta: item ? t('Round {round} · sent {time} to {destination}', { round: item.round, time: time(item.sentAt), destination: t(item.route === 'bar' ? 'Bar' : item.route === 'kitchen2' ? 'Kitchen 2' : 'Kitchen 1') }) : '',
       cxMulti: remaining > 1, cxQty: String(dialog.qty), cxMax: t('of {count}', { count: remaining }), cxMaxNumber: remaining,
       cxInc: () => this.changeQuantity(1), cxDec: () => this.changeQuantity(-1),
       cxReasons: reasons.map(reason => ({ label: t(reason), pressed: String(dialog.reason === reason), pick: () => this.chooseReason(reason) })),
