@@ -1,11 +1,12 @@
 import { configText } from './config-i18n.js';
 const h = React.createElement;
 export class AdminSentCorrections extends React.Component {
-  constructor(props) { super(props); this.state = { items: [], loading: true, error: '', selected: null, quantity: 1, reason: '', busy: false, pending: null, notice: '' }; }
+  constructor(props) { super(props); this.state = { items: [], loading: true, error: '', selected: null, quantity: 1, reason: '', busy: false, pending: null, uncertain: false, notice: '' }; }
   t(key) { return configText(this.props.language,key); }
   componentDidMount() { this.load(); }
   leaveEditor() { return !this.state.busy && !this.state.pending; }
   async load() {
+    this.setState({loading:true,error:''});
     try {
       const result = await window.arra.adminSentCorrection({action:'list'});
       if (!result.ok || !Array.isArray(result.data?.items)) throw Error();
@@ -16,26 +17,36 @@ export class AdminSentCorrections extends React.Component {
     if (this.state.busy) return;
     const item=this.state.items.find(i=>i.itemId===this.state.selected);
     const req=this.state.pending || (item && {action:'correct',orderId:item.orderId,itemId:item.itemId,quantity:Number(this.state.quantity),reason:this.state.reason.trim(),requestId:crypto.randomUUID()});
-    if (!req || !Number.isSafeInteger(req.quantity) || req.quantity<1 || (!this.state.pending && req.quantity>item.remaining) || !req.reason || req.reason.length>500) { this.setState({error:this.t('Enter a valid quantity and reason.')}); return; }
-    if (!this.state.pending && !window.confirm(this.t('Correct this sent item? Tell preparation staff in person.'))) return;
+    if (!req || !Number.isSafeInteger(req.quantity) || req.quantity<1 || (!this.state.pending && req.quantity>item.remaining)) { this.setState({error:this.t('Enter a whole quantity between 1 and the remaining quantity.')}); return; }
+    if (!req.reason || req.reason.length>500) { this.setState({error:this.t('Enter a reason of up to 500 characters.')}); return; }
+    if (!this.state.pending && !window.confirm(this.t('Confirm correction:')+' '+this.t('Table')+' '+item.tableId+' · '+item.name+' (#'+item.itemId+') · '+this.t('Quantity')+' '+req.quantity+'\n'+this.t('Tell preparation staff in person.'))) return;
     this.setState({busy:true,pending:req,error:'',notice:''});
     try {
       const result=await window.arra.adminSentCorrection(req);
-      if (result.ok) { this.props.onJobsChanged?.(); this.setState({busy:false,pending:null,selected:null,quantity:1,reason:'',notice:this.t(result.testPrintEnabled ? 'Correction saved.' : 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.')}); await this.load(); }
-      else if (result.uncertain) this.setState({busy:false,error:this.t('The result is uncertain. Retry the same correction.')});
+      if (result.ok) { this.props.onJobsChanged?.(); this.setState({busy:false,pending:null,uncertain:false,selected:null,quantity:1,reason:'',notice:this.t(result.testPrintEnabled ? 'Correction saved. Tell preparation staff in person.' : 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.')}); await this.load(); }
+      else if (result.uncertain || this.state.uncertain) this.setState({busy:false,uncertain:true,error:this.t('The result is uncertain. Retry the same correction.')});
       else { this.setState({busy:false,pending:null}); await this.load(); this.setState({error:this.t('Correction was rejected. Refresh and check the order.')}); }
-    } catch (_) { this.setState({busy:false,error:this.t('The result is uncertain. Retry the same correction.')}); }
+    } catch (_) { this.setState({busy:false,uncertain:true,error:this.t('The result is uncertain. Retry the same correction.')}); }
   }
   render() {
     const s=this.state, t=x=>this.t(x), item=s.items.find(i=>i.itemId===s.selected), locked=!!s.pending || s.busy;
-    return h('main',{className:'floor-page'},h('button',{onClick:this.props.onBack,disabled:locked},t('← Back to administration')),
-      h('h1',null,t('Correct sent items')),h('p',null,t('Combined can correct sent items on unbilled open orders. Tell preparation staff in person.')),
+    const groups=new Map(); s.items.forEach(i=>{ if (!groups.has(i.tableId)) groups.set(i.tableId,[]); groups.get(i.tableId).push(i); });
+    const qty=Number(s.quantity), valid=Number.isSafeInteger(qty) && qty>=1 && item && qty<=item.remaining;
+    return h('main',{className:'floor-page correction-page'},h('button',{onClick:this.props.onBack,disabled:locked},t('← Back to administration')),
+      h('h1',null,t('Correct sent items')),
+      h('p',null,t('Find a table, select a sent item, then enter how many to cancel and why.')),
+      h('p',{className:'floor-note'},t('A correction reduces the remaining quantity on an unbilled open order. Tell preparation staff in person; a printed notice does not guarantee they have seen it.')),
       s.loading && h('p',{role:'status'},t('Loading…')),s.error && h('p',{role:'alert'},s.error),s.notice && h('p',{role:'status'},s.notice),
-      !s.loading && !s.error && !s.items.length && h('p',null,t('No sent items available for correction.')),
-      h('ul',null,s.items.map(i=>h('li',{key:i.itemId},h('button',{type:'button',disabled:locked,onClick:()=>this.setState({selected:i.itemId,quantity:1,reason:''})},t('Table')+' '+i.tableId+' · '+i.name+' · '+t('Remaining')+' '+i.remaining)))),
-      item && h('form',{onSubmit:e=>{e.preventDefault();this.submit();}},h('h2',null,item.name),
-        h('label',null,t('Quantity'),h('input',{type:'number',min:1,max:item.remaining,value:s.quantity,disabled:locked,onChange:e=>this.setState({quantity:e.target.value})})),
-        h('label',null,t('Reason'),h('textarea',{value:s.reason,maxLength:500,required:true,disabled:locked,onChange:e=>this.setState({reason:e.target.value})})),
-        h('button',{type:'submit',disabled:s.busy},s.pending?t('Retry same correction'):t('Save correction'))));
+      !s.loading && !s.pending && s.error && h('button',{type:'button',onClick:()=>this.load()},t('Refresh list')),
+      !s.loading && !s.error && !s.items.length && h('p',{className:'floor-empty'},t('No sent items available for correction.')),
+      !s.loading && s.items.length>0 && h('div',{className:'correction-layout'},
+        h('section',{'aria-label':t('Choose a sent item')},h('h2',null,t('1. Find a table and select an item')),
+          Array.from(groups,([table,items])=>h('section',{className:'correction-table',key:table},h('h3',null,t('Table')+' '+table),h('ul',null,items.map(i=>h('li',{key:i.itemId},h('button',{type:'button',className:'correction-item'+(s.selected===i.itemId?' selected':''),'aria-pressed':s.selected===i.itemId,disabled:locked,onClick:()=>this.setState({selected:i.itemId,quantity:1,reason:'',error:'',notice:''})},h('strong',null,i.name),h('span',null,t('Remaining')+' '+i.remaining+' · '+t('Item #')+i.itemId)))))))),
+        h('section',{className:'correction-form'},h('h2',null,t('2. Enter the correction')), !item ? h('p',null,t('Select an item to continue.')) :
+          h('form',{onSubmit:e=>{e.preventDefault();this.submit();}},h('p',null,h('strong',null,t('Table')+' '+item.tableId+' · '+item.name),h('br'),t('Item #')+item.itemId+' · '+t('Remaining')+' '+item.remaining),
+            h('label',null,t('Quantity to cancel'),h('input',{type:'number',min:1,max:item.remaining,step:1,value:s.quantity,disabled:locked,onChange:e=>this.setState({quantity:e.target.value})})),
+            h('p',{className:'correction-effect'},valid ? t('Remaining after correction:')+' '+(item.remaining-qty) : t('Choose a whole quantity within the remaining amount.')),
+            h('label',null,t('Reason (required)'),h('textarea',{value:s.reason,maxLength:500,disabled:locked,onChange:e=>this.setState({reason:e.target.value})})),
+            h('button',{type:'submit',className:'floor-primary',disabled:s.busy},s.pending?t('Retry same correction'):t('Review and save correction'))))));
   }
 }
