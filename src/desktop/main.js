@@ -8,6 +8,7 @@ const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
 const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
+const { registerActivityReport } = require('./activity-report');
 const { registerOperationalReports } = require('./operational-reports');
 const { registerTransferCorrection } = require('./transfer-correction');
 const { registerAdminSentCorrection } = require('./admin-sent-correction');
@@ -77,6 +78,7 @@ app.whenReady().then(() => {
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
   registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: process.platform === 'win32' ? printTestJob : null });
+  registerActivityReport(require('electron').ipcMain, isAllowedSender, database, session);
   registerOperationalReports(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);

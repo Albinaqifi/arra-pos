@@ -97,7 +97,7 @@ test('upgrade grants shared administration only to existing owners', t=>{
   db.exec("DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27");
   db.close(); db=openDatabase(dir);
   for(const id of [2,3,4]) for(const permission of ['tables.change','menu.change','employees.view','employees.change']) assert.ok(db.prepare('SELECT 1 FROM user_permissions WHERE user_id=? AND permission=?').get(id,permission));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,35);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,36);
   assert.equal(db.prepare("SELECT count(*) n FROM user_permissions WHERE user_id IN (2,3) AND permission='business_days.close'").get().n,0);
 });
 

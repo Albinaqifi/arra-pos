@@ -1,3 +1,5 @@
+import { WaiterPerformance } from './ActivityReports.js';
+import { activityText } from './activity-i18n.js';
 import { financeText } from './finance-i18n.js';
 import { SalesReports } from './SalesReports.js';
 import { BusinessDays } from './BusinessDays.js';
@@ -28,11 +30,12 @@ export class FinancialVisibility extends React.Component {
   }
   render() {
     const h=React.createElement,s=this.state, t=key=>financeText(this.props.language,key);
-    const options=[['billHistory',t('Bill history'),t('Review paid bills by business day')],['today',t("Current day turnover"),t("See today’s payments and totals")],['reports',t("Previous days & reports"),t("Review a closed day or date range")],['history',t("Payment history"),t("Find payments and unpaid bills")],['close',t("Close current day"),t("Review outstanding orders before closing")]];
+    const options=[['performance',activityText(this.props.language,'Waiter performance'),activityText(this.props.language,'Review sales, payments and cancellations by waiter')],['billHistory',t('Bill history'),t('Review paid bills by business day')],['today',t("Current day turnover"),t("See today’s payments and totals")],['reports',t("Previous days & reports"),t("Review a closed day or date range")],['history',t("Payment history"),t("Find payments and unpaid bills")],['close',t("Close current day"),t("Review outstanding orders before closing")]];
     const title=options.find(x=>x[0]===s.view)?.[1];
     return h('main',{className:'finance-home'},h('button',{className:'finance-back',onClick:s.view?()=>this.selectView(null):this.props.onBack},s.view?t("← Financial information"):t("← Back to administration")),
       h('p',{className:'admin-eyebrow floor-eyebrow'},t("ADMINISTRATION / FINANCIAL INFORMATION")),h('h1',null,title || t("Financial information")),
       !s.view ? h(React.Fragment,null,h('p',{className:'admin-intro'},t("Choose what you would like to review.")),h('div',{className:'finance-choices'},options.map(([id,label,description])=>h('button',{key:id,className:'finance-choice',onClick:()=>this.selectView(id)},h('span',{className:'finance-choice-icon','aria-hidden':true},id==='today'?'◷':id==='reports'?'▦':id==='history'?'≡':'✓'),h('span',{className:'finance-choice-copy'},h('strong',null,label),h('small',null,description)),h('span',{className:'finance-choice-arrow','aria-hidden':true},'→')))),h('p',{className:'finance-footnote'},t("Sample data · Non-fiscal, provisional reporting"))) : null,
+      s.view==='performance' && h(WaiterPerformance,{language:this.props.language}),
       s.view==='billHistory' && h(BillHistory,{language:this.props.language}),
       s.view==='today' && h(SalesReports,{language:this.props.language,key:'today-'+s.dayRevision,mode:'today'}),
       s.view==='reports' && h(SalesReports,{language:this.props.language,key:'reports-'+s.dayRevision,mode:'reports'}),
