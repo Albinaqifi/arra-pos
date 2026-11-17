@@ -53,7 +53,7 @@ app.whenReady().then(() => {
     database = openDatabase(dataDirectory(process.argv, app.getPath('userData')));
   } catch (error) {
     dialog.showErrorBox('Database could not be opened / Baza e të dhënave nuk mund të hapet',
-      'Arra POS could not initialize its local database. Check that the application data folder is writable and that this app is not older than the database. Your existing data has not been deleted. Close the app and seek support if the problem continues.\n\nArra POS nuk mund të hapë bazën lokale të të dhënave. Kontrolloni që dosja e të dhënave të lejojë shkrimin dhe që aplikacioni të mos jetë më i vjetër se baza e të dhënave. Të dhënat ekzistuese nuk janë fshirë. Mbyllni aplikacionin dhe kërkoni ndihmë nëse problemi vazhdon.');
+      'Arra POS could not initialize its local database. Check available disk space, that the application data folder is writable and that this app is not older than the database. Preserve the database and its sidecar files. Close the app and seek support if the problem continues.\n\nArra POS nuk mund të hapë bazën lokale të të dhënave. Kontrolloni hapësirën e lirë në disk, që dosja e të dhënave të lejojë shkrimin dhe që aplikacioni të mos jetë më i vjetër se baza e të dhënave. Ruani bazën e të dhënave dhe skedarët e saj ndihmës. Mbyllni aplikacionin dhe kërkoni ndihmë nëse problemi vazhdon.');
     app.quit();
     return;
   }
