@@ -86,4 +86,9 @@ S-052's local recovery exercise is complete. The owner cannot test on another ma
 | S-075 | In progress | PR #102 merged into S-074 branch as 0f08803; not yet on main. Owner reports printer flow works; detailed physical/offline checks and prerequisite verification outstanding. |
 | S-076 | Done | Independent review and tests passed; owner confirmed setup, restart, offline workflows and upgrade data; PR #106 merged as `851ce22`. |
 
+<<<<<<< Updated upstream
 | S-077 | In progress | Arra sample setup implemented; independent review and target-machine verification outstanding. |
+=======
+| S-077 | In progress | PR #110 merged as `e963ab6`; independent review, full-suite completion and target-machine verification outstanding. |
+| S-078 | Todo | Opening-date filter and current or final table grouping confirmed. |
+>>>>>>> Stashed changes

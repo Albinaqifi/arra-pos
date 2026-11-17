@@ -2,6 +2,21 @@
 
 Status: proposed backlog, 2026-11-03. Each story is intended for one development session. Scope and order can be adjusted as we learn; split a story if it cannot be completed and verified in a session. This is a development plan, not permission to use the app for real sales. Product rules come from the approved intent, architecture, `admin_requirements.md` and the waiter requirements; the later admin requirements override conflicts in the waiter document.
 
+### S-078 — Browse order history by table and date
+
+**Goal:** Help an authorized administrator find historical orders either by table or in the existing full order list, for one date or a date range. **Depends on:** S-041 and S-065.
+
+**Owner decisions:** The order's opening date determines inclusion in the selected period. A moved order appears only under its current or final table in the table view.
+
+**Acceptance:**
+
+- Place date selection above two tabs, shared by both views. Allow a single date or an inclusive start-to-end date range, show the active selection clearly, and provide a way to return to all dates. Reject invalid or reversed ranges with useful feedback. Select orders by their opening date using local calendar dates and make that basis clear.
+- Put **By table** first: show tables with matching permitted orders; selecting a table shows its matching orders and allows opening their existing full details and activity timeline. Provide clear navigation back to the selected table and preserve the active date selection. Group a moved order only under its current or final table, including when that table is later changed or deactivated.
+- Put **All orders** second: show the matching orders together in the existing full-list style, with access to the same order details. Do not display the tables an order moved through in the all-orders list; show move information in the selected order's detail and activity timeline. Switching tabs retains the date selection; returning from details retains the user's view and context. Make empty results, loading and failures understandable.
+- Preserve the existing operational-history privacy limits and trusted authorization, including connected-order financial scope after item moves. Table lists, counts, filters and direct requests must not reveal orders or table associations outside the signed-in user's permitted scope. Preserve existing history, identity cleanup, stale-response protection, offline use, English and Albanian, and keyboard and resizing support. Keep feature behavior in its renderer owner.
+
+**Checks/review:** With sample orders, verify one day, an inclusive multi-day range, boundaries, invalid ranges, no results, switching tabs and returning from details. Verify moved orders appear only under their current or final table, including changed and inactive tables, and retain full timelines. Test permitted and denied direct requests and scoped results for owner identities, including connected orders, stale responses and identity changes. Check both languages, keyboard, resizing and offline desktop behavior; record actual evidence and limitations.
+
 ## How to use this backlog
 
 - Start a session by naming one story ID. Read that story, its dependencies and relevant requirements; implement and verify only that story. Follow-up fixes necessary to finish it belong in the same session.
