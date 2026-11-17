@@ -2,6 +2,19 @@
 
 Status: proposed backlog, 2026-11-03. Each story is intended for one development session. Scope and order can be adjusted as we learn; split a story if it cannot be completed and verified in a session. This is a development plan, not permission to use the app for real sales. Product rules come from the approved intent, architecture, `admin_requirements.md` and the waiter requirements; the later admin requirements override conflicts in the waiter document.
 
+### S-079 — Make sent-item corrections clear and usable
+
+**Goal:** Help an authorized administrator find a sent item and understand and safely record a correction. **Depends on:** S-041 and S-072; preserve the existing cancellation notice behavior where available.
+
+**Acceptance:**
+
+- Redesign the page around a clear explanation and a simple sequence: find the table, select the item, and enter how many to cancel and why. Explain that this reduces the remaining quantity on an unbilled open order, and that preparation staff must be told in person. Use plain language and avoid implying that a printed notice guarantees staff awareness.
+- Group eligible items by table with visible spacing between tables and a scannable layout. Show each item's name and remaining eligible quantity, make the selected item and table obvious, and handle an empty list, loading and errors clearly. Keep multiple entries distinguishable when they represent separate sent items.
+- Present the selected table and item alongside clearly labelled quantity and required reason fields. Show the effect of the chosen quantity, validate input with useful feedback, and confirm the item, table and quantity before saving. Provide clear success, rejection and uncertain-result recovery states without creating duplicate corrections.
+- Preserve existing eligibility, trusted authorization and validation, billing effects, correction and preparation history, cancellation notices, retry protections and offline operation. Do not add paid-order corrections or change access rules. Keep feature behavior in its renderer owner; support English and Albanian, keyboard use, visible focus and supported desktop sizes.
+
+**Checks/review:** Inspect the rendered page with sample tables containing multiple items and repeated item names, including selected, empty, error and uncertain-result states. Exercise partial and full corrections, invalid quantities and reasons, confirmation, denied direct requests and retry recovery; verify history, billing and notice behavior remain intact. Check both languages, keyboard, resizing and offline operation, and record actual evidence and limitations.
+
 ### S-078 — Browse order history by table and date
 
 **Goal:** Help an authorized administrator find historical orders either by table or in the existing full order list, for one date or a date range. **Depends on:** S-041 and S-065.

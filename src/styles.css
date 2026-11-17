@@ -260,3 +260,15 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 .employee-history .floor-list { margin-top:12px; padding:16px; box-shadow:none; }
 .employee-history h2 { font-size:16px; }
 @media (max-width:800px) { .employee-layout { grid-template-columns:1fr; } .employee-overview div { padding:12px; } }
+.correction-page > p { max-width: 900px; }
+.correction-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 0.85fr); gap: 24px; align-items: start; margin-top: 24px; }
+.correction-table, .correction-form { background: white; border: 1px solid #cbd5e1; border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+.correction-table h3 { margin: 0 0 12px; }
+.correction-table ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.correction-item { width: 100%; text-align: left; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px; }
+.correction-item.selected { border: 2px solid #1d4ed8; background: #eff6ff; }
+.correction-form label { display: block; font-weight: 600; margin-top: 16px; }
+.correction-form input, .correction-form textarea { display: block; width: 100%; margin-top: 6px; box-sizing: border-box; }
+.correction-form textarea { min-height: 100px; }
+.correction-effect { color: #475569; }
+@media (max-width: 700px) { .correction-layout { grid-template-columns: 1fr; } }
