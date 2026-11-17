@@ -337,5 +337,9 @@
   "waiter.Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.": "Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.",
   "waiter.Kitchen 1": "Kitchen 1",
   "waiter.Kitchen 2": "Kitchen 2",
-  "waiter.The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page.": "The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page."
+  "waiter.The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page.": "The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page.",
+  "waiter.Account A bill": "Account A bill",
+  "waiter.Account B bill": "Account B bill",
+  "waiter.Not yet attempted; check paper before printing": "Not yet attempted; check paper before printing",
+  "waiter.Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.": "Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs."
 }

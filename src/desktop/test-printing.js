@@ -3,7 +3,7 @@
 const { hasPermissions } = require('./permissions');
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const token = s => typeof s === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(s);
-const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill'].includes(s);
+const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill', 'bill-A', 'bill-B'].includes(s);
 const inFlight = new Set();
 
 function createPreparationJob(db, ticketId) {
@@ -60,7 +60,8 @@ function reserveAttempt(db, jobId, requestId, actorId) {
   if (prior) { if (prior.jobId !== jobId) throw Error('Invalid retry'); return null; }
   const job = db.prepare('SELECT destination,snapshot FROM test_print_jobs WHERE id=?').get(jobId);
   if (!job) throw Error('Job unavailable');
-  const queue = db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
+  const payment = job.destination === 'bill' ? db.prepare("SELECT COALESCE(c.account,p.account) AS account FROM payments p LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE p.bill_id=(SELECT bill_id FROM test_print_jobs WHERE id=?)").get(jobId) : null;
+  const queue = payment ? db.prepare('SELECT queue FROM bill_printer_queues WHERE account=?').get(payment.account).queue : db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
   const attemptId = db.prepare('INSERT INTO test_print_attempts(job_id,request_id,actor_id,queue,started_at) VALUES(?,?,?,?,?)').run(jobId, requestId, actorId, queue, Date.now()).lastInsertRowid;
   return { attemptId, queue, destination: job.destination, snapshot: JSON.parse(job.snapshot) };
 }
@@ -73,7 +74,7 @@ function dispatch(db, adapter, attempt) {
   }).catch(() => { /* unknown: leave the durable attempt without a result */ }).finally(() => inFlight.delete(attempt.attemptId));
 }
 
-function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, enabled) {
+function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, enabled, billOnly = false) {
   ipcMain.handle('arra:test-printing', (event, req) => {
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype) return { ok:false };
     if (!enabled) return {ok:false,disabled:true};
@@ -83,6 +84,7 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
       (req.action === 'configureAlert' && (!['kitchen','kitchen2','bar'].includes(req.destination) || typeof req.beep !== 'boolean')) ||
       (req.action === 'bill' && (!validId(req.billId) || !token(req.requestId))) ||
       (['retry','retryNotice'].includes(req.action) && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
+    if (billOnly && (req.action === 'configureAlert' || req.action === 'retryNotice' || (req.action === 'configure' && !['bill-A','bill-B'].includes(req.destination)))) return {ok:false};
     const operational = hasPermissions(db,session,'orders.view','orders.change');
     const financial = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && hasPermissions(db,session,'employees.view') && ['A','B','combined'].includes(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope);
     const correctionAdmin = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope === 'combined' && !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(session.currentUserId());
@@ -94,9 +96,12 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
       db.exec('BEGIN IMMEDIATE');
       try {
         if (req.action === 'configure') {
-          const old=db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(req.destination);
-          db.prepare('UPDATE test_printer_queues SET queue=? WHERE destination=?').run(req.queue,req.destination);
-          if (old.queue !== req.queue) db.prepare('UPDATE cancellation_alert_settings SET beep=0 WHERE destination=?').run(req.destination);
+          if (req.destination === 'bill-A' || req.destination === 'bill-B') db.prepare('UPDATE bill_printer_queues SET queue=? WHERE account=?').run(req.queue,req.destination.slice(-1));
+          else {
+            const old=db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(req.destination);
+            db.prepare('UPDATE test_printer_queues SET queue=? WHERE destination=?').run(req.queue,req.destination);
+            if (old.queue !== req.queue) db.prepare('UPDATE cancellation_alert_settings SET beep=0 WHERE destination=?').run(req.destination);
+          }
         }
         if (req.action === 'configureAlert') db.prepare('UPDATE cancellation_alert_settings SET beep=? WHERE destination=?').run(req.beep ? 1 : 0,req.destination);
         if (req.action === 'bill') {
@@ -111,7 +116,7 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
         }
         if (req.action === 'retry') {
           const job = db.prepare(`SELECT j.bill_id AS billId, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
-          if (!job || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
+          if (!job || (billOnly && !job.billId) || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
           attempt = reserveAttempt(db,req.jobId,'retry-' + req.requestId,session.currentUserId());
         }
         let noticeAttempt;
@@ -120,9 +125,9 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
           if (!(operational || correctionAdmin) || !job || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
           noticeAttempt=reserveCancellationAttempt(db,req.jobId,'retry-'+req.requestId,session.currentUserId());
         }
-        const notices = (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().map(j=>({...j,...JSON.parse(j.snapshot)})) : [];
-        const queues = db.prepare('SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination ORDER BY q.destination').all();
-        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,a.queue,a.started_at AS startedAt,COALESCE(r.result,'uncertain') AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : operational);
+        const notices = !billOnly && (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().map(j=>({...j,...JSON.parse(j.snapshot)})) : [];
+        const queues = db.prepare("SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination UNION ALL SELECT 'bill-' || account AS destination,queue,NULL AS beep FROM bill_printer_queues ORDER BY destination").all().filter(q => !billOnly || ['bill-A','bill-B'].includes(q.destination));
+        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,COALESCE(a.queue,'') AS queue,a.started_at AS startedAt,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : !billOnly && operational);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
         dispatchCancellation(db,adapter,noticeAttempt);

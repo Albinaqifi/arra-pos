@@ -112,15 +112,11 @@ test('a stale bill close callback cannot dismiss its replacement', () => {
   old.componentWillUnmount(); old.close(); assert.equal(app.billing.state.desktop, current);
 });
 
-test('test-bill printing keeps one request across lost replies, panel replacement and identity changes', async () => {
+test('test-bill printing keeps one request across lost replies and identity changes', async () => {
   const requests = [];
-  const { app, bill: createBill } = harness({ testPrinting: async request => { requests.push(request); return { ok: requests.length > 1 }; } });
-  let bill = createBill(); await bill.printTestBill(); assert.match(bill.state.printNotice, /status unavailable/);
-  bill.componentWillUnmount(); app.billing.dismiss();
-  app.tableOrders.dismissSelectedOrder(); arrange(app, { screen: 'order', tableId: 1 });
-  bill = createBill(); await bill.printTestBill(); await bill.printTestBill();
-  assert.equal(requests.length, 3); assert.ok(requests.every(request => request.requestId === requests[0].requestId && request.billId === 7));
-  assert.match(bill.state.printNotice, /not proof of printing/);
+  const { app } = harness({ testPrinting: async request => { requests.push(request); return { ok: requests.length > 1 }; } });
+  await app.printing.submitTestBill(7); await app.printing.submitTestBill(7);
+  assert.equal(requests.length, 2); assert.equal(requests[0].requestId, requests[1].requestId); assert.equal(requests[0].billId, 7);
 });
 
 test('demo bill gates pending items and preserves backup, reprint, totals and one history entry', async () => {

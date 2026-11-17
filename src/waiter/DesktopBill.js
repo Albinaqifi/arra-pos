@@ -107,14 +107,6 @@ export class DesktopBill extends React.Component {
     const known = ['Invalid request', 'Access denied', 'Send or remove new items before billing', 'No eligible items', 'Order changed; review the bill again', 'Bill already generated', 'Could not prepare bill', 'Bill unavailable', 'Bill already paid with a different selection', 'Could not record payment. Retry the same selection.', 'Payment result unknown. Retry the same selection.'];
     return known.includes(error) ? error : fallback;
   }
-  async printTestBill() {
-    if (!this.state.data?.id || !desktopBridge.testPrinting || !this.props.printing) return;
-    const billId = this.state.data.id, operation = this.begin('bill-print'); if (!operation) return;
-    try {
-      const result = await this.props.printing.submitTestBill(billId);
-      if (this.current(operation)) this.setState({ error: '', printNotice: waiterTranslate(this.props.language, result.ok ? 'waiter.Test print submitted. Check the printer and paper; queue acceptance is not proof of printing. Use the test jobs list to retry.' : 'waiter.Test print status unavailable. Check paper and the test jobs list before retrying.') });
-    } finally { this.end(operation); }
-  }
   render() {
     const h = React.createElement, d = this.state.data;
     const t = (key, values) => (typeof waiterTranslate === 'function' ? waiterTranslate : (language, key, values = {}) => key.replace(/^waiter\./, '').replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match))(this.props.language, 'waiter.' + key, values);
@@ -134,12 +126,11 @@ export class DesktopBill extends React.Component {
             h('ul', { className: 'bill-lines' }, d.lines.map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
             h('div', { className: 'bill-total' }, h('strong', null, t('Total: {total}', {total:money(d.total)})))),
           d?.id && h('div', { className: 'bill-payment' },
-            h('button',{className:'bill-print',disabled:this.state.busy || !desktopBridge.testPrinting,onClick:()=>this.printTestBill()},t("Print test bill — not a fiscal receipt")),
-            this.state.printNotice && h('p',{role:'status',className:'bill-status'},this.state.printNotice),
+            h('p', null, t("Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.")),
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),
             h('div', { className: 'bill-choices' },
               h('button', { 'aria-pressed': this.state.method === 'cash', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash') }, t("Cash")),
-              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card (Account A)"))),
+              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card"))),
             this.state.method === 'cash' && h('div', { className: 'bill-choices' }, h('button', { 'aria-pressed': this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('A') }, t("Account A")), h('button', { 'aria-pressed': this.state.account === 'B', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectAccount('B') }, t("Account B"))),
             this.state.account && h('p', { className: 'bill-selection' }, t('Selected: {method} · Account {account}', {method:t(this.state.method === 'cash' ? 'Cash' : 'Card'), account:this.state.account})))),
         h('footer', { className: 'bill-actions' },

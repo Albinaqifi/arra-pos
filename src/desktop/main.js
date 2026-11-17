@@ -70,10 +70,10 @@ app.whenReady().then(() => {
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
-  registerPayments(require('electron').ipcMain, isAllowedSender, database, session);
+  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
+  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : null);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
-  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
   registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: process.platform === 'win32' ? printTestJob : null });
@@ -86,7 +86,7 @@ app.whenReady().then(() => {
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
-  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, printTestJob, testPrintEnabled);
+  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed', true, !testPrintEnabled);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

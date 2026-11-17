@@ -279,6 +279,9 @@ const migrations = [
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_delete BEFORE DELETE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_replace BEFORE INSERT ON cancellation_notice_results WHEN EXISTS(SELECT 1 FROM cancellation_notice_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
   { version: 34, run: addSecondKitchen },
+  { version: 35, sql: `CREATE TABLE IF NOT EXISTS bill_printer_queues (account TEXT PRIMARY KEY CHECK(account IN ('A','B')), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
+    INSERT OR IGNORE INTO bill_printer_queues SELECT 'A',queue FROM test_printer_queues WHERE destination='bill';
+    INSERT OR IGNORE INTO bill_printer_queues SELECT 'B',queue FROM test_printer_queues WHERE destination='bill';` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

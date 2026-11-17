@@ -1,5 +1,20 @@
 # Development backlog
 
+### S-083 — Print bills through account printers when recording payment
+
+**Goal:** Simplify the generated-bill screen so staff choose Cash or Card, select Account A or B for cash, and use the payment choice to print the bill and release the table. Add independently configurable Account A and Account B bill printers in administration. **Depends on:** the existing bill, payment and test-printing flows (S-023, S-024 and S-056); review their actual state and outstanding printer verification before implementation.
+
+**Readiness decision:** Agree with the owner what should happen when printing fails or its outcome is uncertain, including whether and when an already confirmed customer payment releases the table. Windows queue acceptance does not prove paper was printed. Define a recoverable flow that does not lose a payment, leave a paid table misleadingly occupied, or duplicate payment or paper on retry. Confirm whether the requested output remains the existing non-fiscal test bill; fiscal integration is outside the current tested capability.
+
+**Acceptance:**
+
+- On the generated-bill screen label the card option **Card**, remove the separate **Print test bill — not a fiscal receipt** button, and make the payment actions initiate the bill printing flow. Cash selects A or B; card remains assigned to A in trusted code. Preserve a clear instruction to confirm the separate customer payment before recording it.
+- An authorized administrator can configure Account A and Account B bill printer queues independently, persistently and offline. Route card and A cash to A, B cash to B. Preserve existing settings and historical jobs during upgrade; define a safe default from the existing bill queue. Keep other printer destinations independent.
+- Record a confirmed payment once, retain its method, account and history, and release the table according to the agreed print-failure behavior. Repeated requests, lost responses, restarts and retries must not duplicate payments. Keep print jobs and attempts durable, visible and recoverable; require an operator paper check before retrying uncertain output. Never claim Windows queue acceptance proves physical printing.
+- Enforce authorization, payment classification and routing in trusted application code, including direct requests. Preserve financial-scope restrictions for bill history and reprints, shared order-write exclusion, identity cleanup and request lifetimes. Work offline; support English, Albanian and keyboard access. Clearly identify non-fiscal output unless a separately verified fiscal integration exists.
+
+**Checks/review:** Test cash A/B and card routing, independent configuration and denied direct requests, migration from existing queues and jobs, historical permissions, concurrent and repeated payment requests, printer failure and uncertain output, restart and retry recovery, and table status. Review financial integrity, authorization, migrations and renderer ownership. Verify sample desktop behavior and physical paper separately, recording actual results and limitations.
+
 ### S-080 — Review paid bills by business day
 
 **Goal:** Add a Bill history card to Financial information for reviewing paid bills over an inclusive range of local payment dates, grouped by the recorded business day. Each payment appears once, with one row per bill and no item breakdown. **Depends on:** S-028, S-030, S-058 and S-060.
