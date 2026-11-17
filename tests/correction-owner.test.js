@@ -14,7 +14,7 @@ function fixture() {
     getTables: async () => ({ ok: true, data: [{ id: 1, orderId: 10, untouched: false }] }),
   };
   const orders = new context.OrderModule.TableOrderModel({ bridge, canNavigate: () => true, getLanguage: () => language, notify() {}, onOrderOpened() {}, onDismiss() {} });
-  orders._set({ screen: 'order', tableId: 1, orders: { 1: { id: 10, itemsLoaded: true } }, items: [{ id: 100, tableId: 1, status: 'sent', qty: 3, cxQty: 0, name: 'Sample', unit: 100, cx: [], route: 'kitchen', round: 1, sentAt: 1 }] });
+  orders._set({ screen: 'order', tableId: 1, orders: { 1: { id: 10, itemsLoaded: true } }, items: [{ id: 100, tableId: 1, status: 'sent', qty: 3, cxQty: 0, name: 'Sample', unit: 100, cx: [], route: 'kitchen', round: 1, sentAt: Date.now() }] });
   const workflow = new context.CorrectionModule.CorrectionWorkflow({ bridge, orders: {
     snapshot: () => orders.state, captureTarget: () => orders.captureTarget(), tableForOrder: target => orders.tableForOrder(target),
     writeBusy: () => orders.writeBusy, isCurrent: target => orders.isCurrent(target), acquireWrite: (kind, target) => orders.acquireWrite(kind, target), releaseWrite: lease => orders.releaseWrite(lease),
@@ -67,7 +67,7 @@ test('stale correction completion cannot overwrite a replacement order or releas
   const { workflow, orders, calls, notices } = fixture();
   workflow.open(100); workflow.chooseReason('Entered by mistake'); const pending = workflow.confirm();
   orders.clearProtectedData(); workflow.reset();
-  orders._set({ screen: 'order', tableId: 1, orders: { 1: { id: 20 } }, items: [{ id: 200, tableId: 1, status: 'sent', qty: 1, cxQty: 0 }] });
+  orders._set({ screen: 'order', tableId: 1, orders: { 1: { id: 20 } }, items: [{ id: 200, tableId: 1, status: 'sent', sentAt: Date.now(), qty: 1, cxQty: 0 }] });
   workflow.open(200); const newer = orders.acquireWrite('add');
   calls[0].resolve({ ok: true, data: { items: [] } }); await pending;
   assert.equal(workflow.state.dialog.itemId, 200); assert.equal(orders.state.items[0].id, 200);

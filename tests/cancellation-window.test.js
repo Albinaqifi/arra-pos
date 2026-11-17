@@ -1,0 +1,57 @@
+const test = require('node:test'), assert = require('node:assert/strict'), fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const {openDatabase} = require('../src/desktop/database'), {authorizedDatabase} = require('./support/authorized-database');
+const {seedTables} = require('../src/desktop/tables'), {seedMenu} = require('../src/desktop/menu'), {registerOrderItems} = require('../src/desktop/order-items');
+const {registerMoveOrder} = require('../src/desktop/move-order'), {registerAdminSentCorrection} = require('../src/desktop/admin-sent-correction');
+test('moving and restarting do not renew the deadline; administrator can correct afterward', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-move-')); let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+  let now=1000000; const original=Date.now; Date.now=()=>now; t.after(()=>{Date.now=original;});
+  let handlers={}; const register=()=>{handlers={};const ipc={handle:(name,fn)=>handlers[name]=fn}, session={currentUserId:()=>1,authenticatedUserId:()=>1};registerOrderItems(ipc,()=>true,db,session);registerMoveOrder(ipc,()=>true,db,session);registerAdminSentCorrection(ipc,()=>true,db,session);}; register();
+  const call=(name,request)=>handlers[name]({},request), items=req=>call('arra:order-items',req);
+  assert.equal(items({action:'add',orderId:1,productId:'qebapa'}).ok,true);
+  const itemId=items({action:'list',orderId:1}).data.items[0].id;
+  assert.equal(items({action:'send',orderId:1,requestId:'send'}).ok,true);
+  now=1119999; assert.equal(call('arra:move-order',{orderId:1,sourceId:1,destinationId:2,requestId:'move'}).ok,true);
+  assert.equal(items({action:'list',orderId:1}).data.items[0].sentAt,1000000);
+  db.close();db=openDatabase(dir);register();now=1120000;
+  const req={action:'correct',orderId:1,itemId,quantity:1,reason:'Mistake',requestId:'waiter'};
+  assert.equal(items(req).code,'window_expired');
+  assert.equal(call('arra:admin-sent-correction',{...req,requestId:'admin'}).ok,false);
+  db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1; INSERT INTO user_permissions VALUES(1,'orders.correct_sent')");
+  assert.equal(call('arra:admin-sent-correction',{...req,requestId:'admin'}).ok,true);
+  assert.equal(db.prepare('SELECT count(*) n FROM sent_item_corrections').get().n,1);
+  assert.equal(db.prepare('SELECT count(*) n FROM cancellation_notice_jobs').get().n,1);
+});
+test('persisted round deadline enforces strict cutoff and permits exact replay after expiry and restart', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-')); let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+  let now=1000000; const original=Date.now; Date.now=()=>now; t.after(()=>{Date.now=original;});
+  let call; const register=()=>registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1}); register();
+  const invoke=req=>call({},req), add=productId=>invoke({action:'add',orderId:1,productId}), send=requestId=>invoke({action:'send',orderId:1,requestId});
+  add('qebapa'); send('round-one'); let first=invoke({action:'list',orderId:1}).data.items[0].id;
+  now+=60000; add('shopska'); const second=invoke({action:'list',orderId:1}).data.items[1].id; invoke({action:'increment',orderId:1,itemId:second}); send('round-two');
+  const req=(id,requestId)=>({action:'correct',orderId:1,itemId:id,quantity:1,reason:'Mistake',requestId});
+  now=1119999; assert.equal(invoke(req(first,'first')).ok,true);
+  now=1120000; assert.equal(invoke(req(first,'first')).ok,true); assert.equal(invoke({...req(first,'first'),reason:'changed'}).code,'invalid_input');
+  assert.equal(invoke(req(second,'second')).ok,true);
+  now=1180000; assert.equal(invoke(req(second,'new')).code,'window_expired');
+  db.close(); db=openDatabase(dir); register(); assert.equal(invoke(req(first,'first')).ok,true); assert.equal(db.prepare('SELECT count(*) n FROM sent_item_corrections').get().n,2);
+});
+test('missing or future round timestamp denies new corrections', t => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-invalid-')); const db=authorizedDatabase(openDatabase(dir));t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});seedTables(db);seedMenu(db);
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent')");
+  let call;registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});const req={action:'correct',orderId:1,itemId:1,quantity:1,reason:'Mistake',requestId:'new'};
+  assert.equal(call({},req).code,'window_expired');
+  db.prepare("INSERT INTO preparation_rounds(order_id,request_id,number,actor_id,sent_at,table_id) VALUES(1,'future',1,1,?,1)").run(Date.now()+60000);db.exec("INSERT INTO preparation_tickets(round_id,destination,adapter) VALUES(1,'kitchen','simulated'); INSERT INTO preparation_ticket_items(ticket_id,item_id,quantity) VALUES(1,1,1)");
+  assert.equal(call({},req).code,'window_expired'); assert.equal(db.prepare('SELECT count(*) n FROM sent_item_corrections').get().n,0);
+});
+test('deadline reached before commit rolls back correction, notice and audit', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-commit-'));const db=authorizedDatabase(openDatabase(dir));t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});seedTables(db);seedMenu(db);
+ db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent'); INSERT INTO preparation_rounds(order_id,request_id,number,actor_id,sent_at,table_id) VALUES(1,'send',1,1,1000000,1); INSERT INTO preparation_tickets(round_id,destination,adapter) VALUES(1,'kitchen','simulated'); INSERT INTO preparation_ticket_items(ticket_id,item_id,quantity) VALUES(1,1,1)");
+ let call;registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});
+ const original=Date.now;let reads=0;Date.now=()=>++reads<4?1119999:1120000;t.after(()=>{Date.now=original;});
+ const result=call({}, {action:'correct',orderId:1,itemId:1,quantity:1,reason:'Mistake',requestId:'deadline'});
+ assert.equal(result.code,'window_expired');assert.equal(db.prepare('SELECT count(*) n FROM sent_item_corrections').get().n,0);assert.equal(db.prepare('SELECT count(*) n FROM cancellation_notice_jobs').get().n,0);assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE action='correct_sent'").get().n,0);
+});

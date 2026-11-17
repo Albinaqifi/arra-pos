@@ -3,6 +3,7 @@ const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:order-items';
 const validId = n => Number.isSafeInteger(n) && n > 0;
+const cancellationOpen = (sentAt, now) => Number.isSafeInteger(sentAt) && sentAt > 0 && Number.isSafeInteger(now) && sentAt <= now && now - sentAt < 120000;
 
 function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
@@ -21,7 +22,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, rejected: true, error: 'Access denied', ...(request.action === 'correct' ? {code:'access_denied'} : {}) };
     try {
       const testAttempts = [];
-      let cancellationAttempt;
+      let cancellationAttempt, correctionSentAt;
       db.exec('BEGIN IMMEDIATE');
       try {
         const priorCorrection = request.action === 'correct' ? db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId) : null;
@@ -35,6 +36,9 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             const corrected = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS quantity FROM sent_item_corrections WHERE item_id = ?').get(request.itemId).quantity;
             if (!item || request.quantity > item.quantity - corrected) throw Error('Invalid correction');
             const now = Date.now(), reason = request.reason.trim();
+            const round = db.prepare('SELECT r.sent_at AS sentAt FROM preparation_ticket_items ti JOIN preparation_tickets t ON t.id=ti.ticket_id JOIN preparation_rounds r ON r.id=t.round_id WHERE ti.item_id=?').get(request.itemId);
+            if (!round || !cancellationOpen(round.sentAt, now)) throw Error('Cancellation window expired');
+            correctionSentAt = round.sentAt;
             const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
             const noticeId = cancellationPrinting.createCancellationJob(db, id, request.itemId, request.quantity);
             if (testPrinting) cancellationAttempt = cancellationPrinting.reserveCancellationAttempt(db, noticeId, 'initial-' + noticeId, session.currentUserId());
@@ -116,13 +120,14 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
           if (!Number.isSafeInteger(line) || !Number.isSafeInteger(total + line)) throw Error('Total too large');
           total += line;
         }
+        if (correctionSentAt !== undefined && !cancellationOpen(correctionSentAt, Date.now())) throw Error('Cancellation window expired');
         db.exec('COMMIT');
         if (testPrinting) { for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt); cancellationPrinting.dispatchCancellation(db, testPrinting.adapter, cancellationAttempt); }
         return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting) } };
       } catch (error) {
         try { db.exec('ROLLBACK'); } catch (_) { return { ok: false, uncertain: request.action === 'correct' }; }
         if (request.action === 'correct') {
-          const codes = { 'Invalid order':'unavailable', 'Invalid correction':'unavailable', 'Invalid retry':'invalid_input', 'Order billed':'already_billed' };
+          const codes = { 'Invalid order':'unavailable', 'Invalid correction':'unavailable', 'Invalid retry':'invalid_input', 'Order billed':'already_billed', 'Cancellation window expired':'window_expired' };
           const code = codes[error.message];
           return code ? { ok: false, rejected: true, code } : { ok: false, rejected: false };
         }

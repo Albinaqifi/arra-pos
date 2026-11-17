@@ -127,7 +127,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
       }
       if (action === 'correct' && response?.ok === false) {
         const rejected = response.rejected === true;
-        const code = rejected && ['invalid_input', 'access_denied', 'already_billed', 'unavailable'].includes(response.code) ? response.code : undefined;
+        const code = rejected && ['invalid_input', 'access_denied', 'already_billed', 'unavailable', 'window_expired'].includes(response.code) ? response.code : undefined;
         return code ? { ok: false, rejected, code } : { ok: false, rejected };
       }
     } catch (_) {}

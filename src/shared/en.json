@@ -336,5 +336,6 @@
   "waiter.Enable sound only for a printer confirmed to support ESC B. Sound is skipped for non-ASCII text; Windows cannot confirm sound.": "Enable sound only for a printer confirmed to support ESC B. Sound is skipped for non-ASCII text; Windows cannot confirm sound.",
   "waiter.Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.": "Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.",
   "waiter.Kitchen 1": "Kitchen 1",
-  "waiter.Kitchen 2": "Kitchen 2"
+  "waiter.Kitchen 2": "Kitchen 2",
+  "waiter.The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page.": "The two-minute cancellation window has ended. Ask an authorized administrator to use the administration sent-item corrections page."
 }

@@ -14,7 +14,7 @@ function harness(api) {
   arrange(app, {screen:'order', waiter:{id:1,name:'First'}, tableId:1, orders:{1:{id:5,log:[]}}, items:[]});
   return {app, context};
 }
-const row = status => ({id:1,productId:'p',name:'Dish',unitPrice:10,quantity:1,status,note:'',modifiers:[]});
+const row = status => ({id:1,productId:'p',name:'Dish',unitPrice:10,quantity:1,status,sentAt:Date.now(),note:'',modifiers:[]});
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 test('confirmed send switches identity and shows a print issue; failed send stays for retry', async () => {
@@ -74,7 +74,7 @@ test('a lost print retry response keeps its token through automatic handoff and 
 test('demo cancellation never claims a printed notice', async () => {
   for (const printer of [true,false]) {
     const {app}=harness(undefined);
-    arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
+    arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',sentAt:Date.now(),name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
     await app.correction.confirm(); assert.match(app.shell.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.shell.state.toast.msg,/print/i);
   }
 });

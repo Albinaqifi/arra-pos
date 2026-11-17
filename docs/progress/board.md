@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-081 | In progress | Independent review and focused tests passed; desktop verification and PR merge outstanding. |
 | S-080 | In progress | Independent code review and automated tests passed; desktop and physical printer verification outstanding. |
 | S-001 | Done | Acceptance and review passed; PR #1 merged. |
 | S-002 | Done | Acceptance, review and testing passed; PR #2 merged. |
@@ -90,4 +91,4 @@ S-052's local recovery exercise is complete. The owner cannot test on another ma
 | S-077 | In progress | PR #110 merged as `e963ab6`; independent review, full-suite completion and target-machine verification outstanding. |
 | S-078 | In progress | PR #112 merged; independent code review and focused tests found no defects, but rendered review and desktop verification remain outstanding. |
 
-| S-079 | In progress | PR #114 merged as `e7f382c`; independent code review and tests passed; owner reports it works. Detailed desktop evidence outstanding. |
+| S-079 | Done | PR #114 merged as `e7f382c`; independent review and tests passed; owner reports all detailed checks passed. |
