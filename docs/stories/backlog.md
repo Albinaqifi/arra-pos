@@ -1,5 +1,18 @@
 # Development backlog
 
+### S-080 — Review paid bills by business day
+
+**Goal:** Add a Bill history card to Financial information for reviewing paid bills over an inclusive range of local payment dates, grouped by the recorded business day. Each payment appears once, with one row per bill and no item breakdown. **Depends on:** S-028, S-030, S-058 and S-060.
+
+**Acceptance:**
+
+- Show only recorded payments, with payment time, bill, table, method, effective account and amount. Group by actual business day, including days spanning midnight; clearly identify open days and older payments whose original day boundaries are unavailable. Date filtering uses the payment date, not the bill creation date. Give useful empty, invalid-range and error states.
+- Enforce authenticated financial access in trusted code for every query, print and export: A sees effective A payments, B sees effective B payments, and Combined sees both. A corrected payment appears exactly once in its effective account. Exclude unpaid bills and print attempts from the sales totals.
+- Use bounded server-side pagination for the screen, including large date ranges. Provide printing to the configured local report printer and Excel export for the entire selected range, grouped by business day with one row per bill. Ensure large outputs are handled safely, and make failures, cancellation and uncertain printer output clear. Do not record or repeat payments when producing a report.
+- Preserve offline operation, existing history and data, renderer ownership, English and Albanian, keyboard use and identity cleanup. Treat output as provisional and non-fiscal.
+
+**Checks/review:** Test direct requests and exports for A, B and Combined, corrected payments, unpaid exclusion, date boundaries, business days crossing midnight, pagination and large ranges, output completeness and failure handling, identity changes and no payment mutations. Verify build, relevant rendered behavior and physical printer separately; record actual evidence and limitations.
+
 Status: proposed backlog, 2026-11-03. Each story is intended for one development session. Scope and order can be adjusted as we learn; split a story if it cannot be completed and verified in a session. This is a development plan, not permission to use the app for real sales. Product rules come from the approved intent, architecture, `admin_requirements.md` and the waiter requirements; the later admin requirements override conflicts in the waiter document.
 
 ### S-081 — Limit waiter cancellation of sent items to two minutes

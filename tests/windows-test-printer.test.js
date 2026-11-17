@@ -102,3 +102,17 @@ test('compatible cancellation sends buzzer bytes and Unicode raster in one RAW j
     if (existing) require.cache[modulePath] = existing;
   }
 });
+test('bill history rows contain date, bill and MKD and only the final part has the full total', () => {
+  const paidAt=new Date(2026,6,10,14,35).getTime();
+  const record={dayId:2,firstDay:0,openedAt:1,closedAt:null,paidAt,billId:8,tableId:4,method:'cash',account:'A',amount:220};
+  for(const [language,bill,total,part] of [['en','Bill','TOTAL','Part'],['sq','Fatura','TOTALI','Pjesa']]) {
+    const snapshot={from:paidAt,to:paidAt+86400000,part:1,parts:2,language,rows:[record],total:'420'};
+    const text=textForJob({destination:'bill-history',snapshot});
+    const line=text.split('\n').find(x=>x.includes(bill+' #8'));
+    assert.equal(line,new Date(paidAt).toLocaleDateString(language==='sq'?'sq-AL':'en-GB')+' | '+bill+' #8 | 220 MKD');
+    assert.ok(!line.includes('14:35')); assert.ok(!line.includes('cash')); assert.ok(!line.includes('Table'));
+    assert.ok(text.includes(part+' 1 / 2'));assert.ok(!text.includes(total+':'));
+    const last=textForJob({destination:'bill-history',snapshot:{...snapshot,part:2,rows:[]}});
+    assert.ok(last.includes(total+': 420 MKD'));
+  }
+});

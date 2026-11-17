@@ -3,6 +3,7 @@ const h=React.createElement;
 const date=value=>new Date(value).toLocaleString();
 function Issues({issues,language}) {
   const t=(key,values)=>financeText(language,key,values);
+  if (!issues) return h('p',null,t('Recorded issues are unavailable.'));
   return h('div',{className:'finance-issues'},h('div',null,h('strong',null,t("Open orders (")+issues.orders.length+')'),h('p',null,(issues.orders.length && issues.orders[0].id == null ? t('Details available to Combined.') : issues.orders.map(o=>t('#{id} · table {table}',{id:o.id,table:o.tableId})).join(', ') || t("None")))),h('div',null,h('strong',null,t("Unsuccessful or uncertain print jobs (")+issues.printJobs.length+')'),h('p',null,issues.printJobs.map(j=>j.id == null ? t(j.result || 'Unavailable') : t('#{id} · {status}',{id:j.id,status:t(j.result || "Unavailable")}) + (j.retryBlocked ? ' · ' + t('Do not retry: ticket contains a cancellation. Tell preparation staff in person.') : '')).join(', ') || t("None"))));
 }
 export class BusinessDays extends React.Component {

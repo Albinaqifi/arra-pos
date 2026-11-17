@@ -1,6 +1,20 @@
 const { BrowserWindow } = require('electron');
 function textForJob(job) {
   const s = job.snapshot;
+  if (job.destination === 'bill-history') {
+    const {dayLabel,translations} = require('./bill-history');
+    const language=s.language, t=translations[language]; if (!t) throw Error('Invalid language');
+    const date=value=>new Date(value).toLocaleDateString(language === 'sq' ? 'sq-AL' : 'en-GB');
+    const rows = [t.title, date(s.from) + ' - ' + date(s.to - 1), t.part + ' ' + s.part + ' / ' + s.parts];
+    let day = null;
+    for (const r of s.rows) {
+      if (r.dayId !== day) { day = r.dayId; rows.push('--------------------------------', dayLabel(r,language)); }
+      rows.push(date(r.paidAt) + ' | '+t.bill+' #' + r.billId + ' | ' + r.amount + ' MKD');
+    }
+    if (!s.rows.length) rows.push(t.empty);
+    if (s.part===s.parts) rows.push('--------------------------------', t.total + ': ' + s.total + ' MKD');
+    return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
+  }
   if (job.destination === 'turnover') {
     if (!['A','B','combined'].includes(job.scope)) throw Error('Invalid report scope');
     const rows = ['NON-FISCAL DAILY TURNOVER REPORT', job.scope === 'combined' ? 'FULL REPORT - ACCOUNTS A AND B' : 'ACCOUNT ' + job.scope + ' REPORT ONLY', 'System day #' + s.dayId, 'Opened: ' + new Date(s.openedAt).toLocaleString(), 'Closed: ' + new Date(s.closedAt).toLocaleString(), '--------------------------------'];
