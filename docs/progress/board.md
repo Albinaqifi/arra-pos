@@ -4,6 +4,8 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-083 | In progress | Independent review and focused tests passed; desktop, offline and physical paper verification outstanding. |
+
 | S-082 | Done | Independent review and automated tests passed; owner reports all checks passed; PR #119 merged as `9cb9f72`. |
 | S-081 | In progress | Independent review and focused tests passed; desktop verification and PR merge outstanding. |
 | S-080 | In progress | Independent code review and automated tests passed; desktop and physical printer verification outstanding. |

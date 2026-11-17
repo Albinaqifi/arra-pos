@@ -32,9 +32,9 @@ test('Albanian sign-in failure and bill review and uncertain payment show transl
   const api={signIn:async()=>({ok:false}),payment:async()=>({ok:false,uncertain:true}),bill:async r=>({ok:true,data:r.action==='review'?{total:100,lines:[],fingerprint:'x'}:{id:7,total:100,lines:[]}})};
   const {app,ctx}=setup(api); arrange(app, {language:'sq',user:'sample',pass:'sample'}); await app.session.login(); assert.equal(app.shell.state.toast.msg,'Hyrja dështoi.');
   const bill=new ctx.Bill({language:'sq',orderId:5,onPaid(){},onClose(){}}); await bill.review();
-  assert.ok(button(bill.render(),'Krijo faturën')); await bill.generate(); assert.ok(button(bill.render(),'Kartë (Llogaria A)'));
-  button(bill.render(),'Kartë (Llogaria A)').props.onClick(); await bill.pay();
-  assert.ok(JSON.stringify(bill.render()).includes('Rezultati i pagesës në POS është i pasigurt.')); assert.equal(button(bill.render(),'Kartë (Llogaria A)').props.disabled,true);
+  assert.ok(button(bill.render(),'Krijo faturën')); await bill.generate(); assert.ok(button(bill.render(),'Kartë'));
+  button(bill.render(),'Kartë').props.onClick(); await bill.pay();
+  assert.ok(JSON.stringify(bill.render()).includes('Rezultati i pagesës në POS është i pasigurt.')); assert.equal(button(bill.render(),'Kartë').props.disabled,true);
 });
 
 test('Albanian failed-print banner offers a translated backup action',()=>{

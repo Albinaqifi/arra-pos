@@ -21,7 +21,7 @@ test('sample test jobs route only the new round, persist attempts and preserve b
   registerBills({handle:(_,fn)=>bills=fn},e=>e===event,db,session);
   assert.equal(jobs({}, {action:'list'}).ok,false);
   assert.equal(jobs(event,{action:'configure',destination:'kitchen',queue:'Queue K'}).ok,true);
-  assert.deepEqual(jobs(event,{action:'list'}).data.queues.map(q=>q.queue),['Arra Test Printer','Arra Test Printer','Queue K','']);
+  assert.deepEqual(jobs(event,{action:'list'}).data.queues.map(q=>q.queue),['Arra Test Printer','Arra Test Printer','Arra Test Printer','Arra Test Printer','Queue K','']);
   assert.equal(jobs(event,{action:'configure',destination:'bar',queue:' bad '}).ok,false);
   orders(event,{action:'add',orderId:1,productId:'qebapa'}); orders(event,{action:'note',orderId:1,itemId:1,note:'sample note'});
   orders(event,{action:'add',orderId:1,productId:'espresso'});

@@ -13,7 +13,7 @@ async function upgradeSampleBusinessDays(sourceFile, username, password) {
   const source = new DatabaseSync(sourceFile, { readOnly: true });
   let directory, copy;
   try {
-    if (![22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35].includes(source.prepare('PRAGMA user_version').get().user_version)) throw new Error('Expected version 22 through 35 sample');
+    if (![22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36].includes(source.prepare('PRAGMA user_version').get().user_version)) throw new Error('Expected version 22 through 36 sample');
     const sourceActor = verifyLocalAccount(source, username, password);
     if (!sourceActor || source.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(sourceActor)?.scope !== 'combined') throw new Error('Combined sample account unavailable');
     if (source.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='business_days.close'").get(sourceActor)) throw new Error('Close grant already exists');

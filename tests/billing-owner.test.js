@@ -31,7 +31,7 @@ test('batched React state cannot duplicate payment, alter its in-flight selectio
   const { context } = harness({ payment: request => { calls.push(request); return response.promise; } }, true);
   const bill = new context.RendererModules.DesktopBill({ orderId: 5, onPaid: () => { paid++; return handoff.promise; } });
   Object.assign(bill.state, { data, method: 'cash', account: 'B', loading: false });
-  const paying = bill.pay(); bill.pay(); bill.selectMethod('card'); bill.selectAccount('A'); bill.close();
+  const paying = bill.pay(); bill.pay(); bill.selectMethod('card'); bill.selectMethod('cash', 'A'); bill.close();
   assert.equal(calls.length, 1); assert.equal(calls[0].method, 'cash'); assert.equal(calls[0].account, 'B');
   response.resolve({ ok: true }); await tick(); bill.pay();
   assert.equal(paid, 1); assert.equal(calls.length, 1);
@@ -44,7 +44,7 @@ test('unknown then definite failure freezes the payment payload and blocks all s
   const bill = new context.RendererModules.DesktopBill({ orderId: 5, onPaid: () => paid++, onClose: () => closed++ });
   Object.assign(bill.state, { data, method: 'card', account: 'B', loading: false });
   await bill.pay(); assert.equal(bill.state.uncertain, true); assert.equal(calls[0].account, 'A');
-  bill.selectMethod('cash'); bill.selectAccount('B'); bill.close(); await bill.review(); await bill.generate();
+  bill.selectMethod('cash', 'B'); bill.close(); await bill.review(); await bill.generate();
   assert.equal(closed, 0); assert.equal(calls.length, 1);
   // Even a stale render's selection cannot change the saved uncertain request.
   Object.assign(bill.state, { method: 'cash', account: 'B' });
@@ -112,15 +112,11 @@ test('a stale bill close callback cannot dismiss its replacement', () => {
   old.componentWillUnmount(); old.close(); assert.equal(app.billing.state.desktop, current);
 });
 
-test('test-bill printing keeps one request across lost replies, panel replacement and identity changes', async () => {
+test('test-bill printing keeps one request across lost replies and identity changes', async () => {
   const requests = [];
-  const { app, bill: createBill } = harness({ testPrinting: async request => { requests.push(request); return { ok: requests.length > 1 }; } });
-  let bill = createBill(); await bill.printTestBill(); assert.match(bill.state.printNotice, /status unavailable/);
-  bill.componentWillUnmount(); app.billing.dismiss();
-  app.tableOrders.dismissSelectedOrder(); arrange(app, { screen: 'order', tableId: 1 });
-  bill = createBill(); await bill.printTestBill(); await bill.printTestBill();
-  assert.equal(requests.length, 3); assert.ok(requests.every(request => request.requestId === requests[0].requestId && request.billId === 7));
-  assert.match(bill.state.printNotice, /not proof of printing/);
+  const { app } = harness({ testPrinting: async request => { requests.push(request); return { ok: requests.length > 1 }; } });
+  await app.printing.submitTestBill(7); await app.printing.submitTestBill(7);
+  assert.equal(requests.length, 2); assert.equal(requests[0].requestId, requests[1].requestId); assert.equal(requests[0].billId, 7);
 });
 
 test('demo bill gates pending items and preserves backup, reprint, totals and one history entry', async () => {

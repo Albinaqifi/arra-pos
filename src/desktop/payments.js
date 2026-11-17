@@ -1,8 +1,9 @@
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:payment';
+const { createBillJob, reserveAttempt, dispatch } = require('./test-printing');
 
-function registerPayments(ipcMain, isAllowedSender, db, session) {
+function registerPayments(ipcMain, isAllowedSender, db, session, printing = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       Reflect.ownKeys(request).length !== 3 || !['billId', 'method', 'account'].every(k => Object.hasOwn(request, k)) ||
@@ -22,7 +23,14 @@ function registerPayments(ipcMain, isAllowedSender, db, session) {
         const id = db.prepare('INSERT INTO payments (bill_id, actor_id, paid_at, amount, method, account) VALUES (?, ?, ?, ?, ?, ?)').run(request.billId, session.currentUserId(), Date.now(), bill.total, request.method, request.account).lastInsertRowid;
         db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty = 0").run(bill.orderId);
         recordAudit(db, session.currentUserId(), 'record', 'payment', id, bill.orderId, {});
-        db.exec('COMMIT'); return { ok: true, data: { id } };
+        let job = db.prepare('SELECT id FROM test_print_jobs WHERE bill_id=?').get(request.billId);
+        const isNew = !job;
+        if (isNew) job = { id: createBillJob(db, request.billId) };
+        // A previously printed unpaid bill must never be printed automatically again.
+        const attempt = isNew && printing ? reserveAttempt(db, job.id, 'payment-' + id, session.currentUserId()) : null;
+        db.exec('COMMIT');
+        if (attempt) dispatch(db, printing, attempt);
+        return { ok: true, data: { id } };
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } catch (error) { return { ok: false, error: ['Bill unavailable', 'Bill already paid with a different selection'].includes(error.message) ? error.message : 'Could not record payment. Retry the same selection.' }; }
   });
