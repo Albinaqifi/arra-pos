@@ -471,6 +471,37 @@ Start **S-044 — JSX and local build foundation**. It establishes the frontend 
 
 **Checks/review:** Exercise cancellation of one sent product and partial quantity while other items remain, pending-item behavior, administrator history and restart. Test blank explanations, invalid quantities, unauthorized direct requests, repeated submissions, failures, financial scope, billing effects and existing history. Verify both languages and offline use. Review authorization, data integrity and any migration; record actual results and limitations.
 
+### S-074 — Alert preparation when a sent product is cancelled
+
+**Goal:** When an authorized user cancels a previously sent product, send a clearly marked cancellation ticket and an audible alert to the preparation destination that received it. **Depends on:** S-056, S-072 and S-073; use the existing local test-printing workflow and preserve S-056's outstanding hardware limitations.
+
+**Acceptance:**
+
+- For each affected sent quantity, create a durable cancellation notice for the original kitchen or bar destination, including table, original round, product, cancelled quantity and relevant modifiers or notes. Route mixed destinations separately; changes to a product's current routing must not redirect an old cancellation. Pending-item removal produces no preparation cancellation notice.
+- Create notice jobs atomically with the recorded cancellation, preserving prior order, sent-item, cancellation, billing and print history. Repeated requests, lost responses and restarts must not create duplicate cancellations or notice jobs. Enforce the existing trusted authorization and validation rules.
+- Print through the destination's configured local Windows queue without internet. Where the printer supports it, request three audible beeps as part of the cancellation print job; do not apply this alert to ordinary tickets. Support printers without this capability without silently claiming an audible alert occurred.
+- Show delivery failures and uncertain results and provide safe retry of the original notice job using the existing operator paper-check practice. Queue acceptance does not prove a ticket printed, a beep sounded, or kitchen staff saw the cancellation; retain clear instruction to notify preparation in person where confirmation is unavailable. A printer failure must not undo or duplicate the cancellation.
+- Verify English and Albanian, appropriate desktop and offline behavior, and a sample physical test of the implemented flow with the Birch CP-Q3X. See [hardware test evidence](../progress/handoffs/S-074.md) for the separate raw-command experiment.
+
+**Checks/review:** Cover destination snapshots and routing changes, partial and repeated cancellations, authorization and validation, atomicity, failures and uncertain retries, restart recovery, no duplicate jobs or financial changes, ordinary and unsupported-printer behavior, and relevant migrations. Review the trusted service and renderer ownership boundaries; record actual independent review, focused tests, and physical results.
+
+### S-075 — Add a second kitchen printer
+
+**Goal:** Support three preparation printer destinations: bar, kitchen 1 and kitchen 2, so the restaurant can use two kitchen printers alongside its bar printer. **Depends on:** S-056 and S-074, including their outstanding verification.
+
+**Owner decision before implementation:** Confirm how kitchen items are routed: whether each product goes to a selected kitchen printer, every kitchen ticket goes to both, or another rule applies. Do not assume that a second printer is a backup or that duplicate tickets are wanted. Define the routing and any transition defaults with the owner before building.
+
+**Acceptance:**
+
+- Authorized administrators can configure the local Windows queue for bar, kitchen 1 and kitchen 2 independently and set any product routing required by the agreed rule. Settings and routing persist across restarts and work offline. Keep bill and report printer settings separate and enforce existing permissions in trusted code.
+- Send only the newly sent items to the appropriate preparation destinations under the agreed rule. Tickets identify their destination, table and round and retain quantities, modifiers and notes. Mixed bar and kitchen orders are routed correctly; queue configuration must not change order or payment classification.
+- Preserve existing data and historical migrations. Upgrade existing kitchen and bar configuration, products and outstanding jobs safely under the agreed transition rule, without losing routes or silently redirecting historical work. New sends and retries must not duplicate orders, rounds or jobs.
+- Preserve the destination snapshot for each sent item and route cancellation notices to the destination or destinations that received it, even if current settings or product routing change. Keep the existing cancellation alert behavior and history. Printer failure must not undo an order or cancellation.
+- Show failures and uncertain outcomes per destination and allow safe retry of the original job, including the existing paper-check instruction. A Windows queue acceptance does not prove physical output. Support English and Albanian and preserve offline operation.
+- With sample data, verify routing and readable output on the bar printer and both kitchen printers, including a mixed order, another round and a cancellation notice. Record actual hardware results and any unavailable checks; this story does not approve fiscal integration or live sales.
+
+**Checks/review:** Test the agreed routing and transition rules, independent queue settings, direct-request permissions, existing data and migration, destination snapshots, cancellation routing, repeated requests, failures, uncertain retries and restart recovery. Review data integrity, trusted authorization and renderer ownership. Record automated, offline and physical-printer results separately.
+
 ## Renderer ownership
 
 ### S-073 — Complete the renderer ownership refactor

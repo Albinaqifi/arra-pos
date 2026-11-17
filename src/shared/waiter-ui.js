@@ -8,7 +8,7 @@ export function waiterTranslate(language, key, values = {}) {
   return key.replace(/^waiter\./, '').replace(/\{(\w+)\}/g, (match, name) => Object.hasOwn(values, name) ? String(values[name]) : match);
 }
 export function printDestination(language, destination) {
-  const keys = { kitchen: 'Kitchen', bar: 'Bar', bill: 'Bill' };
+  const keys = { kitchen: 'Kitchen 1', kitchen2: 'Kitchen 2', bar: 'Bar', bill: 'Bill' };
   return Object.hasOwn(keys, destination) ? waiterTranslate(language, 'waiter.' + keys[destination]) : waiterTranslate(language, 'waiter.Unknown destination');
 }
 // Convert the design's CSS declarations to React's style object.

@@ -37,7 +37,7 @@ export function orderView(d, { language, now = Date.now(), desktop, onCorrect, s
           nameStyle: 'font-size:17px; font-weight:800; ' + (all ? 'text-decoration:line-through; color:#64748B' : 'color:#0F172A'),
           amount: all ? t('Cancelled') : money(qq * i.unit),
           amountStyle: 'font-size:17px; font-weight:800; white-space:nowrap; color:' + (all ? '#B91C1C' : '#0F172A'),
-          routeLabel: i.route === 'bar' ? 'Bar' : t('Kitchen'),
+          routeLabel: i.route === 'bar' ? 'Bar' : t(i.route === 'kitchen2' ? 'Kitchen 2' : 'Kitchen 1'),
           routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
           hasCx: i.cxQty > 0,
           cxText: c ? t('{count} cancelled total · latest: {qty} · {reason} · {who} {time}', {count:i.cxQty, qty:c.qty, reason:['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'].includes(c.reason) ? t(c.reason) : c.reason, who:c.who, time:hm(c.t)}) + (desktop ? '' : t(' · waiting for owner review')) : '',

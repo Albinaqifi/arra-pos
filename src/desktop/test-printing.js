@@ -3,7 +3,7 @@
 const { hasPermissions } = require('./permissions');
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const token = s => typeof s === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(s);
-const destination = s => ['kitchen', 'bar', 'bill'].includes(s);
+const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill'].includes(s);
 const inFlight = new Set();
 
 function createPreparationJob(db, ticketId) {
@@ -11,6 +11,31 @@ function createPreparationJob(db, ticketId) {
   const lines = db.prepare(`SELECT i.id, i.name, i.note, ti.quantity FROM preparation_ticket_items ti JOIN order_items i ON i.id=ti.item_id WHERE ti.ticket_id=? ORDER BY i.id`).all(ticketId);
   for (const line of lines) line.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName FROM order_item_modifiers WHERE item_id=? ORDER BY rowid').all(line.id);
   return db.prepare('INSERT INTO test_print_jobs(destination,ticket_id,snapshot,created_at) VALUES(?,?,?,?)').run(ticket.destination, ticketId, JSON.stringify({ ...ticket, lines }), Date.now()).lastInsertRowid;
+}
+
+// Capture the original ticket destination and sent-round details, never current routing.
+function createCancellationJob(db, correctionId, itemId, quantity) {
+  const ticket = db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round, i.name, i.note FROM preparation_ticket_items ti JOIN preparation_tickets t ON t.id=ti.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN order_items i ON i.id=ti.item_id WHERE ti.item_id=?`).get(itemId);
+  if (!ticket) throw Error('Original preparation ticket unavailable');
+  const source=ticket;
+  const modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName FROM order_item_modifiers WHERE item_id=? ORDER BY rowid').all(itemId);
+  const snapshot = { tableId:source.tableId, round:source.round, lines:[{name:source.name,note:source.note,quantity,modifiers}], cancellation:true };
+  return db.prepare('INSERT INTO cancellation_notice_jobs(correction_id,destination,snapshot,created_at) VALUES(?,?,?,?)').run(correctionId,source.destination,JSON.stringify(snapshot),Date.now()).lastInsertRowid;
+}
+function reserveCancellationAttempt(db, jobId, requestId, actorId) {
+  const prior = db.prepare('SELECT job_id AS jobId FROM cancellation_notice_attempts WHERE request_id=?').get(requestId);
+  if (prior) { if (prior.jobId !== jobId) throw Error('Invalid retry'); return null; }
+  const job=db.prepare('SELECT destination,snapshot FROM cancellation_notice_jobs WHERE id=?').get(jobId);
+  if (!job) throw Error('Job unavailable');
+  const queue=db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
+  const beep=db.prepare('SELECT beep FROM cancellation_alert_settings WHERE destination=?').get(job.destination).beep;
+  const attemptId=db.prepare('INSERT INTO cancellation_notice_attempts(job_id,request_id,actor_id,queue,beep,started_at) VALUES(?,?,?,?,?,?)').run(jobId,requestId,actorId,queue,beep,Date.now()).lastInsertRowid;
+  return {attemptId,queue,destination:job.destination,snapshot:JSON.parse(job.snapshot),cancellation:true,beep:!!beep};
+}
+function dispatchCancellation(db,adapter,attempt) {
+  if (!attempt) return;
+  const key='c'+attempt.attemptId; inFlight.add(key);
+  Promise.resolve().then(()=>attempt.queue ? adapter(attempt) : 'failed').then(result=>db.prepare('INSERT INTO cancellation_notice_results(attempt_id,result,occurred_at) VALUES(?,?,?)').run(attempt.attemptId,result === 'accepted' ? 'accepted' : 'failed',Date.now())).catch(()=>{}).finally(()=>inFlight.delete(key));
 }
 
 function createBillJob(db, billId) {
@@ -43,7 +68,7 @@ function reserveAttempt(db, jobId, requestId, actorId) {
 function dispatch(db, adapter, attempt) {
   if (!attempt) return;
   inFlight.add(attempt.attemptId);
-  Promise.resolve().then(() => adapter(attempt)).then(result => {
+  Promise.resolve().then(() => attempt.queue ? adapter(attempt) : 'failed').then(result => {
     db.prepare('INSERT INTO test_print_results(attempt_id,result,occurred_at) VALUES(?,?,?)').run(attempt.attemptId, result === 'accepted' ? 'accepted' : 'failed', Date.now());
   }).catch(() => { /* unknown: leave the durable attempt without a result */ }).finally(() => inFlight.delete(attempt.attemptId));
 }
@@ -52,21 +77,28 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
   ipcMain.handle('arra:test-printing', (event, req) => {
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype) return { ok:false };
     if (!enabled) return {ok:false,disabled:true};
-    const shape = { list:['action'], configure:['action','destination','queue'], bill:['action','billId','requestId'], retry:['action','jobId','requestId','checked'] };
+    const shape = { list:['action'], configure:['action','destination','queue'], configureAlert:['action','destination','beep'], bill:['action','billId','requestId'], retry:['action','jobId','requestId','checked'], retryNotice:['action','jobId','requestId','checked'] };
     if (!Object.hasOwn(shape,req.action) || Reflect.ownKeys(req).length !== shape[req.action].length || !shape[req.action].every(k=>Object.hasOwn(req,k)) ||
       (req.action === 'configure' && (!destination(req.destination) || typeof req.queue !== 'string' || req.queue !== req.queue.trim() || !req.queue || req.queue.length > 255 || /[\x00-\x1f\x7f]/.test(req.queue))) ||
+      (req.action === 'configureAlert' && (!['kitchen','kitchen2','bar'].includes(req.destination) || typeof req.beep !== 'boolean')) ||
       (req.action === 'bill' && (!validId(req.billId) || !token(req.requestId))) ||
-      (req.action === 'retry' && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
+      (['retry','retryNotice'].includes(req.action) && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
     const operational = hasPermissions(db,session,'orders.view','orders.change');
     const financial = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && hasPermissions(db,session,'employees.view') && ['A','B','combined'].includes(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope);
-    if (req.action === 'configure' && !(hasPermissions(db,session,'orders.view','employees.change') || (financial && hasPermissions(db,session,'employees.change')))) return {ok:false};
-    if (req.action === 'list' && !operational && !financial) return {ok:false};
+    const correctionAdmin = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope === 'combined' && !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(session.currentUserId());
+    if (['configure','configureAlert'].includes(req.action) && !(hasPermissions(db,session,'orders.view','employees.change') || (financial && hasPermissions(db,session,'employees.change')))) return {ok:false};
+    if (req.action === 'list' && !operational && !financial && !correctionAdmin) return {ok:false};
     if (['bill','retry'].includes(req.action) && !operational && !financial) return {ok:false};
     try {
       let attempt;
       db.exec('BEGIN IMMEDIATE');
       try {
-        if (req.action === 'configure') db.prepare('UPDATE test_printer_queues SET queue=? WHERE destination=?').run(req.queue,req.destination);
+        if (req.action === 'configure') {
+          const old=db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(req.destination);
+          db.prepare('UPDATE test_printer_queues SET queue=? WHERE destination=?').run(req.queue,req.destination);
+          if (old.queue !== req.queue) db.prepare('UPDATE cancellation_alert_settings SET beep=0 WHERE destination=?').run(req.destination);
+        }
+        if (req.action === 'configureAlert') db.prepare('UPDATE cancellation_alert_settings SET beep=? WHERE destination=?').run(req.beep ? 1 : 0,req.destination);
         if (req.action === 'bill') {
           if (!canPrintBill(db,session,req.billId)) throw Error('Bill unavailable');
           let job = db.prepare('SELECT id FROM test_print_jobs WHERE bill_id=?').get(req.billId);
@@ -82,13 +114,21 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
           if (!job || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
           attempt = reserveAttempt(db,req.jobId,'retry-' + req.requestId,session.currentUserId());
         }
-        const queues = db.prepare('SELECT destination,queue FROM test_printer_queues ORDER BY destination').all();
+        let noticeAttempt;
+        if (req.action === 'retryNotice') {
+          const job=db.prepare('SELECT id,(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) AS lastAttempt FROM cancellation_notice_jobs j WHERE id=?').get(req.jobId);
+          if (!(operational || correctionAdmin) || !job || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
+          noticeAttempt=reserveCancellationAttempt(db,req.jobId,'retry-'+req.requestId,session.currentUserId());
+        }
+        const notices = (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().map(j=>({...j,...JSON.parse(j.snapshot)})) : [];
+        const queues = db.prepare('SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination ORDER BY q.destination').all();
         const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,a.queue,a.started_at AS startedAt,COALESCE(r.result,'uncertain') AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : operational);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
-        return {ok:true,data:{queues,jobs}};
+        dispatchCancellation(db,adapter,noticeAttempt);
+        return {ok:true,data:{queues,jobs,notices}};
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     } catch (_) { return {ok:false,error:'Test printing unavailable. Check the job before retrying.'}; }
   });
 }
-module.exports = {createPreparationJob,createBillJob,reserveAttempt,dispatch,registerTestPrinting};
+module.exports = {createCancellationJob,reserveCancellationAttempt,dispatchCancellation,createPreparationJob,createBillJob,reserveAttempt,dispatch,registerTestPrinting};

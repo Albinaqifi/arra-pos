@@ -26,14 +26,14 @@ export class AdminWorkspace extends FeatureState {
     this.editor = null;
     this._set({ page: 'admin' });
   }
-  render({ identity, language, settings, printing }) {
+  render({ identity, language, settings, printing, jobsChanged }) {
     const page = this.state.page, Page = pages[page], generation = identity.generation;
     return React.createElement(Pages.AdminShell, {
       screen: page, user: identity.name, language, directOwner: true,
       navigate: next => this.navigate(next), back: () => this.signOut(), switchUser: () => this.signOut(),
     }, Page ? React.createElement(Page, {
       ref: editors.has(page) ? instance => { this.editor = instance; } : undefined,
-      language, onBack: () => this.returnToOverview(), onAccessChanged: () => this.refreshAccess(generation),
+      language, onJobsChanged: page === 'adminSentCorrections' ? jobsChanged : undefined, onBack: () => this.returnToOverview(), onAccessChanged: () => this.refreshAccess(generation),
     }) : React.createElement(React.Fragment, null, settings, printing));
   }
 }

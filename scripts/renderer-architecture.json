@@ -1,7 +1,7 @@
 {
   "phase": "coordinator",
   "coordinator": {
-    "sha256": "31957413cfde8a8053f13c03a2233cd843916dec9bba7eec880c7e72474bc301",
+    "sha256": "fae5347ba191f7619e63022c8e024dc907e89f330bf6976f8ea2614a5ca3a732",
     "methods": [
       "constructor",
       "componentDidMount",

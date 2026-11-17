@@ -1,0 +1,46 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const { seedTables } = require('../src/desktop/tables');
+const { seedMenu } = require('../src/desktop/menu');
+const { registerOrderItems } = require('../src/desktop/order-items');
+const printing = require('../src/desktop/test-printing');
+
+test('unconfigured second kitchen fails safely and retries the original job after restart', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-kitchen-recovery-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  let db = authorizedDatabase(openDatabase(dir));
+  seedTables(db); seedMenu(db);
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); UPDATE menu_products SET destination='kitchen2' WHERE id='qebapa'");
+  const event = {}, session = { currentUserId: () => 1, authenticatedUserId: () => 1 }, calls = [];
+  const adapter = async attempt => { calls.push(attempt); return 'accepted'; };
+  let orders, jobs;
+  const register = () => {
+    registerOrderItems({ handle: (_, f) => orders = f }, e => e === event, db, session, { ...printing, adapter });
+    printing.registerTestPrinting({ handle: (_, f) => jobs = f }, e => e === event, db, session, adapter, true);
+  };
+  register();
+  assert.equal(jobs(event, { action: 'configure', destination: 'kitchen2', queue: 'Kitchen Two' }).ok, false);
+  assert.equal(orders(event, { action: 'add', orderId: 1, productId: 'qebapa' }).ok, true);
+  assert.equal(orders(event, { action: 'send', orderId: 1, requestId: 'send' }).ok, true);
+  await new Promise(setImmediate);
+  const job = jobs(event, { action: 'list' }).data.jobs[0];
+  assert.equal(job.destination, 'kitchen2'); assert.equal(job.result, 'failed'); assert.equal(calls.length, 0);
+  db.close(); db = authorizedDatabase(openDatabase(dir)); register();
+  db.prepare("INSERT INTO user_permissions VALUES(1,'employees.change')").run();
+  assert.equal(jobs(event, { action: 'configure', destination: 'kitchen2', queue: 'Kitchen Two' }).ok, true);
+  assert.equal(jobs(event, { action: 'retry', jobId: job.id, requestId: 'retry', checked: false }).ok, false);
+  assert.equal(jobs(event, { action: 'retry', jobId: job.id, requestId: 'retry', checked: true }).ok, true);
+  await new Promise(setImmediate);
+  assert.equal(jobs(event, { action: 'retry', jobId: job.id, requestId: 'retry', checked: true }).ok, true);
+  await new Promise(setImmediate);
+  assert.equal(calls.length, 1); assert.equal(calls[0].queue, 'Kitchen Two'); assert.equal(calls[0].destination, 'kitchen2');
+  assert.equal(db.prepare('SELECT count(*) n FROM preparation_rounds').get().n, 1);
+  assert.equal(db.prepare('SELECT count(*) n FROM test_print_jobs').get().n, 1);
+  assert.equal(jobs(event, { action: 'list' }).data.jobs[0].attempts, 2);
+  db.close();
+});

@@ -70,7 +70,7 @@ app.whenReady().then(() => {
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
-  registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session);
+
   const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
@@ -79,6 +79,7 @@ app.whenReady().then(() => {
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
   const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:printTestJob } : null;
+  registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);

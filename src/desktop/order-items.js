@@ -1,3 +1,4 @@
+const cancellationPrinting = require('./test-printing');
 const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:order-items';
@@ -20,6 +21,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, rejected: true, error: 'Access denied', ...(request.action === 'correct' ? {code:'access_denied'} : {}) };
     try {
       const testAttempts = [];
+      let cancellationAttempt;
       db.exec('BEGIN IMMEDIATE');
       try {
         const priorCorrection = request.action === 'correct' ? db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId) : null;
@@ -34,6 +36,8 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             if (!item || request.quantity > item.quantity - corrected) throw Error('Invalid correction');
             const now = Date.now(), reason = request.reason.trim();
             const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
+            const noticeId = cancellationPrinting.createCancellationJob(db, id, request.itemId, request.quantity);
+            if (testPrinting) cancellationAttempt = cancellationPrinting.reserveCancellationAttempt(db, noticeId, 'initial-' + noticeId, session.currentUserId());
             recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason });
           }
         } else if (request.action === 'send') {
@@ -45,7 +49,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             if (pending.length) {
               const number = db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM preparation_rounds WHERE order_id = ?').get(request.orderId).number;
               const roundId = db.prepare('INSERT INTO preparation_rounds (order_id, request_id, number, actor_id, sent_at, table_id) VALUES (?, ?, ?, ?, ?, (SELECT table_id FROM orders WHERE id = ?))').run(request.orderId, request.requestId, number, session.currentUserId(), Date.now(), request.orderId).lastInsertRowid;
-              for (const destination of ['kitchen', 'bar']) {
+              for (const destination of ['kitchen', 'kitchen2', 'bar']) {
                 const selected = pending.filter(i => i.destination === destination);
                 if (!selected.length) continue;
                 const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;
@@ -113,7 +117,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
           total += line;
         }
         db.exec('COMMIT');
-        if (testPrinting) for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt);
+        if (testPrinting) { for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt); cancellationPrinting.dispatchCancellation(db, testPrinting.adapter, cancellationAttempt); }
         return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting) } };
       } catch (error) {
         try { db.exec('ROLLBACK'); } catch (_) { return { ok: false, uncertain: request.action === 'correct' }; }

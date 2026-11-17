@@ -9,7 +9,7 @@ function textForJob(job) {
     rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den');
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
-  const rows = job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + job.destination.toUpperCase() + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
+  const rows = job.cancellation ? ['*** CANCELLATION ***', 'TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' CANCELLATION', 'Table ' + s.tableId, 'Round ' + s.round] : job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
   rows.push('--------------------------------');
   for (const l of s.lines) {
     rows.push(l.quantity + ' x ' + l.name + (job.destination === 'bill' ? '  ' + (l.quantity * l.unitPrice) + ' den' : ''));
@@ -22,11 +22,138 @@ function textForJob(job) {
   return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
 }
 const escape = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Render Unicode locally with the same Windows drawing API used by the
+// physically checked printer diagnostic. Input and output stay on pipes.
+const rasterScript = String.raw`
+$ErrorActionPreference = 'Stop'
+[Console]::InputEncoding = [Text.UTF8Encoding]::new()
+Add-Type -AssemblyName System.Drawing
+$text = ([Console]::In.ReadToEnd() | ConvertFrom-Json).text
+$probe = [System.Drawing.Bitmap]::new(384, 1)
+$graphics = [System.Drawing.Graphics]::FromImage($probe)
+$font = [System.Drawing.Font]::new('Consolas', 24, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+try {
+  $lines = [System.Collections.Generic.List[string]]::new()
+  foreach ($paragraph in $text.Split([char]10)) {
+    $line = ''
+    $elements = [Globalization.StringInfo]::GetTextElementEnumerator($paragraph)
+    while ($elements.MoveNext()) {
+      $element = $elements.GetTextElement(); $next = $line + $element
+      if ($line.Length -gt 0 -and $graphics.MeasureString($next, $font).Width -gt 368) { $lines.Add($line); $line = $element } else { $line = $next }
+    }
+    $lines.Add($line)
+  }
+  $height = $lines.Count * 32 + 16
+  if ($height -gt 65535) { throw 'Ticket too long' }
+  $graphics.Dispose(); $probe.Dispose()
+  $bitmap = [System.Drawing.Bitmap]::new(384, $height)
+  $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+  try {
+    $graphics.Clear([System.Drawing.Color]::White)
+    for ($i = 0; $i -lt $lines.Count; $i++) { $graphics.DrawString($lines[$i], $font, [System.Drawing.Brushes]::Black, 8, 8 + $i * 32) }
+    $data = [byte[]]::new(8 + 48 * $height)
+    $data[0]=29; $data[1]=118; $data[2]=48; $data[3]=0; $data[4]=48; $data[5]=0; $data[6]=$height -band 255; $data[7]=($height -shr 8)
+    for ($y = 0; $y -lt $height; $y++) {
+      for ($x = 0; $x -lt 384; $x++) {
+        $color=$bitmap.GetPixel($x,$y)
+        if (($color.R + $color.G + $color.B) -lt 384) {
+          $index=8+$y*48+[int][Math]::Floor($x/8)
+          $data[$index]=$data[$index] -bor (128 -shr ($x % 8))
+        }
+      }
+    }
+    [Console]::Out.Write([Convert]::ToBase64String($data))
+  } finally { $graphics.Dispose(); $bitmap.Dispose() }
+} finally { $graphics.Dispose(); $probe.Dispose(); $font.Dispose() }
+`;
+function systemPowerShell() {
+  return require('node:path').win32.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+}
+function renderRaster(text) {
+  const { spawn } = require('node:child_process');
+  return new Promise((resolve,reject)=>{
+    const child=spawn(systemPowerShell(),['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(rasterScript,'utf16le').toString('base64')],{windowsHide:true,stdio:['pipe','pipe','ignore']});
+    const chunks=[];
+    const timer=setTimeout(()=>{child.kill(); reject(Error('Output unknown'));},30000);
+    child.stdout.on('data',chunk=>chunks.push(chunk));
+    child.on('error',()=>{clearTimeout(timer);reject(Error('Output unknown'));});
+    child.on('close',code=>{clearTimeout(timer);code === 0 ? resolve(Buffer.from(Buffer.concat(chunks).toString('ascii'),'base64')) : reject(Error('Output unknown'));});
+    child.stdin.on('error',()=>{});
+    child.stdin.end(JSON.stringify({text}));
+  });
+}
+// Some ESC/POS printers accept small raster commands but not a full ticket in
+// one command. Split on row boundaries so every command has bounded height.
+function rasterBands(raster, bandHeight = 24) {
+  if (!Buffer.isBuffer(raster) || raster.length < 8 || !raster.subarray(0, 4).equals(Buffer.from([29,118,48,0]))) throw Error('Invalid raster');
+  const width = raster.readUInt16LE(4), height = raster.readUInt16LE(6);
+  if (!width || !height || raster.length !== 8 + width * height || !Number.isInteger(bandHeight) || bandHeight < 1 || bandHeight > 65535) throw Error('Invalid raster');
+  const bands = [];
+  for (let row = 0; row < height; row += bandHeight) {
+    const rows = Math.min(bandHeight, height - row), header = Buffer.from([29,118,48,0,0,0,0,0]);
+    header.writeUInt16LE(width, 4); header.writeUInt16LE(rows, 6);
+    bands.push(header, raster.subarray(8 + row * width, 8 + (row + rows) * width));
+  }
+  return Buffer.concat(bands);
+}
+// A single RAW spooler document carries both the alert and cancellation text.
+// The queue is passed through stdin, never interpolated into PowerShell source.
+const rawScript = String.raw`
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class ArraRaw {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] public class Doc { public string name; public string output; public string datatype; }
+  [DllImport("winspool.drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)] public static extern bool OpenPrinter(string name, out IntPtr h, IntPtr d);
+  [DllImport("winspool.drv", EntryPoint="StartDocPrinterW", SetLastError=true, CharSet=CharSet.Unicode)] public static extern int StartDocPrinter(IntPtr h, int level, [In] Doc doc);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv", SetLastError=true)] public static extern bool WritePrinter(IntPtr h, byte[] data, int count, out int written);
+  [DllImport("winspool.drv")] public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool ClosePrinter(IntPtr h);
+}
+"@
+$x = [Console]::In.ReadToEnd() | ConvertFrom-Json
+$data = [Convert]::FromBase64String($x.bytes)
+$h = [IntPtr]::Zero
+if (-not [ArraRaw]::OpenPrinter($x.queue, [ref]$h, [IntPtr]::Zero)) { exit 2 }
+try {
+  $doc = New-Object ArraRaw+Doc; $doc.name = 'Arra cancellation'; $doc.datatype = 'RAW'
+  if ([ArraRaw]::StartDocPrinter($h, 1, $doc) -eq 0) { exit 3 }
+  $pageDone = $false; $docDone = $false
+  try {
+    if (-not [ArraRaw]::StartPagePrinter($h)) { exit 4 }
+    try { $written = 0; if (-not [ArraRaw]::WritePrinter($h,$data,$data.Length,[ref]$written) -or $written -ne $data.Length) { exit 5 } }
+    finally { $pageDone = [ArraRaw]::EndPagePrinter($h) }
+  } finally { $docDone = [ArraRaw]::EndDocPrinter($h) }
+  if (-not $pageDone -or -not $docDone) { exit 6 }
+} finally { [void][ArraRaw]::ClosePrinter($h) }
+`;
+function printRawCancellation(job, raster) {
+  const { spawn } = require('node:child_process');
+  const bytes = Buffer.concat([Buffer.from([0x1b,0x42,0x03,0x04]),raster,Buffer.from('\n\n\n')]);
+  return new Promise((resolve,reject)=>{
+    const child=spawn(systemPowerShell(),['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(rawScript,'utf16le').toString('base64')],{windowsHide:true,stdio:['pipe','ignore','ignore']});
+    const timer=setTimeout(()=>{child.kill(); reject(Error('Output unknown'));},30000);
+    child.on('error',()=>{clearTimeout(timer);reject(Error('Output unknown'));});
+    child.on('exit',code=>{clearTimeout(timer);code === 0 ? resolve('accepted') : reject(Error('Output unknown'));});
+    child.stdin.on('error',()=>{});
+    child.stdin.end(JSON.stringify({queue:job.queue,bytes:bytes.toString('base64')}));
+  });
+}
 async function printTestJob(job) {
   const win = new BrowserWindow({show:false, webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});
   try {
     const printers = await win.webContents.getPrintersAsync();
     if (!printers.some(p => p.name === job.queue)) return 'failed';
+    if (job.cancellation && job.beep) {
+      // Render Unicode with local Windows fonts, then send bounded raster bands
+      // and the buzzer together in one RAW spooler job.
+      const ticketText=textForJob(job).replace(/[\x00-\x09\x0b-\x1f\x7f]/g, ' ');
+      const raster=await renderRaster(ticketText);
+      return await printRawCancellation(job,rasterBands(raster));
+    }
     const html = '<!doctype html><meta charset="utf-8"><style>body{font:16px monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>' + escape(textForJob(job)) + '</pre>';
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     // A callback success is only Windows queue acceptance, never paper proof.
@@ -37,4 +164,4 @@ async function printTestJob(job) {
     });
   } finally { if (!win.isDestroyed()) win.destroy(); }
 }
-module.exports = {printTestJob,textForJob};
+module.exports = {printTestJob,textForJob,rasterBands,renderRaster};
