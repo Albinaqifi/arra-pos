@@ -1,3 +1,4 @@
+param([string]$OutputName = '')
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Build on Windows.' }
 $repo = Split-Path -Parent $PSScriptRoot
@@ -25,11 +26,16 @@ try {
     Copy-Item -LiteralPath (Join-Path $repo 'package.json') -Destination $app
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-sample.cmd') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-sample.ps1') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-arra.cmd') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-arra.ps1') -Destination $payload
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath (Join-Path $source 'payload.zip') -CompressionLevel Optimal
     Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\install.*') -Destination $source
+    Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\test-arra.*') -Destination $source
     Set-Content -LiteralPath (Join-Path $source 'version.txt') -Value $version -Encoding ASCII
-    $installer = Join-Path $output "Arra-POS-Sample-$version-Setup.zip"
-    if (Test-Path -LiteralPath $installer) { Remove-Item -LiteralPath $installer -Force }
+    if (!$OutputName) { $OutputName = "Arra-POS-Sample-$version-Setup.zip" }
+    if ($OutputName -notmatch '^[a-zA-Z0-9._-]+\.zip$') { throw 'Invalid output name.' }
+    $installer = Join-Path $output $OutputName
+    if (Test-Path -LiteralPath $installer) { throw 'Installer output already exists; choose another name.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::CreateFromDirectory($source, $installer, [System.IO.Compression.CompressionLevel]::NoCompression, $false)
     Write-Host "Created $installer"

@@ -151,7 +151,7 @@ test('test retry requires a paper check and cancelled tickets expose no retry ac
   assert.equal(requests.length, 1);
   assert.equal(requests[0].checked, true);
   panel.state.data = { queues: [], jobs: [{ id: 3, cancelled: true, result: 'uncertain' }] };
-  const simulated = new PrintJobs({ printing });
+  const simulated = new PrintJobs({ printing, admin: true });
   simulated.state.jobs = [{ id: 3, cancelled: true, result: 'failed' }];
   for (const view of [panel.render(), simulated.render()]) {
     assert.match(JSON.stringify(view), /cancelled item: do not retry/);
@@ -182,4 +182,12 @@ test('printing owns refresh revisions and sends only status reads when building 
   assert.equal(requests.every(request => request.action === 'list'), true);
   for (const panel of panels) panel.componentWillUnmount();
   printing.dispose();
+});
+
+test('printer panels are hidden in waiter view and included in administration', () => {
+ const { printing, PrintJobs, TestPrintJobs } = harness({printJobs:async()=>({ok:true,data:{jobs:[],printers:[]}}),testPrinting:async()=>({ok:true,data})});
+ assert.equal(new PrintJobs({printing}).render(), null);
+ const admin = new TestPrintJobs({printing}); admin.state.data = data;
+ const simulated = nodes(admin.render()).find(node => node.type === PrintJobs);
+ assert.ok(simulated); assert.equal(simulated.props.admin,true);
 });

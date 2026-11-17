@@ -200,6 +200,7 @@
   "waiter.From Table {id}": "Nga tavolina {id}",
   "waiter.{count} cancelled total · latest: {qty} · {reason} · {who} {time}": "{count} të anuluar gjithsej · i fundit: {qty} · {reason} · {who} {time}",
   "waiter.Simulated preparation print history": "Historiku i printimeve të simuluara të përgatitjes",
+  "waiter.Simulated printer settings": "Cilësimet e printerëve të simuluar",
   "waiter.Success": "Sukses",
   "waiter.Failure": "Dështim",
   "waiter.Uncertain": "I pasigurt",
