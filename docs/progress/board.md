@@ -87,4 +87,4 @@ S-052's local recovery exercise is complete. The owner cannot test on another ma
 | S-076 | Done | Independent review and tests passed; owner confirmed setup, restart, offline workflows and upgrade data; PR #106 merged as `851ce22`. |
 
 | S-077 | In progress | PR #110 merged as `e963ab6`; independent review, full-suite completion and target-machine verification outstanding. |
-| S-078 | In progress | Independent code review and focused tests found no defects; rendered review and desktop verification outstanding. |
+| S-078 | In progress | PR #112 merged; independent code review and focused tests found no defects, but rendered review and desktop verification remain outstanding. |
