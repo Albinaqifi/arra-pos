@@ -1,4 +1,5 @@
 import { waiterTranslate, printDestination } from '../shared/waiter-ui.js';
+import { PrintJobs } from './PrintJobs.js';
 
 export class TestPrintJobs extends React.Component {
   constructor(props) {
@@ -55,7 +56,7 @@ export class TestPrintJobs extends React.Component {
   render() {
     const h = React.createElement, d = this.state.data;
     if (this.state.disabled || (!d && !this.state.error)) return null;
-    return h('section', { style: { padding: 12, background: '#fff7ed' } }, h('strong', null, waiterTranslate(this.props?.language, 'waiter.TEST MODE: Windows printer queues')),
+    return h('section', { style: { padding: 12, background: '#fff7ed' } }, h(PrintJobs, { admin: true, printing: this.props.printing, language: this.props.language }), h('strong', null, waiterTranslate(this.props?.language, 'waiter.TEST MODE: Windows printer queues')),
       h('p', null, waiterTranslate(this.props?.language, 'waiter.Queue acceptance does not confirm paper. Inspect the printer and paper before retrying.')),
       this.state.error && h('p', { role: 'alert' }, this.state.error),
       (d?.queues || []).map(q => h('div', { key: q.destination }, h('label', null, waiterTranslate(this.props?.language, 'waiter.{destination} queue', {destination:printDestination(this.props?.language, q.destination)}) + ' ', h('input', { defaultValue: q.queue, id: 'test-queue-' + q.destination, maxLength: 255 })), h('button', { disabled: this.state.busy, onClick: () => this.change(() => this.props.printing.configureQueue(q.destination, document.getElementById('test-queue-' + q.destination).value)) }, waiterTranslate(this.props?.language, 'waiter.Save queue')))),

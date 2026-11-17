@@ -200,6 +200,7 @@
   "waiter.From Table {id}": "From Table {id}",
   "waiter.{count} cancelled total · latest: {qty} · {reason} · {who} {time}": "{count} cancelled total · latest: {qty} · {reason} · {who} {time}",
   "waiter.Simulated preparation print history": "Simulated preparation print history",
+  "waiter.Simulated printer settings": "Simulated printer settings",
   "waiter.Success": "Success",
   "waiter.Failure": "Failure",
   "waiter.Uncertain": "Uncertain",

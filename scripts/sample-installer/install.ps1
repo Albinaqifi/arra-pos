@@ -20,6 +20,10 @@ try {
     $shortcut.Arguments = '"' + (Join-Path $target 'resources\app') + '" --sample-data-directory="' + $data + '"'
     $shortcut.WorkingDirectory = $target
     $shortcut.Save()
+    $shortcut = $shell.CreateShortcut((Join-Path $shortcutStaging 'Set up Arra menu sample.lnk'))
+    $shortcut.TargetPath = Join-Path $target 'setup-arra.cmd'
+    $shortcut.WorkingDirectory = $target
+    $shortcut.Save()
     $shortcut = $shell.CreateShortcut((Join-Path $shortcutStaging 'Set up sample data.lnk'))
     $shortcut.TargetPath = Join-Path $target 'setup-sample.cmd'
     $shortcut.WorkingDirectory = $target

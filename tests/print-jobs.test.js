@@ -104,3 +104,22 @@ test('failed version 18 migration leaves version 17 data intact', t => {
   assert.equal(db.prepare('PRAGMA user_version').get().user_version,17); assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='sample'").get().value,'kept'); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);
   db.exec('ALTER TABLE preparation_rounds DROP COLUMN table_id'); db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version, 34); db.close();
 });
+
+test('owner can configure simulated printers without receiving shared preparation history', t => {
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-print-owner-'));
+ const db=authorizedDatabase(openDatabase(dir)); t.after(()=>{db.close(); fs.rmSync(dir,{recursive:true,force:true});});
+ seedTables(db); seedMenu(db);
+ db.exec("INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'owner',x'00',x'00'),(3,'limited',x'00',x'00'),(4,'transfer',x'00',x'00'); INSERT INTO financial_scopes VALUES(2,'A'),(3,'B'); INSERT INTO user_permissions VALUES(2,'employees.view'),(2,'employees.change'),(3,'employees.view'); INSERT INTO transfer_managers VALUES(4); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+ let actor=1, authenticated=1, orders,jobs; const session={currentUserId:()=>actor,authenticatedUserId:()=>authenticated};
+ registerOrderItems({handle:(_,fn)=>orders=fn},()=>true,db,session); registerPrintJobs({handle:(_,fn)=>jobs=fn},()=>true,db,session);
+ const call=req=>jobs({},req);
+ orders({}, {action:'add',orderId:1,productId:'qebapa'}); orders({}, {action:'send',orderId:1,requestId:'test-send'});
+ assert.equal(call({action:'list'}).data.jobs.length,1);
+ actor=authenticated=2;
+ assert.equal(call({action:'list'}).ok,true); assert.equal(call({action:'list'}).data.jobs.length,0);
+ assert.equal(call({action:'simulate',destination:'kitchen',result:'failed'}).ok,true);
+ assert.equal(call({action:'retry',jobId:1,requestId:'owner'}).ok,false);
+ actor=authenticated=3; assert.equal(call({action:'list'}).ok,true); assert.equal(call({action:'simulate',destination:'bar',result:'failed'}).ok,false);
+ actor=authenticated=4; assert.equal(call({action:'list'}).ok,false);
+ actor=2; authenticated=1; assert.equal(call({action:'list'}).ok,false);
+});
