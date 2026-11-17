@@ -13,6 +13,7 @@ const { registerTransferCorrection } = require('./transfer-correction');
 const { registerAdminSentCorrection } = require('./admin-sent-correction');
 const { registerBusinessDays } = require('./business-days');
 const { registerFinancialVisibility } = require('./financial-visibility');
+const { registerBillHistory } = require('./bill-history');
 const { registerMoveOrder } = require('./move-order');
 const { registerMenuConfig } = require('./menu-config');
 const { registerMenu } = require('./menu');
@@ -50,7 +51,8 @@ function createWindow() {
 
 app.whenReady().then(() => {
   try {
-    database = openDatabase(dataDirectory(process.argv, app.getPath('userData')));
+    const directory = dataDirectory(process.argv, app.getPath('userData'));
+    database = openDatabase(directory);
   } catch (error) {
     dialog.showErrorBox('Database could not be opened / Baza e të dhënave nuk mund të hapet',
       'Arra POS could not initialize its local database. Check available disk space, that the application data folder is writable and that this app is not older than the database. Preserve the database and its sidecar files. Close the app and seek support if the problem continues.\n\nArra POS nuk mund të hapë bazën lokale të të dhënave. Kontrolloni hapësirën e lirë në disk, që dosja e të dhënave të lejojë shkrimin dhe që aplikacioni të mos jetë më i vjetër se baza e të dhënave. Ruani bazën e të dhënave dhe skedarët e saj ndihmës. Mbyllni aplikacionin dhe kërkoni ndihmë nëse problemi vazhdon.');
@@ -74,6 +76,7 @@ app.whenReady().then(() => {
   const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
+  registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: process.platform === 'win32' ? printTestJob : null });
   registerOperationalReports(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);

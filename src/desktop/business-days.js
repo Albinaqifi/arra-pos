@@ -11,7 +11,8 @@ function issues(db) {
   };
 }
 function projectIssues(value, scope) {
-  if (value === null || scope === 'combined') return value;
+  if (!value || !Array.isArray(value.orders) || !Array.isArray(value.printJobs)) return null;
+  if (scope === 'combined') return value;
   return { orders: value.orders.map(() => ({})), printJobs: value.printJobs.map(job => ({ result: job.result })) };
 }
 const flights = new WeakMap();

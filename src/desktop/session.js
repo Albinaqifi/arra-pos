@@ -29,13 +29,14 @@ function bootstrap(db, username, password) {
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
 function createSession(db) {
-  let restaurantId = null, activeId = null;
+  let restaurantId = null, activeId = null, generation = 0;
   function restaurantActive() {
     try { return restaurantId !== null && db.prepare('SELECT active FROM local_users WHERE id = ?').get(restaurantId)?.active === 1; }
     catch (_) { return false; }
   }
   return {
     signIn(request) {
+      generation++;
       activeId = null; restaurantId = null;
       if (!request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
           Reflect.ownKeys(request).length !== 2 || !Object.hasOwn(request, 'username') || !Object.hasOwn(request, 'password') ||
@@ -53,8 +54,8 @@ function createSession(db) {
         return { ok: true, admin: false };
       } catch (_) { return failure(); }
     },
-    signOut() { activeId = null; restaurantId = null; return { ok: true }; },
-    clearWaiter() { activeId = null; return { ok: true }; },
+    signOut() { generation++; activeId = null; restaurantId = null; return { ok: true }; },
+    clearWaiter() { generation++; activeId = null; return { ok: true }; },
     listWaiters() {
       if (!restaurantActive() || !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId)) return { ok: false, error: 'Access denied' };
       try {
@@ -62,6 +63,7 @@ function createSession(db) {
       } catch (_) { return { ok: false, error: 'Waiters unavailable' }; }
     },
     selectWaiter(request) {
+      generation++;
       const fail = () => ({ ok: false, error: 'Waiter selection failed' });
       if (!restaurantActive() || !request || typeof request !== 'object' || Array.isArray(request) ||
           Object.getPrototypeOf(request) !== Object.prototype || Reflect.ownKeys(request).length !== 2 ||
@@ -82,8 +84,10 @@ function createSession(db) {
         return { ok: true };
       } catch (_) { return fail(); }
     },
+    identityGeneration() { return generation; },
     authenticatedUserId() { return restaurantActive() ? restaurantId : null; },
     invalidateUser(id) {
+      if (restaurantId === id || activeId === id) generation++;
       if (restaurantId === id) { restaurantId = null; activeId = null; }
       else if (activeId === id) activeId = null;
     },

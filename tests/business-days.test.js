@@ -6,6 +6,24 @@ const path = require('node:path');
 const { openDatabase } = require('../src/desktop/database');
 const { registerBusinessDays } = require('../src/desktop/business-days');
 
+test('incomplete historical issue snapshots remain unavailable for both financial scopes', t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-day-issues-')), db = openDatabase(dir);
+  t.after(() => { db.close(); fs.rmSync(dir, {recursive:true, force:true}); });
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'sample-combined',x'00',x'00'),(2,'sample-a',x'00',x'00');
+    INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'employees.view');
+    INSERT INTO financial_scopes VALUES(1,'combined'),(2,'A');
+    UPDATE business_days SET closed_at=2,closed_by=1,issues='{}' WHERE closed_at IS NULL;
+    INSERT INTO business_days(opened_at) VALUES(2);`);
+  let actor=1, handler;
+  registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,{currentUserId:()=>actor,authenticatedUserId:()=>actor});
+  for (actor of [1,2]) {
+    const result=handler({}, {action:'list'});
+    assert.equal(result.ok,true);
+    assert.equal(result.data.days.find(day=>day.closedAt!==null).issues,null);
+  }
+  assert.equal(db.prepare('SELECT issues FROM business_days WHERE closed_at IS NOT NULL').get().issues,'{}');
+});
+
 test('manual close is authorized, atomic, persistent and retains outstanding issues', t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-day-')); let db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });

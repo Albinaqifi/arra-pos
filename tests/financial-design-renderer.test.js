@@ -22,6 +22,11 @@ test('combined sees older owner report failures outside collapsed history',async
  const issues={orders:[],printJobs:[]}, data={scope:'combined',queue:'sample',issues,days:[{id:3,openedAt:3,closedAt:null},{id:2,openedAt:2,closedAt:3,closedBy:1,issues,reportId:2,printAttempts:1,printResult:'accepted',otherPrints:[]},{id:1,openedAt:1,closedAt:2,closedBy:2,issues,reportId:1,printAttempts:0,printResult:null,otherPrints:[{scope:'A',printAttempts:1,printResult:'uncertain'}]}]};
  const c=make({businessDays:async()=>({ok:true,data}),financialVisibility:async()=>({ok:true,data:{groups:[]}})}),d=new c.BusinessDays({});await d.load();const text=JSON.stringify(expand(d.render()));assert.match(text,/Day #1 · report needs attention/);assert.match(text,/Account A report/);assert.match(text,/Retry account A report after checking printer/);assert.match(text,/Print result is uncertain/);
 });
+test('a historical day with unavailable issues does not crash the close screen',async()=>{
+ const data={scope:'combined',queue:'sample',issues:{orders:[],printJobs:[]},days:[{id:2,openedAt:2,closedAt:null},{id:1,openedAt:1,closedAt:2,closedBy:1,issues:null,reportId:null}]};
+ const c=make({businessDays:async()=>({ok:true,data}),financialVisibility:async()=>({ok:true,data:{groups:[]}})}),d=new c.BusinessDays({});await d.load();
+ assert.match(JSON.stringify(expand(d.render())),/Recorded issues are unavailable/);
+});
 test('empty owner close preview describes permitted scope without asserting the whole day is empty',async()=>{
  const data={scope:'A',queue:'sample',issues:{orders:[],printJobs:[]},days:[{id:1,openedAt:1,closedAt:null}]};
  const c=make({businessDays:async()=>({ok:true,data}),financialVisibility:async()=>({ok:true,data:{groups:[]}})}),d=new c.BusinessDays({});await d.load();await d.review(1);const text=JSON.stringify(expand(d.render()));assert.match(text,/No payments in this day for your permitted scope/);assert.doesNotMatch(text,/No payments in this day\./);
