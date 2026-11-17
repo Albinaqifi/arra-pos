@@ -18,7 +18,7 @@ function version31(t) {
 test('version 31 upgrades to cancellation schema and preserves existing data', t => {
   const dir = version31(t);
   const db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 33);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 34);
   assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='migration_sample'").get().value, 'preserved');
   assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name LIKE 'order_cancellations_no_%'").get().n, 3);
   db.close();

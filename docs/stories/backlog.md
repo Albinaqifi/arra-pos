@@ -485,6 +485,23 @@ Start **S-044 — JSX and local build foundation**. It establishes the frontend 
 
 **Checks/review:** Cover destination snapshots and routing changes, partial and repeated cancellations, authorization and validation, atomicity, failures and uncertain retries, restart recovery, no duplicate jobs or financial changes, ordinary and unsupported-printer behavior, and relevant migrations. Review the trusted service and renderer ownership boundaries; record actual independent review, focused tests, and physical results.
 
+### S-075 — Add a second kitchen printer
+
+**Goal:** Support three preparation printer destinations: bar, kitchen 1 and kitchen 2, so the restaurant can use two kitchen printers alongside its bar printer. **Depends on:** S-056 and S-074, including their outstanding verification.
+
+**Owner decision before implementation:** Confirm how kitchen items are routed: whether each product goes to a selected kitchen printer, every kitchen ticket goes to both, or another rule applies. Do not assume that a second printer is a backup or that duplicate tickets are wanted. Define the routing and any transition defaults with the owner before building.
+
+**Acceptance:**
+
+- Authorized administrators can configure the local Windows queue for bar, kitchen 1 and kitchen 2 independently and set any product routing required by the agreed rule. Settings and routing persist across restarts and work offline. Keep bill and report printer settings separate and enforce existing permissions in trusted code.
+- Send only the newly sent items to the appropriate preparation destinations under the agreed rule. Tickets identify their destination, table and round and retain quantities, modifiers and notes. Mixed bar and kitchen orders are routed correctly; queue configuration must not change order or payment classification.
+- Preserve existing data and historical migrations. Upgrade existing kitchen and bar configuration, products and outstanding jobs safely under the agreed transition rule, without losing routes or silently redirecting historical work. New sends and retries must not duplicate orders, rounds or jobs.
+- Preserve the destination snapshot for each sent item and route cancellation notices to the destination or destinations that received it, even if current settings or product routing change. Keep the existing cancellation alert behavior and history. Printer failure must not undo an order or cancellation.
+- Show failures and uncertain outcomes per destination and allow safe retry of the original job, including the existing paper-check instruction. A Windows queue acceptance does not prove physical output. Support English and Albanian and preserve offline operation.
+- With sample data, verify routing and readable output on the bar printer and both kitchen printers, including a mixed order, another round and a cancellation notice. Record actual hardware results and any unavailable checks; this story does not approve fiscal integration or live sales.
+
+**Checks/review:** Test the agreed routing and transition rules, independent queue settings, direct-request permissions, existing data and migration, destination snapshots, cancellation routing, repeated requests, failures, uncertain retries and restart recovery. Review data integrity, trusted authorization and renderer ownership. Record automated, offline and physical-printer results separately.
+
 ## Renderer ownership
 
 ### S-073 — Complete the renderer ownership refactor

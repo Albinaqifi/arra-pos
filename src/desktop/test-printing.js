@@ -3,7 +3,7 @@
 const { hasPermissions } = require('./permissions');
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const token = s => typeof s === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(s);
-const destination = s => ['kitchen', 'bar', 'bill'].includes(s);
+const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill'].includes(s);
 const inFlight = new Set();
 
 function createPreparationJob(db, ticketId) {
@@ -35,7 +35,7 @@ function reserveCancellationAttempt(db, jobId, requestId, actorId) {
 function dispatchCancellation(db,adapter,attempt) {
   if (!attempt) return;
   const key='c'+attempt.attemptId; inFlight.add(key);
-  Promise.resolve().then(()=>adapter(attempt)).then(result=>db.prepare('INSERT INTO cancellation_notice_results(attempt_id,result,occurred_at) VALUES(?,?,?)').run(attempt.attemptId,result === 'accepted' ? 'accepted' : 'failed',Date.now())).catch(()=>{}).finally(()=>inFlight.delete(key));
+  Promise.resolve().then(()=>attempt.queue ? adapter(attempt) : 'failed').then(result=>db.prepare('INSERT INTO cancellation_notice_results(attempt_id,result,occurred_at) VALUES(?,?,?)').run(attempt.attemptId,result === 'accepted' ? 'accepted' : 'failed',Date.now())).catch(()=>{}).finally(()=>inFlight.delete(key));
 }
 
 function createBillJob(db, billId) {
@@ -68,7 +68,7 @@ function reserveAttempt(db, jobId, requestId, actorId) {
 function dispatch(db, adapter, attempt) {
   if (!attempt) return;
   inFlight.add(attempt.attemptId);
-  Promise.resolve().then(() => adapter(attempt)).then(result => {
+  Promise.resolve().then(() => attempt.queue ? adapter(attempt) : 'failed').then(result => {
     db.prepare('INSERT INTO test_print_results(attempt_id,result,occurred_at) VALUES(?,?,?)').run(attempt.attemptId, result === 'accepted' ? 'accepted' : 'failed', Date.now());
   }).catch(() => { /* unknown: leave the durable attempt without a result */ }).finally(() => inFlight.delete(attempt.attemptId));
 }
@@ -80,7 +80,7 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
     const shape = { list:['action'], configure:['action','destination','queue'], configureAlert:['action','destination','beep'], bill:['action','billId','requestId'], retry:['action','jobId','requestId','checked'], retryNotice:['action','jobId','requestId','checked'] };
     if (!Object.hasOwn(shape,req.action) || Reflect.ownKeys(req).length !== shape[req.action].length || !shape[req.action].every(k=>Object.hasOwn(req,k)) ||
       (req.action === 'configure' && (!destination(req.destination) || typeof req.queue !== 'string' || req.queue !== req.queue.trim() || !req.queue || req.queue.length > 255 || /[\x00-\x1f\x7f]/.test(req.queue))) ||
-      (req.action === 'configureAlert' && (!['kitchen','bar'].includes(req.destination) || typeof req.beep !== 'boolean')) ||
+      (req.action === 'configureAlert' && (!['kitchen','kitchen2','bar'].includes(req.destination) || typeof req.beep !== 'boolean')) ||
       (req.action === 'bill' && (!validId(req.billId) || !token(req.requestId))) ||
       (['retry','retryNotice'].includes(req.action) && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
     const operational = hasPermissions(db,session,'orders.view','orders.change');

@@ -278,9 +278,33 @@ const migrations = [
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_update BEFORE UPDATE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_delete BEFORE DELETE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_replace BEFORE INSERT ON cancellation_notice_results WHEN EXISTS(SELECT 1 FROM cancellation_notice_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
+  { version: 34, run: addSecondKitchen },
 ];
 
+// Rebuild constrained tables without changing their historic rows or references.
+function addSecondKitchen(db) {
+  const tables = ['menu_products','preparation_tickets','simulated_printers','test_printer_queues','test_print_jobs','cancellation_notice_jobs','cancellation_alert_settings'];
+  for (const table of tables) {
+    const schema = db.prepare("SELECT sql FROM sqlite_schema WHERE type='table' AND name=?").get(table)?.sql;
+    if (!schema) throw new Error('Missing printer schema');
+    const expanded = schema.replaceAll("'kitchen', 'bar'", "'kitchen', 'kitchen2', 'bar'").replaceAll("'kitchen','bar'", "'kitchen','kitchen2','bar'");
+    if (expanded === schema && !schema.includes("'kitchen2'")) throw new Error('Unexpected printer schema');
+    const triggers = db.prepare("SELECT sql FROM sqlite_schema WHERE type='trigger' AND tbl_name=? AND sql IS NOT NULL").all(table);
+    const definition = table === 'test_printer_queues' ? expanded.replace('length(trim(queue)) BETWEEN 1 AND 255', 'length(trim(queue)) BETWEEN 0 AND 255') : expanded;
+    const create = definition.replace(/^CREATE TABLE (?:IF NOT EXISTS )?[\"\x60\[]?\w+[\"\x60\]]?/i, 'CREATE TABLE s075_new');
+    if (create === definition) throw new Error('Unexpected printer table definition');
+    db.exec(create);
+    db.exec('INSERT INTO s075_new SELECT * FROM ' + table);
+    db.exec('DROP TABLE ' + table);
+    db.exec('ALTER TABLE s075_new RENAME TO ' + table);
+    for (const trigger of triggers) db.exec(trigger.sql);
+  }
+  db.exec("INSERT OR IGNORE INTO simulated_printers VALUES('kitchen2','success'); INSERT OR IGNORE INTO test_printer_queues VALUES('kitchen2',''); INSERT OR IGNORE INTO cancellation_alert_settings VALUES('kitchen2',0)");
+}
+
 function migrate(db) {
+  const foreignKeys = db.prepare('PRAGMA foreign_keys').get().foreign_keys;
+  db.exec('PRAGMA foreign_keys = OFF');
   db.exec('BEGIN IMMEDIATE');
   try {
     const current = db.prepare('PRAGMA user_version').get().user_version;
@@ -288,14 +312,17 @@ function migrate(db) {
     if (current > latest) throw new Error('Database version is newer than this application');
     for (const migration of migrations) {
       if (migration.version > current) {
-        db.exec(migration.sql);
+        if (migration.run) migration.run(db); else db.exec(migration.sql);
         db.exec(`PRAGMA user_version = ${migration.version}`);
       }
     }
+    if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Database foreign key check failed');
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
+  } finally {
+    db.exec(`PRAGMA foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
   }
 }
 

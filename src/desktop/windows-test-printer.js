@@ -9,7 +9,7 @@ function textForJob(job) {
     rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den');
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
-  const rows = job.cancellation ? ['*** CANCELLATION ***', 'TEST ' + job.destination.toUpperCase() + ' CANCELLATION', 'Table ' + s.tableId, 'Round ' + s.round] : job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + job.destination.toUpperCase() + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
+  const rows = job.cancellation ? ['*** CANCELLATION ***', 'TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' CANCELLATION', 'Table ' + s.tableId, 'Round ' + s.round] : job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
   rows.push('--------------------------------');
   for (const l of s.lines) {
     rows.push(l.quantity + ' x ' + l.name + (job.destination === 'bill' ? '  ' + (l.quantity * l.unitPrice) + ' den' : ''));

@@ -80,7 +80,7 @@ test('print destinations translate without modifying their identifiers', () => {
   const context = { window: {}, React: { Component: class {} }, ArraComponents: {} };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.destination = printDestination;', context);
-  assert.equal(context.destination('sq', 'kitchen'), 'Kuzhina');
+  assert.equal(context.destination('sq', 'kitchen'), 'Kuzhina 1');
   assert.equal(context.destination('sq', 'bill'), 'Fatura');
   assert.equal(context.destination('sq', 'unexpected'), 'Destinacion i panjohur');
 });

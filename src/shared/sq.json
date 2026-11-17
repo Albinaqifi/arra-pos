@@ -333,5 +333,7 @@
   "waiter.Three beeps requested; sound unconfirmed.": "U kërkuan tre sinjale; tingulli nuk është konfirmuar.",
   "waiter.No sound requested.": "Nuk u kërkua tingull.",
   "waiter.Enable sound only for a printer confirmed to support ESC B. Sound is skipped for non-ASCII text; Windows cannot confirm sound.": "Aktivizoni tingullin vetëm për printerë që mbështesin ESC B. Tingulli nuk kërkohet për tekst jo ASCII; Windows nuk e konfirmon tingullin.",
-  "waiter.Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.": "Korrigjimi u ruajt. Printimi është i çaktivizuar. Kontrolloni printimin e mëparshëm dhe njoftoni personalisht personelin e përgatitjes."
+  "waiter.Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.": "Korrigjimi u ruajt. Printimi është i çaktivizuar. Kontrolloni printimin e mëparshëm dhe njoftoni personalisht personelin e përgatitjes.",
+  "waiter.Kitchen 1": "Kuzhina 1",
+  "waiter.Kitchen 2": "Kuzhina 2"
 }
