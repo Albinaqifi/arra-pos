@@ -319,7 +319,11 @@ function migrate(db) {
     if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('Database foreign key check failed');
     db.exec('COMMIT');
   } catch (error) {
-    db.exec('ROLLBACK');
+    // SQLite can automatically roll back on SQLITE_FULL and other I/O errors.
+    // Do not mask the original failure with a second ROLLBACK error.
+    if (db.isTransaction) {
+      try { db.exec('ROLLBACK'); } catch { /* Closing the connection also rolls back. */ }
+    }
     throw error;
   } finally {
     db.exec(`PRAGMA foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
@@ -338,4 +342,4 @@ function openDatabase(dataDirectory) {
   }
 }
 
-module.exports = { openDatabase };
+module.exports = { openDatabase, migrate };
