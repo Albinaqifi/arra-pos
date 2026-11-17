@@ -28,7 +28,7 @@ function registerAdminSentCorrection(ipcMain, isAllowedSender, db, session, test
           const result=db.prepare('INSERT INTO sent_item_corrections(request_id,item_id,order_id,actor_id,quantity,reason,occurred_at) VALUES(?,?,?,?,?,?,?)').run(req.requestId,req.itemId,req.orderId,actor,req.quantity,req.reason.trim(),Date.now());
           const noticeId=cancellationPrinting.createCancellationJob(db,result.lastInsertRowid,req.itemId,req.quantity);
           if (testPrinting) attempt=cancellationPrinting.reserveCancellationAttempt(db,noticeId,'initial-'+noticeId,actor);
-          recordAudit(db,actor,'correct_sent','order_item',req.itemId,req.orderId,{correctionId:result.lastInsertRowid,quantity:req.quantity,reason:req.reason.trim()});
+          recordAudit(db,actor,'correct_sent','order_item',req.itemId,req.orderId,{correctionId:result.lastInsertRowid,quantity:req.quantity,reason:req.reason.trim(),source:'administrator'});
         }
         db.exec('COMMIT'); if (testPrinting) cancellationPrinting.dispatchCancellation(db,testPrinting.adapter,attempt); return {ok:true};
       } catch (_) { db.exec('ROLLBACK'); return {ok:false}; }

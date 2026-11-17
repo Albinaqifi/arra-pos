@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   async testPrinting(request) {
     try { return await ipcRenderer.invoke('arra:test-printing', request); } catch (_) { return {ok:false, error:'Test print status unknown. Check paper before retrying.'}; }
   },
+  async activityReport(request) {
+    try { return await ipcRenderer.invoke('arra:activity-report', request); } catch (_) { return {ok:false}; }
+  },
   async operationalReports(request) {
     try { return await ipcRenderer.invoke('arra:operational-reports', request); } catch (_) { return { ok: false }; }
   },

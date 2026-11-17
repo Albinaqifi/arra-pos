@@ -279,6 +279,14 @@ const migrations = [
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_delete BEFORE DELETE ON cancellation_notice_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
   CREATE TRIGGER IF NOT EXISTS cancellation_results_no_replace BEFORE INSERT ON cancellation_notice_results WHEN EXISTS(SELECT 1 FROM cancellation_notice_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
   { version: 34, run: addSecondKitchen },
+  { version: 35, sql: `CREATE INDEX IF NOT EXISTS activity_move_source ON application_audit(order_id) WHERE action='move_items' AND entity_type='order';
+    CREATE INDEX IF NOT EXISTS activity_move_destination ON application_audit(json_extract(context,'$.destinationOrderId')) WHERE action='move_items' AND entity_type='order';
+    CREATE INDEX IF NOT EXISTS activity_correction_source ON application_audit(json_extract(context,'$.correctionId')) WHERE action='correct_sent' AND entity_type='order_item';
+    CREATE INDEX IF NOT EXISTS activity_correction_date ON sent_item_corrections(occurred_at,id);
+    CREATE INDEX IF NOT EXISTS activity_correction_actor_date ON sent_item_corrections(actor_id,occurred_at,id);
+    CREATE INDEX IF NOT EXISTS activity_order_cancellation_date ON order_cancellations(occurred_at,order_id);
+    CREATE INDEX IF NOT EXISTS activity_order_cancellation_actor_date ON order_cancellations(actor_id,occurred_at,order_id);
+    CREATE INDEX IF NOT EXISTS activity_payment_actor_date ON payments(actor_id,paid_at);` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.
