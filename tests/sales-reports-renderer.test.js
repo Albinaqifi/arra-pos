@@ -77,8 +77,8 @@ test('financial landing offers focused views and payment rows keep identifiers i
   const screen=new context.ArraComponents.FinancialVisibility({onBack(){}});
   const all=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat().flatMap(all)];
   const cards=all(screen.render()).filter(n=>n.type==='button'&&n.props.className==='finance-choice');
-  assert.equal(cards.length,4); assert.ok(!all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
-  cards[0].props.onClick(); assert.equal(screen.state.view,'today'); assert.ok(all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
+  assert.equal(cards.length,5); assert.ok(JSON.stringify(cards[0]).includes('Bill history')); assert.ok(!all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
+  cards[1].props.onClick(); assert.equal(screen.state.view,'today'); assert.ok(all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
   const report=new context.ArraComponents.SalesReports({mode:'today'}); report.setState({dayId:'3',days:[{id:3,openedAt:100,closedAt:null}],data:{groups:[{account:'A',method:'cash',count:1,total:500}],records:[{id:9,billId:42,dayId:3,paidAt:100,tableId:7,waiter:'Alex',account:'A',method:'cash',amount:500}],corrections:[]}});
   const view=JSON.stringify(report.render()); for(const x of ['Table 7','Alex','500']) assert.ok(view.includes(x)); for(const x of ['Bill #42','Day #3','Payment #9']) assert.ok(!view.includes(x));
   assert.ok(all(report.render()).some(n=>n.type==='button'&&n.props.className==='finance-more'&&n.props['aria-label'].includes('table 7')));

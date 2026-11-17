@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-080 | In progress | Independent code review and automated tests passed; desktop and physical printer verification outstanding. |
 | S-001 | Done | Acceptance and review passed; PR #1 merged. |
 | S-002 | Done | Acceptance, review and testing passed; PR #2 merged. |
 | S-003 | Done | Acceptance, review and testing passed; PR #3 merged. |

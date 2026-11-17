@@ -108,6 +108,8 @@ For sample-only transfer testing in a marked sample database that has no transfe
 
 To create a fresh isolated sample database with accounts, a transfer manager, tables, menu and order/payment scenarios in one step, close the desktop app and run `node src/desktop/create-sample-scenarios.js` interactively. Choose four distinct sample passwords, a waiter PIN and a transfer manager PIN. Run `npm run build` and then the launch command it prints; sign in as `sample-combined` to review all turnover.
 
+For a larger bill-history exercise, run `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\test-bill-history.ps1` from the project folder. Choose three distinct sample passwords when prompted. The script builds the app, creates a fresh isolated temporary database with 365 business days and approximately 11,000–18,000 randomized paid bills, and opens it. Sign in as `sample-combined` to see both accounts, or `sample-owner-a` / `sample-owner-b` to check each account. Card payments belong to A. Each run creates a new directory and prints its location; it does not change the normal database or reuse a previous sample. Use sample data only.
+
 To add the scenarios to an already-created, fresh sample database instead, copy its directory path. With the desktop app closed, run these PowerShell commands, replacing the example path with that directory:
 
 ```powershell
