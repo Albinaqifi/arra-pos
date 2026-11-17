@@ -2,6 +2,22 @@
 
 Status: proposed backlog, 2026-11-03. Each story is intended for one development session. Scope and order can be adjusted as we learn; split a story if it cannot be completed and verified in a session. This is a development plan, not permission to use the app for real sales. Product rules come from the approved intent, architecture, `admin_requirements.md` and the waiter requirements; the later admin requirements override conflicts in the waiter document.
 
+### S-081 — Limit waiter cancellation of sent items to two minutes
+
+**Goal:** Let a waiter cancel an eligible sent item for two minutes, then direct them to an authorized administrator's sent-item correction page. The owner's new request narrows the unlimited waiter cancellation in S-072 and clarifies the admin-only rule in FLOOR 05. **Depends on:** S-072 and S-079; S-079 verification was confirmed by the owner.
+
+**Timing interpretation for implementation:** The two-minute window starts when the item's preparation round is sent, using its persisted send timestamp, not when the table was opened. Each later round has its own window. The request is eligible strictly before 120 seconds have elapsed; at exactly 120 seconds it is expired. Confirm this interpretation with the owner if “order is entered” was intended to mean a different event.
+
+**Acceptance:**
+
+- For an eligible sent item on an unbilled open order, an authorized waiter can cancel a valid quantity with the existing required explanation and confirmation during its round's window. After expiry, the waiter cannot create a new cancellation; explain that an authorized administrator can use the administration sent-item corrections page. Pending items remain editable or removable under existing rules.
+- Enforce the cutoff and existing authorization, quantity and reason checks in trusted application code at the time the new correction is committed, including direct requests and a dialog left open across the deadline. Use the persisted send time and local trusted clock; do not trust a renderer-supplied time or restart the window after moving an item or restarting the app. Handle missing or future send timestamps conservatively, without granting extra time.
+- Keep the existing authorized administrator correction flow available for eligible items after expiry, with its current access and billing restrictions. Do not create paid-order corrections or refunds. Preserve original items, preparation and correction history, actor, reason, totals, cancellation notices and in-person notification guidance.
+- Preserve idempotent recovery: a retry of the same previously committed request returns its prior outcome even after the window expires, without a second correction; a new or changed request after expiry is rejected. Keep uncertain submissions bound to their original payload and preserve shared order-write exclusion and identity cleanup.
+- Disable the sent item's Cancel button when its window expires and show that an authorized administrator must use the administration sent-item corrections page. If the deadline passes while the confirmation is open, prevent a new cancellation and show the same guidance. Make this clear in English and Albanian. Work offline and preserve keyboard access and supported desktop layouts.
+
+**Checks/review:** With controlled time, test just before, exactly at and after the deadline, separate rounds, a dialog open across expiry, direct requests, unauthorized actors, missing/future timestamps, moves and restart. Test admin correction after expiry, existing pending and billed restrictions, partial quantities, history and totals, cancellation notices, rollback and repeated/uncertain requests across the deadline. Verify both languages and offline behavior; review authorization, clock handling, financial integrity and renderer ownership. Record actual evidence and limitations.
+
 ### S-079 — Make sent-item corrections clear and usable
 
 **Goal:** Help an authorized administrator find a sent item and understand and safely record a correction. **Depends on:** S-041 and S-072; preserve the existing cancellation notice behavior where available.

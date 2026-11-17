@@ -1,10 +1,12 @@
 import { FeatureState } from '../shared/FeatureState.js';
 import { waiterTranslate } from '../shared/waiter-ui.js';
 import { ModalFrame, modalCardStyle } from '../shared/ModalFrame.js';
+import { isCancellationOpen, cancellationGuidance } from '../waiter/cancellation-window.js';
 import { SentItemCorrection } from '../waiter/SentItemCorrection.js';
 
 const reasons = ['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'];
 const rejections = {
+  window_expired: cancellationGuidance,
   access_denied: 'Correction denied. Sign in as a waiter with order access.',
   already_billed: 'This order has already been billed. The item cannot be cancelled here.',
   unavailable: 'The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.',
@@ -23,7 +25,7 @@ export class CorrectionWorkflow extends FeatureState {
     if (this.disposed || this.locked || this.orders.writeBusy() || !this.canOpen()) return false;
     const target = this.orders.captureTarget();
     const item = this.orders.snapshot().items.find(value => value.id === itemId && value.tableId === target.tableId);
-    if (!item || item.status !== 'sent' || item.qty <= item.cxQty) return false;
+    if (!item || item.status !== 'sent' || item.qty <= item.cxQty || !isCancellationOpen(item.sentAt, Date.now())) return false;
     this._set({ dialog: { type: 'cancel', itemId, qty: 1, reason: '', other: '', confirming: false, target, draftId: ++this.draftSequence } });
     return true;
   }
@@ -60,6 +62,7 @@ export class CorrectionWorkflow extends FeatureState {
     if (!dialog.reason || (dialog.reason === 'Other' && !dialog.other.trim())) return;
     const item = this._item(dialog);
     if (!item || (!dialog.requestId && (item.status !== 'sent' || dialog.qty > item.qty - item.cxQty))) return;
+    if (!dialog.requestId && !isCancellationOpen(item.sentAt, Date.now())) { this._set({ dialog: { ...dialog, error: this.t(cancellationGuidance) } }); return; }
     const lease = this.orders.acquireWrite('correct', dialog.target);
     if (!lease) return;
     if (!this.bridge) {
@@ -101,7 +104,7 @@ export class CorrectionWorkflow extends FeatureState {
     const time = value => new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     return {
       t, modalTitle: t('Cancel a sent item'), modalSub: t('It was already sent, so it stays on record, crossed out.'),
-      cxName: item?.name || '', cxMods: item?.mods || '', cxHasMods: !!item?.mods,
+      cxSentAt: item?.sentAt, cxName: item?.name || '', cxMods: item?.mods || '', cxHasMods: !!item?.mods,
       cxMeta: item ? t('Round {round} · sent {time} to {destination}', { round: item.round, time: time(item.sentAt), destination: t(item.route === 'bar' ? 'Bar' : item.route === 'kitchen2' ? 'Kitchen 2' : 'Kitchen 1') }) : '',
       cxMulti: remaining > 1, cxQty: String(dialog.qty), cxMax: t('of {count}', { count: remaining }), cxMaxNumber: remaining,
       cxInc: () => this.changeQuantity(1), cxDec: () => this.changeQuantity(-1),

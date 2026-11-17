@@ -41,7 +41,7 @@ export function orderView(d, { language, now = Date.now(), desktop, onCorrect, s
           routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
           hasCx: i.cxQty > 0,
           cxText: c ? t('{count} cancelled total · latest: {qty} · {reason} · {who} {time}', {count:i.cxQty, qty:c.qty, reason:['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'].includes(c.reason) ? t(c.reason) : c.reason, who:c.who, time:hm(c.t)}) + (desktop ? '' : t(' · waiting for owner review')) : '',
-          canCancel: qq > 0, cancel: () => onCorrect(i.id), cancelAria: t('Cancel {name}', {name: i.name})
+          canCancel: qq > 0, sentAt: i.sentAt, cancel: () => onCorrect(i.id), cancelAria: t('Cancel {name}', {name: i.name})
         };
       })
     };
