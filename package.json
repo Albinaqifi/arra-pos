@@ -1,6 +1,6 @@
 {
   "name": "arra-pos-waiter-demo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Self-contained React demo of the Arra POS waiter design",
   "scripts": {
@@ -8,7 +8,8 @@
     "start": "node server.js",
     "desktop": "electron .",
     "test": "node --test tests/*.test.js",
-    "build": "node build.js"
+    "build": "node build.js",
+    "build:sample-installer": "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-sample-installer.ps1"
   },
   "main": "src/desktop/main.js",
   "devDependencies": {

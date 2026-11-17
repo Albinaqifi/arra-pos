@@ -12,6 +12,14 @@ Closing a system day also creates a non-fiscal turnover report and attempts to p
 
 ## Desktop window
 
+### Windows sample installer
+
+Build a versioned installer bundle on Windows after `npm ci` and the Electron download: `npm run build:sample-installer`. The output is `build/sample-installer/Arra-POS-Sample-<version>-Setup.zip`. The selected runtime is the pinned Electron 45.2.1 distribution, including its Node 24 runtime and built-in SQLite; the installed app does not need a separate Node installation or network connection. This is an unsigned sample-only build, not a production or fiscal release.
+
+Extract the entire ZIP and run `install.cmd`, then run **Set up sample data** from the versioned Arra POS Sample Start menu folder. Choose four distinct sample passwords and sample waiter and transfer PINs; input is hidden. Setup creates sample accounts, tables and menu once and refuses to overwrite an existing data directory. Then open **Arra POS Sample** and sign in with `sample-restaurant` for waiter workflows or `sample-combined` for administration. Never enter real sales or personal information. If setup fails after creating an incomplete directory, move that directory aside before retrying; do not delete data you need.
+
+The marked database is `%APPDATA%\Arra POS Sample Data\arra.sqlite`, outside the versioned program directory `%LOCALAPPDATA%\Arra POS Sample\<version>`. The installer refuses to replace an existing version and never deletes the sample data. A new version uses the same sample directory; back it up before upgrading. To roll back, close the app, preserve the data directory and launch a retained older version only with a compatible restored copy; an older application may refuse a newer database. Removing program folders or shortcuts manually does not remove the database. This is not a tested upgrade, recovery or uninstall system; S-032 and S-051 remain outstanding. Keep a separate protected backup before relying on any data.
+
 Install Node.js 22.12 or later and run the following once while connected to the internet, from this directory:
 
 ```sh
