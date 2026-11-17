@@ -80,7 +80,7 @@ test('waiter-only version 27 upgrade preserves identity without silently grantin
   db.exec('DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 34);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 35);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope, 'waiter');
   assert.equal(db.prepare("SELECT count(*) AS n FROM financial_scopes WHERE scope='combined'").get().n, 0);
   assert.throws(() => bootstrap(db, 'sample second', 'sample second password'));

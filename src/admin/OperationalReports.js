@@ -1,9 +1,10 @@
+import { OperationalCancellations } from './ActivityReports.js';
 import { historyReportsText } from './history-reports-i18n.js';
 const h = React.createElement;
 class OperationalReports extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { from: "", to: "", data: null, error: "", busy: false };
+    this.state = { from: "", to: "", data: null, activeRange: null, error: "", busy: false };
     this.sequence = 0;
   }
   componentWillUnmount() {
@@ -18,7 +19,7 @@ class OperationalReports extends React.Component {
     const to = end.getTime();
     if (!Number.isSafeInteger(from) || !Number.isSafeInteger(to) || from >= to) return this.setState({ data: null, error: "Choose a valid date range." });
     const sequence = ++this.sequence;
-    this.setState({ busy: true, data: null, error: "" });
+    this.setState({ busy: true, data: null, activeRange: {from,to,sequence}, error: "" });
     try {
       const r = await window.arra.operationalReports({ from, to, account: null });
       if (sequence === this.sequence) this.setState(r.ok ? { data: r.data, error: "", busy: false } : { data: null, error: "Report unavailable.", busy: false });
@@ -39,10 +40,11 @@ class OperationalReports extends React.Component {
       h("h2", null, t("Choose dates")),
       h("form", { className: "report-form", onSubmit: (e) => this.load(e) },
       h("label", null, t("From"),
-      h("input", { type: "date", required: true, disabled: busy, value: from, onChange: (e) => this.setState({ from: e.target.value, data: null, error: "" }) })),
+      h("input", { type: "date", required: true, disabled: busy, value: from, onChange: (e) => this.setState({ from: e.target.value, data: null, activeRange: null, error: "" }) })),
       h("label", null, t("Through"),
-      h("input", { type: "date", required: true, disabled: busy, value: to, onChange: (e) => this.setState({ to: e.target.value, data: null, error: "" }) })),
+      h("input", { type: "date", required: true, disabled: busy, value: to, onChange: (e) => this.setState({ to: e.target.value, data: null, activeRange: null, error: "" }) })),
       h("button", { className: "floor-primary", disabled: busy }, busy ? t("Loading…") : t("Show report")))),
+      this.state.activeRange && h(OperationalCancellations,{key:this.state.activeRange.sequence,language:this.props.language,from:this.state.activeRange.from,to:this.state.activeRange.to}),
       h("div", { className: "floor-note" },
       h("strong", null, t("Provisional definitions")),
       h("p", null, t("Paid bills only, by local payment date and your financial scope. Values are bill snapshot amounts in minor units. Products are grouped by ID and show their latest paid snapshot name in the period. Unpaid orders are excluded.")),
