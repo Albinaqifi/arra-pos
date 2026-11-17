@@ -19,11 +19,22 @@ export function describeEvent(e, language = 'en') {
  default: return t('Activity recorded.');
  }
 }
-function OrderList({ orders, open, t }) {
+function localDate(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+}
+function validDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y,m,d] = value.split('-').map(Number);
+  const date = new Date(0); date.setFullYear(y,m-1,d);
+  return date.getFullYear() === y && date.getMonth() === m-1 && date.getDate() === d;
+}
+function OrderList({ orders, open, t, title = 'All orders' }) {
   return h('section', {className:'history-panel'},
-    h('div', {className:'history-section-head'}, h('div', null, h('p',{className:'admin-eyebrow'},t('ORDERS')),h('h2',null,t('All orders'))),h('span',null,t('{count} recorded',{count:orders.length}))),
+    h('div', {className:'history-section-head'}, h('div', null, h('p',{className:'admin-eyebrow'},t('ORDERS')),h('h2',null,title)),h('span',null,t('{count} recorded',{count:orders.length}))),
     orders.length ? h('ul',{className:'history-list'},orders.map(o=>h('li',{key:o.id},h('button',{className:'history-order',onClick:()=>open(o.id)},
-      h('span',null,h('strong',null,t('Order #{id}',{id:o.id})),h('small',null,t('Table {id} · Opened {date}',{id:o.tableId,date:date(o.openedAt)}))),h('span',{className:'history-badge'},t(o.status)),h('span',{'aria-hidden':true},'→'))))) : h('p',{className:'floor-empty'},t('No orders recorded.')));
+      h('span',null,h('strong',null,t('Order #{id}',{id:o.id})),h('small',null,t('Table {id} · Opened {date}',{id:o.tableId,date:date(o.openedAt)}))),h('span',{className:'history-badge'},t(o.status)),h('span',{'aria-hidden':true},'→'))))) : h('p',{className:'floor-empty'},t('No orders match this selection.')));
 }
 function OrderDetail({ data, open, t, language }) {
   const {order,items,events}=data;
@@ -35,22 +46,35 @@ function OrderDetail({ data, open, t, language }) {
       events.length ? h('ol',{className:'history-timeline'},events.map(e=>h('li',{key:e.id},h('div',null,h('strong',null,describeEvent(e,language)),h('small',null,date(e.occurredAt)+' · '+e.actor),e.orderId!==order.id && h('button',{onClick:()=>open(e.orderId)},t('View order #{id}',{id:e.orderId})))))) : h('p',{className:'floor-empty'},t('No activity recorded.'))));
 }
 export class OrderHistory extends React.Component {
-  constructor(props) { super(props); this.state={orders:[],data:null,error:'',loading:true}; this.sequence=0; }
+  constructor(props) { super(props); this.state={orders:[],data:null,error:'',loading:true,tab:'table',tableId:null,from:'',to:'',period:null,dateError:''}; this.sequence=0; this.target=null; }
   componentDidMount() { this.load(null); }
   componentWillUnmount() { this.sequence++; }
   async load(id) {
+    this.target=id;
     const sequence=++this.sequence; this.setState({loading:true,error:'',data:null});
     try {
       const r=await window.arra.orderHistory(id); if(sequence!==this.sequence) return;
-      if(!r.ok) return this.setState({loading:false,error:'History unavailable. Check your access and try again.',orders:[]});
+      if(!r.ok) return this.setState({loading:false,error:'History unavailable. Check your access and try again.',...(id===null ? {orders:[]} : {})});
       this.setState(id===null ? {orders:r.data.orders,data:null,loading:false} : {data:r.data,loading:false});
-    } catch (_) { if(sequence===this.sequence) this.setState({loading:false,orders:[],error:'Could not load order history. Please try again.'}); }
+    } catch (_) { if(sequence===this.sequence) this.setState({loading:false,error:'Could not load order history. Please try again.',...(id===null ? {orders:[]} : {})}); }
+  }
+  applyDates() {
+    const {from,to}=this.state;
+    if (!validDate(from) || (to && !validDate(to)) || (to && to < from)) return this.setState({dateError:'Choose a valid start date and an end date on or after it.'});
+    this.setState({period:{from,to:to || from},dateError:'',tableId:null});
   }
   render() {
-    const {data,error,loading}=this.state;
+    const {data,error,loading,orders,tab,tableId,from,to,period,dateError}=this.state;
     const language=this.props.language || 'en';
     const t=(key,values)=>historyReportsText(language,key,values);
+    const matching=orders.filter(o=>!period || (localDate(o.openedAt)>=period.from && localDate(o.openedAt)<=period.to));
+    const tableOrders=matching.filter(o=>o.tableId===tableId);
+    const tables=[...new Set(matching.map(o=>o.tableId))].sort((a,b)=>a-b);
+    const back=()=>{ if (this.target===null && !data) return; this.sequence++; this.target=null; this.setState({data:null,error:'',loading:false}); };
     return h('main',null,h('button',{onClick:this.props.onBack},t('← Back to administration')),h('p',{className:'admin-eyebrow floor-eyebrow'},t('ADMINISTRATION / ORDER HISTORY')),h('h1',null,t('Order history')),h('p',{className:'admin-intro'},t('Review operational activity across orders and moves.')),h('p',{className:'admin-access-note'},t('Prices, payments and note text are excluded. Owner history is limited to permitted accounts, including connected orders after item moves.')),
-      data && h('button',{onClick:()=>this.load(null)},t('← All orders')),loading ? h('p',{role:'status',className:'admin-status'},t('Loading order history…')) : error ? h('div',null,h('p',{role:'alert'},t(error)),h('button',{onClick:()=>this.load(null)},t('Try again'))) : data ? OrderDetail({data,open:id=>this.load(id),t,language}) : OrderList({orders:this.state.orders,open:id=>this.load(id),t}));
+      h('section',{className:'history-panel'},h('h2',null,t('Opening date')),h('p',null,t('Orders are selected by their opening date in the local calendar.')),h('label',null,t('From'), ' ',h('input',{type:'date',value:from,onChange:e=>this.setState({from:e.target.value})})), ' ',h('label',null,t('Through (optional)'), ' ',h('input',{type:'date',value:to,onChange:e=>this.setState({to:e.target.value})})), ' ',h('button',{onClick:()=>this.applyDates()},t('Apply dates')), ' ',h('button',{onClick:()=>this.setState({from:'',to:'',period:null,dateError:'',tableId:null})},t('All dates')),h('p',null,period ? t('Opening dates: {from} through {to}',period) : t('Showing all opening dates.')),dateError && h('p',{role:'alert'},t(dateError))),
+      h('div',{className:'history-panel','aria-label':t('History view')},h('button',{'aria-pressed':tab==='table',onClick:()=>{back();this.setState({tab:'table'})}},t('By table')), ' ',h('button',{'aria-pressed':tab==='all',onClick:()=>{back();this.setState({tab:'all'})}},t('All orders'))),
+      (data || this.target!==null) && h('button',{onClick:back},tab==='table' && tableId!==null ? t('← Back to table {id}',{id:tableId}) : t('← Back to results')),
+      loading ? h('p',{role:'status',className:'admin-status'},t('Loading order history…')) : error ? h('div',null,h('p',{role:'alert'},t(error)),h('button',{onClick:()=>this.load(this.target)},t('Try again'))) : data ? OrderDetail({data,open:id=>this.load(id),t,language}) : tab==='all' ? OrderList({orders:matching,open:id=>this.load(id),t,title:t('All orders')}) : tableId!==null ? h(React.Fragment,null,h('button',{onClick:()=>this.setState({tableId:null})},t('← All tables')),OrderList({orders:tableOrders,open:id=>this.load(id),t,title:t('Table {id}',{id:tableId})})) : h('section',{className:'history-panel'},h('h2',null,t('By table')),tables.length ? h('ul',{className:'history-list'},tables.map(id=>h('li',{key:id},h('button',{className:'history-order',onClick:()=>this.setState({tableId:id})},t('Table {id}',{id}), ' · ',t('{count} recorded',{count:matching.filter(o=>o.tableId===id).length}))))) : h('p',{className:'floor-empty'},t('No orders match this selection.'))));
   }
 }

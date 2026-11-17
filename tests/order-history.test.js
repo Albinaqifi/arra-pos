@@ -22,6 +22,8 @@ test('history restricts direct access and projects operational events without fi
   assert.equal(item({action:'send',orderId:1,requestId:'send'}).ok,true);
   assert.equal(item({action:'correct',orderId:1,itemId:1,quantity:1,reason:'mistake',requestId:'correct'}).ok,true);
   assert.equal(handlers['arra:move-order'](event,{orderId:1,sourceId:1,destinationId:2,requestId:'move'}).ok,true);
+  db.exec("UPDATE dining_tables SET active=0, area='Changed area' WHERE id=2");
+  assert.equal(history({orderId:null}).data.orders.find(o=>o.id===1).tableId,2);
   const result=history({orderId:1}); assert.equal(result.ok,true); assert.deepEqual(result.data.events.filter(e=>e.action!=='print_attempt').map(e=>e.action),['add','send','correct_sent','move']); assert.ok(result.data.events.some(e=>e.action==='print_attempt' && e.adapter==='simulated' && e.result==='success'));
   assert.ok(result.data.events.every(e=>e.actor && e.occurredAt)); assert.equal(result.data.events.find(e=>e.action==='correct_sent').quantity,1); assert.equal(result.data.events.find(e=>e.action==='correct_sent').reason,'mistake');
   historicalMove(db, 1, 2, 3, 2, 1);
