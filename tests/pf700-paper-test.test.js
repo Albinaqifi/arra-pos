@@ -4,6 +4,7 @@ const { execFileSync } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { runSequence, runDiagnostic } = require('../scripts/pf700-paper-test/paper-test');
+const { runReplyCheck, runReplySequence } = require('../scripts/pf700-paper-test/check-reply');
 
 const baseline = Buffer.from('888080e1809a', 'hex');
 const closed = Buffer.from('0,0000,000000000');
@@ -20,6 +21,75 @@ function reply(step, { data, status = baseline, sequence = step.sequence, comman
   const bcc = sum.toString(16).padStart(4, '0').split('').map(digit => 0x30 + parseInt(digit, 16));
   return Buffer.from([1, ...body, ...bcc, 3]);
 }
+
+test('reply check defaults to simulation and accepts only its explicit read option', async () => {
+  let calls = 0;
+  const live = () => { calls++; return 'read only'; };
+  assert.equal(await runReplyCheck([], live), 'Reply format: 13 bytes | 0,_##,+###.## (offline rehearsal)');
+  for (const args of [['--print-diagnostic-slip'], ['--CHECK-REPLY'], ['--check'], ['--check-reply', '71']]) {
+    await assert.rejects(runReplyCheck(args, live), /Use no arguments/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(await runReplyCheck(['--check-reply'], live), 'read only');
+  assert.equal(calls, 1);
+});
+
+test('read-only check sends only status X and a fresh command 76, even for an unfamiliar layout', async () => {
+  const sent = [];
+  const unfamiliar = Buffer.from('0,+15.79');
+  const result = await runReplySequence(0x7f, step => {
+    sent.push([step.sequence, step.command, step.request.subarray(4, -6).toString('ascii')]);
+    return reply(step, step.name === 'document' ? { data: unfamiliar } : {});
+  });
+  assert.deepEqual(sent, [[0x7f, 74, 'X'], [0x20, 76, '']]);
+  assert.equal(result, 'Reply format: 8 bytes | 0,+##.##');
+  const paperCommands = [];
+  await assert.rejects(runSequence(0x7f, step => {
+    paperCommands.push(step.command);
+    return reply(step, step.name === 'document' ? { data: unfamiliar } : {});
+  }), /No print command was sent. Invalid receipt-state reply/);
+  assert.deepEqual(paperCommands, [74, 76]);
+});
+
+test('layout masks each private byte and retains only an isolated initial flag and safe punctuation', async () => {
+  for (const [data, layout] of [
+    [Buffer.from([0x31, 0x2c, 0x20, 0x41, 0x62, 0xff, 0x3b, 0x2d, 0x35, 0x2e, 0x31, 0x7c, 0x30]), '1,_???;-#.#|#'],
+    [Buffer.from('001,00,1,+1'), '###,##,#,+#'],
+    [Buffer.from('1.00'), '#.##'],
+    [Buffer.from('2'), '#'],
+    [Buffer.from('0'), '0'],
+    [Buffer.from('1'), '1'],
+    [Buffer.alloc(0), '(empty)'],
+    [Buffer.alloc(84, 0xab), '?'.repeat(84)]
+  ]) {
+    const result = await runReplySequence(0x20, step => reply(step, step.name === 'document' ? { data } : {}));
+    assert.equal(result, `Reply format: ${data.length} ${data.length === 1 ? 'byte' : 'bytes'} | ${layout}`);
+    assert.ok(result.length <= 110);
+  }
+});
+
+test('reply check rejects stale, unrelated, damaged and error-bearing packets before reporting a layout', async () => {
+  const coverOpen = Buffer.from(baseline);
+  coverOpen[1] |= 0x20;
+  for (const phase of ['status', 'document']) {
+    for (const invalid of [
+      step => reply(step, { sequence: step.sequence + 1 }),
+      step => reply(step, { command: 0x47 }),
+      step => reply(step, { status: coverOpen }),
+      step => reply(step, { data: Buffer.from([0x0d]) }),
+      step => { const frame = reply(step); frame[frame.length - 4] ^= 1; return frame; },
+      () => Buffer.from([0x15]),
+      () => Buffer.alloc(0)
+    ]) {
+      const sent = [];
+      await assert.rejects(runReplySequence(0x20, step => {
+        sent.push(step.command);
+        return step.name === phase ? invalid(step) : reply(step);
+      }), /Invalid|Unexpected|rejected|open/);
+      assert.deepEqual(sent, phase === 'status' ? [74] : [74, 76]);
+    }
+  }
+});
 
 test('paper-test CLI defaults to rehearsal and accepts just the exact explicit live option', async () => {
   let calls = 0;
@@ -163,6 +233,9 @@ function Check-Fake($markers, $wantWrites) {
 Check-Fake ("status" + [Environment]::NewLine + "document" + [Environment]::NewLine + "print") '74,76,71'
 Check-Fake ("status" + [Environment]::NewLine + "document") '74,76'
 Check-Fake ("status" + [Environment]::NewLine + "print") '74'
+$requests.Remove('print')
+Check-Fake ("status" + [Environment]::NewLine + "document" + [Environment]::NewLine + "print") '74,76'
+if ([Console]::ReadLine() -cne 'print') { throw 'Read-only plan waited for an extra operation.' }
 exit 0`;
   execFileSync(path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],

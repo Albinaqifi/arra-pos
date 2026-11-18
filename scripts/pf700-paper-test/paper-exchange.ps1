@@ -1,4 +1,4 @@
-# Loaded by paper-test.js. Loading this file by itself opens no port.
+# Loaded by the Windows serial transport. Loading this file by itself opens no port.
 function Read-Pf700PaperReply($Reader) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $frame = [Collections.Generic.List[byte]]::new()
@@ -17,6 +17,7 @@ function Invoke-Pf700PaperExchange($Port, $Requests) {
     try {
         $Port.Open()
         foreach ($name in @('status', 'document', 'print')) {
+            if (!$Requests.Contains($name)) { return }
             # JS only releases the next operation after checking the previous reply.
             # EOF, including after a failed preflight or a closed launcher, stops here.
             if ([Console]::ReadLine() -cne $name) { return }
