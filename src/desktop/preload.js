@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   },
   async employeeConfig(request) {
     try { return await ipcRenderer.invoke('arra:employee-config', request); }
-    catch (_) { return { ok: false, error: 'Employee configuration unavailable' }; }
+    catch (_) { return { ok: false, uncertain: request?.action === 'ownApprovalPin', error: 'Employee configuration unavailable' }; }
   },
   async menuConfig(request) {
     try { return await ipcRenderer.invoke('arra:menu-config', request); }
@@ -95,6 +95,17 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     } catch (_) {}
     return { ok: false, error: 'Sign out failed' };
   },
+  async authorizeCancellation(orderId, itemId, pin) {
+    if (!Number.isSafeInteger(orderId) || orderId <= 0 || !Number.isSafeInteger(itemId) || itemId <= 0 || typeof pin !== 'string' || !/^\d{6}$/.test(pin)) return { ok: false };
+    try {
+      const result = await ipcRenderer.invoke('arra:authorize-cancellation', { orderId, itemId, pin });
+      return result?.ok && typeof result.token === 'string' && /^[a-f0-9]{64}$/.test(result.token) ? { ok:true, token:result.token } : { ok:false };
+    } catch (_) { return { ok:false }; }
+  },
+  async revokeCancellationApproval(token) {
+    if (typeof token !== 'string' || !/^[a-f0-9]{64}$/.test(token)) return { ok:false };
+    try { return (await ipcRenderer.invoke('arra:revoke-cancellation-approval', { token }))?.ok ? { ok:true } : { ok:false }; } catch (_) { return { ok:false }; }
+  },
   async orderItems(action, orderId, value) {
     if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
         !['list', 'add', 'increment', 'decrement', 'remove', 'note', 'send', 'correct'].includes(action)) return action === 'correct' ? {ok:false, rejected:true, code:'invalid_input'} : { ok: false };
@@ -102,6 +113,10 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     if (action === 'correct') {
       if (!value || !Number.isSafeInteger(value.itemId) || !Number.isSafeInteger(value.quantity) || typeof value.reason !== 'string' || typeof value.requestId !== 'string') return { ok: false, rejected: true, code: 'invalid_input' };
       Object.assign(request, { itemId: value.itemId, quantity: value.quantity, reason: value.reason, requestId: value.requestId });
+      if (value.approvalToken !== undefined) {
+        if (typeof value.approvalToken !== 'string' || !/^[a-f0-9]{64}$/.test(value.approvalToken)) return { ok: false, rejected: true, code: 'invalid_input' };
+        request.approvalToken = value.approvalToken;
+      }
     } else if (action === 'send') {
       if (typeof value !== 'string') return { ok: false };
       request.requestId = value;

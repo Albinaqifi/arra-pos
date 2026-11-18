@@ -75,7 +75,7 @@ test('demo cancellation never claims a printed notice', async () => {
   for (const printer of [true,false]) {
     const {app}=harness(undefined);
     arrange(app, {screen:'order',waiter:{name:'Sample'},tableId:1,orders:{1:{log:[]}},items:[{id:'x',tableId:1,status:'sent',sentAt:Date.now(),name:'Dish',qty:2,cxQty:0,cx:[],route:'kitchen'}],printers:{kitchen:printer},modal:{type:'cancel',itemId:'x',qty:1,reason:'Entered by mistake',other:''}});
-    await app.correction.confirm(); assert.match(app.shell.state.toast.msg,/Tell preparation staff in person/i); assert.doesNotMatch(app.shell.state.toast.msg,/print/i);
+    await app.correction.confirm(); assert.equal(app.shell.state.toast.msg,'Correction saved.');
   }
 });
 

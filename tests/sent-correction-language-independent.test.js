@@ -5,10 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-test('sent item correction requires review and tells preparation in both languages', async () => {
-  for (const [language, title, reason, review, confirm, notice, saved] of [
-    ['en','Cancel a sent item','Entered by mistake','Review correction','Confirm correction','Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.','Correction saved. Tell preparation staff in person.'],
-    ['sq','Anulo një artikull të dërguar','U shënua gabimisht','Kontrollo korrigjimin','Konfirmo korrigjimin','Njoftoni personalisht personelin e përgatitjes; nuk printohet njoftim anulimi dhe printimi i mëparshëm mund të mbërrijë ende.','Korrigjimi u ruajt. Njoftoni personelin e përgatitjes personalisht.']
+test('sent item correction requires review and shows concise feedback in both languages', async () => {
+  for (const [language, title, reason, review, confirm, saved] of [
+    ['en','Cancel a sent item','Entered by mistake','Review correction','Confirm correction','Correction saved.'],
+    ['sq','Anulo një artikull të dërguar','U shënua gabimisht','Kontrollo korrigjimin','Konfirmo korrigjimin','Korrigjimi u ruajt.']
   ]) {
     let confirming = false;
     class Component { setState(update, cb) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); if (cb) cb(); } forceUpdate() {} }
@@ -25,8 +25,9 @@ test('sent item correction requires review and tells preparation in both languag
     assert.equal(order.filter(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).length,2);
     assert.ok(!order.some(x=>x.type==='button' && /cancel (whole )?order|anulo porosinë/i.test(String(x.children[0]))));
     order.find(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).props.onClick();
-    let v=app.correction.view(); assert.equal(v.modalTitle,title); assert.equal(v.cxInfo,notice); assert.equal(v.cxDisabled,true);
+    let v=app.correction.view(); assert.equal(v.modalTitle,title); assert.equal(v.cxDisabled,true);
     let nodes=visit(ctx.Correction({v,modal:app.correction.state.dialog}));
+    assert.equal(nodes.some(x=>x.props.className==='correction-info'),false);
     assert.equal(nodes.find(x=>x.props.className==='correction-primary').props.disabled,true);
     nodes.find(x=>x.type==='button' && x.children[0]===reason).props.onClick();
     v=app.correction.view(); nodes=visit(ctx.Correction({v,modal:app.correction.state.dialog}));
