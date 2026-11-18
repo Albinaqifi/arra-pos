@@ -2,7 +2,7 @@ import { financeText } from './finance-i18n.js';
 const h=React.createElement;
 const date=value=>new Date(value).toLocaleString();
 // Unacknowledged operations survive navigation but never cross authenticated actors.
-const retryTokens=new Map(), uncertainCloses=new Map();
+const retryTokens=new Map(), uncertainCloses=new Map(), uncertainWalletCloses=new Map();
 const identityKey=data=>String(data?.actorId ?? 'unknown')+':'+String(data?.scope ?? 'unknown');
 function shiftCloseEffect(response,dayId) {
   if(!response?.ok || response.data?.dayId!==dayId || !Array.isArray(response.data.shifts)) return null;
@@ -72,7 +72,7 @@ export class BusinessDays extends React.Component {
         try { const report=await window.arra.financialVisibility({action:'report',from:null,to:null,dayId:open.id,account:null,method:null}); if(report.ok) turnover=report.data; } catch (_) { /* Show unavailable, never a misleading zero. */ }
       }
       if(sequence!==this.sequence) return;
-      this.setState({data:r.data,turnover,error:'',loading:false,unknownId:uncertainCloses.get(identityKey(r.data)) || null});
+      this.setState({data:r.data,turnover,error:'',loading:false,unknownId:uncertainWalletCloses.get(identityKey(r.data))?.dayId || uncertainCloses.get(identityKey(r.data)) || null});
       return r.data;
     }
     catch (_) { if(sequence===this.sequence) this.setState({data:null,loading:false,error:'Could not load business days. Try again.'}); }
@@ -95,11 +95,22 @@ export class BusinessDays extends React.Component {
       if (!day.ok || !report.ok || !day.data.days.some(d=>d.id===id && d.closedAt===null))
         return this.setState({busy:false,error:'Could not prepare the close. Refresh and try again.'});
       const finishesShift=shiftCloseEffect(shifts,id);
-      this.setState({busy:false,data:day.data,turnover:report.data,preview:report.data,confirmId:id,finishesShift});
+      let wallet=null,walletUnavailable=false;
+      if(day.data.scope==='combined') {
+        try {
+          const result=await window.arra.businessDays({action:'walletStatus'}),value=result?.data;
+          if(!result?.ok || value?.dayId!==id || !(value.expected===null || Number.isSafeInteger(value.expected)) || (value.expected!==null && (!Number.isSafeInteger(value.shiftId) || value.shiftId<=0 || typeof value.revision!=='string'))) walletUnavailable=true;
+          else if(value.expected!==null) wallet=value;
+        } catch (_) { walletUnavailable=true; }
+      }
+      if(sequence!==this.sequence) return;
+      this.setState({busy:false,data:day.data,turnover:report.data,preview:report.data,confirmId:id,finishesShift,wallet,walletUnavailable,walletCount:''});
     } catch (_) { if(sequence===this.sequence) this.setState({busy:false,error:'Could not prepare the close. Refresh and try again.'}); }
   }
-  async close(id) {
+  async close(id, countWallet=false) {
     if(this.closeInFlight || this.state.busy || this.state.unknownId || this.state.confirmId!==id) return;
+    const wallet=this.state.wallet, raw=this.state.walletCount, counted=Number(raw);
+    if(countWallet && (!wallet || typeof raw!=='string' || !/^(0|[1-9]\d*)$/.test(raw) || !Number.isSafeInteger(counted))) return;
     this.closeInFlight=true;
     const sequence=++this.sequence;
     const ownerKey=identityKey(this.state.data);
@@ -109,10 +120,22 @@ export class BusinessDays extends React.Component {
       if(sequence!==this.sequence) return;
       const finishesShift=shiftCloseEffect(shifts,id);
       if(finishesShift!==this.state.finishesShift) return this.setState({busy:false,finishesShift,error:'Shift status changed. Review this confirmation again.'});
-      uncertainCloses.set(ownerKey,id);
-      const r=await window.arra.businessDays({action:'close',dayId:id});
+      let request=null;
+      if(countWallet) {
+        request={dayId:id,pending:true,body:{action:'walletDayClose',dayId:id,shiftId:wallet.shiftId,counted,revision:wallet.revision,requestId:crypto.randomUUID()}};
+        uncertainWalletCloses.set(ownerKey,request);
+      } else uncertainCloses.set(ownerKey,id);
+      let r;
+      try { r=await window.arra.businessDays(request ? request.body : {action:'close',dayId:id}); }
+      finally { if(request) request.pending=false; }
       if(sequence!==this.sequence) return;
+      if(request && !r.ok) {
+        uncertainWalletCloses.delete(ownerKey);
+        if(r.error==='stale') { this.setState({busy:false,confirmId:null,wallet:null,walletCount:'',error:'Cash changed while counting. Review the day and count again.'}); return; }
+        this.setState({busy:false,error:'Could not close the day with this count. Review and try again.'}); return;
+      }
       if(!r.ok) { this.setState({busy:false,confirmId:null,unknownId:id,error:'The close result is unavailable. Check the day before trying again.'}); return; }
+      uncertainWalletCloses.delete(ownerKey);
       uncertainCloses.delete(ownerKey);
       this.setState({busy:false,confirmId:null,completedId:id,unknownId:null,success:'',successDay:null});
       const reloadSequence=this.sequence+1;
@@ -125,13 +148,15 @@ export class BusinessDays extends React.Component {
   async checkClose() {
     const id=this.state.unknownId;
     if(!id || this.state.busy) return;
+    const walletRequest=uncertainWalletCloses.get(identityKey(this.state.data));
+    if(walletRequest?.pending) { this.setState({error:'The close request is still settling. Check the day again.'}); return; }
     const sequence=this.sequence+1;
     const data=await this.load();
     if(sequence!==this.sequence) return;
     if(!data) return;
     const day=data.days.find(item=>item.id===id);
-    if(day && day.closedAt!==null) { uncertainCloses.delete(identityKey(data)); this.setState({unknownId:null,completedId:id,error:''}); }
-    else if(day) { uncertainCloses.delete(identityKey(data)); this.setState({unknownId:null,error:'The day is still open. You can review it again.'}); }
+    if(day && day.closedAt!==null) { uncertainWalletCloses.delete(identityKey(data)); uncertainCloses.delete(identityKey(data)); this.setState({unknownId:null,completedId:id,error:''}); }
+    else if(day) { uncertainWalletCloses.delete(identityKey(data)); uncertainCloses.delete(identityKey(data)); this.setState({unknownId:null,error:'The day is still open. You can review it again.'}); }
     else this.setState({error:'Could not find that day. Check again before closing.'});
     this.pollReports();
   }
@@ -213,7 +238,15 @@ export class BusinessDays extends React.Component {
           h('p',null,t('The permitted non-fiscal restaurant report will be sent to the configured printer.')),
           h('p',null,t('Turnover and outstanding work shown during review may change. The final report uses the state when you confirm.')),
           s.preview && s.preview.groups.length ? h('ul',null,s.preview.groups.map(g=>h('li',{key:g.account+g.method},t('{account} · {method} · {count} payments · {total}',{account:g.account,method:t(g.method),count:g.count,total:g.total})))) : h('p',null,t('No payments in this day for your permitted scope.')),
-          h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.close(open.id)},s.busy?t('Closing…'):t('Confirm close')),h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:null})},t('Back')))) :
+          s.walletUnavailable && h('div',{role:'alert'},h('p',null,t('Wallet status is unavailable. You can close without counting or try again.')),h('button',{disabled:s.busy,onClick:()=>this.review(open.id)},t('Try again'))),
+          s.wallet && h('div',{className:'finance-day wallet-form'},h('h4',null,t('Final wallet count')),
+            h('p',null,t('Expected in wallet'),': ',Number(s.wallet.expected).toLocaleString(),' MKD'),
+            h('label',null,t('Counted cash (MKD)'),h('input',{type:'number',min:0,step:1,inputMode:'numeric',value:s.walletCount,onChange:e=>this.setState({walletCount:e.target.value})})),
+            /^(0|[1-9]\d*)$/.test(s.walletCount) && Number.isSafeInteger(Number(s.walletCount)) && h('p',null,Number(s.walletCount)===s.wallet.expected ? t('Matches') : Number(s.walletCount)<s.wallet.expected ? t('Short')+' '+(s.wallet.expected-Number(s.walletCount)).toLocaleString()+' MKD' : t('Over')+' '+(Number(s.walletCount)-s.wallet.expected).toLocaleString()+' MKD')),
+          h('div',{className:'floor-actions'},s.wallet ? h(React.Fragment,null,
+            h('button',{className:'floor-primary',disabled:s.busy || !/^(0|[1-9]\d*)$/.test(s.walletCount) || !Number.isSafeInteger(Number(s.walletCount)),onClick:()=>this.close(open.id,true)},s.busy?t('Closing…'):t('Confirm count and close')),
+            h('button',{disabled:s.busy,onClick:()=>this.close(open.id)},t('Close without counting'))) : h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.close(open.id)},s.busy?t('Closing…'):t(s.walletUnavailable?'Close without counting':'Confirm close')),
+            h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:null})},t('Back')))) :
         open ? h('div',{className:'finance-day day-current'},h('h3',null,t('Current day #{id}',{id:open.id})),h('p',{className:'history-muted'},t("Opened ")+date(open.openedAt)),h('div',{className:'day-turnover'},h('span',null,t("Current turnover")),h('strong',null,s.turnover ? total(s.turnover)+' MKD' : t("Unavailable")),h('small',null,t('Recorded payments · non-fiscal · review amount'))),h('h4',null,t("Outstanding now")),h(ReviewIssues,{issues:s.data.issues,language:this.props.language,canReviewOrders:s.data.canReviewOrders,onReviewOrders:this.props.onReviewOrders,canReviewCancellationNotices:s.data.canReviewCancellationNotices,onReviewCancellationNotices:this.props.onReviewCancellationNotices}),h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.review(open.id)},t("Review and close day"))) : h('p',{role:'alert'},t("No open system day is available.")),
         h('details',{className:'day-details'},h('summary',null,t('More options')),h('button',{disabled:s.busy,onClick:()=>this.refresh()},t("Refresh")),
         h('details',{className:'day-details'},h('summary',null,t('Previous days ({count})',{count:closed.length})),closed.length ? closed.map(day=>h('details',{className:'finance-day',key:day.id},h('summary',null,t('Day #{id} · Closed {date}',{id:day.id,date:date(day.closedAt)})),h('p',{className:'history-muted'},t('Opened {date} · Closed by actor #{actor}',{date:date(day.openedAt),actor:day.closedBy})),h('h4',null,t("Daily turnover report")),printStatus(day),day.reportId && h('p',{className:'history-muted'},t('{count} attempt(s) · status: {status}',{count:day.printAttempts,status:t(day.printResult || "Unavailable")})),h('h4',null,t("Issues recorded at close")),h(Issues,{issues:day.issues,language:this.props.language}))) : h('p',{className:'history-muted'},t("No previous days."))),

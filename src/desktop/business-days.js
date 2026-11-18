@@ -3,6 +3,7 @@ const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const shifts = require('./shifts');
 const shiftPrint = require('./shift-print');
+const wallet = require('./wallet');
 const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
@@ -47,9 +48,10 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
   ipcMain.handle(CHANNEL, (event, req) => {
     if (req && typeof req.action === 'string' && req.action.startsWith('accountABills')) return require('./account-a-bills').handle(event, req, isAllowedSender, db, session, adapter);
     if (req && typeof req.action === 'string' && req.action.startsWith('accountA')) return require('./account-a-close').handleAccountA(event, req, isAllowedSender, db, session, adapter);
-    if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype ||
+    if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype || typeof req.action !== 'string' ||
       !((req.action === 'list' && Reflect.ownKeys(req).length === 1) ||
         (req.action === 'shiftList' && Reflect.ownKeys(req).length === 1) ||
+        (req.action.startsWith('wallet') && wallet.valid(req)) ||
         (req.action === 'shiftClose' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0) ||
         (req.action === 'shiftPrintStatus' && Reflect.ownKeys(req).length === 3 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0 && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'shiftPrint' && Reflect.ownKeys(req).length === 4 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
@@ -62,10 +64,20 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
       const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope;
       if (!actor || actor !== session.authenticatedUserId() || !['A','B','combined'].includes(scope) ||
           !hasPermissions(db, session, scope === 'combined' ? 'business_days.close' : 'employees.view')) return { ok: false };
+      if (req.action.startsWith('wallet') && scope !== 'combined') return {ok:false};
+      if (req.action === 'walletPrepare') return wallet.prepare(db,req.operation,actor);
+      if (req.action === 'walletCancel') return wallet.cancel(db,req.requestId,actor);
+      if (req.action === 'walletRequestStatus') {
+        db.exec('BEGIN');
+        try { const data=wallet.requestStatus(db,req.requestId,actor); db.exec('COMMIT'); return {ok:true,data}; }
+        catch (error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
+      }
+      if (req.action === 'walletExecute') req=wallet.preparedOperation(db,req.requestId,actor);
+      if (req.action.startsWith('wallet') && req.action !== 'walletDayClose') return wallet.handle(req,db,scope,actor);
       if (req.action === 'shiftList') {
         const result=shifts.handle(req,db,session,scope,actor);
         result.data.actorId=actor; result.data.scope=scope;
-        result.data.shifts=result.data.shifts.map(shift=>shift.closedAt===null?shift:{...shift,...shiftPrint.status(db,shift.id,scope)});
+        result.data.shifts=result.data.shifts.map(shift=>({...shift,...(shift.closedAt===null?{}:shiftPrint.status(db,shift.id,scope)),...(scope==='combined'?{wallet:wallet.historical(db,shift)}:{})}));
         return result;
       }
       if (req.action === 'shiftClose') return shifts.handle(req,db,session,scope,actor);
@@ -85,6 +97,10 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
       }
       db.exec('BEGIN IMMEDIATE');
       try {
+        if (req.action === 'walletDayClose') {
+          const prior=wallet.replay(db,req,actor);
+          if (prior) { db.exec('COMMIT'); return {ok:true,data:prior}; }
+        }
         if (req.action === 'retry') {
           const job = db.prepare('SELECT id,snapshot FROM day_print_jobs WHERE day_id=?').get(req.dayId);
           if (!job) throw Error('Report unavailable');
@@ -96,8 +112,14 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         }
         const day = db.prepare('SELECT id,opened_at AS openedAt FROM business_days WHERE id=? AND closed_at IS NULL').get(req.dayId);
         if (!day) { db.exec('ROLLBACK'); return { ok: false }; }
+        let walletCount=null;
+        if (req.action === 'walletDayClose') {
+          walletCount=wallet.verifyCount(db,req);
+          if (!walletCount) { db.exec('ROLLBACK'); return {ok:false,error:'stale'}; }
+        }
         const outstanding = issues(db), now = Date.now();
         shifts.finalizeDay(db,day.id,actor,now);
+        if (walletCount) wallet.insertClosing(db,req,actor,walletCount,true);
         const records = db.prepare(`SELECT p.id AS paymentId,p.bill_id AS billId,p.paid_at AS paidAt,p.amount,p.method,o.table_id AS tableId,COALESCE(c.account,p.account) AS account FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id JOIN bills b ON b.id=p.bill_id JOIN orders o ON o.id=b.order_id LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE pd.business_day_id=? ORDER BY p.paid_at,p.id`).all(day.id);
         let total=0;
         for (const row of records) { total += row.amount; if (!Number.isSafeInteger(row.amount) || row.amount < 0 || !Number.isSafeInteger(total)) throw Error('Invalid report total'); }
@@ -107,9 +129,11 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         db.prepare('UPDATE business_days SET closed_at=?, closed_by=?, issues=? WHERE id=?').run(now, actor, JSON.stringify(outstanding), day.id);
         db.prepare('INSERT INTO business_days(opened_at) VALUES (?)').run(now);
         recordAudit(db, actor, 'close', 'business_day', day.id, null, {});
+        const result={dayId:day.id,closedAt:now,issues:projectIssues(outstanding,scope)};
+        if (walletCount) wallet.saveRequest(db,req,actor,result);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
-        return { ok: true, data: { dayId: day.id, closedAt: now, issues: projectIssues(outstanding, scope) } };
+        return { ok: true, data: result };
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } catch (_) { return { ok: false }; }
   });

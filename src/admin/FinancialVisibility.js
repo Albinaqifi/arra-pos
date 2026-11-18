@@ -9,8 +9,9 @@ import { BillHistory } from './BillHistory.js';
 import { PaymentLists, FinancialDetail } from './FinancialDetails.js';
 import { ShiftClose } from './ShiftClose.js';
 export class FinancialVisibility extends React.Component {
-  constructor(props) { super(props); this.state={view:null,records:[],unpaid:null,totals:null,detail:null,error:'',loading:false,dayRevision:0,accountACloseAvailable:false,accountAProbeError:false,accountABillsAvailable:false,accountABillsProbeError:false}; this.sequence=0; this.mounted=false; }
-  componentDidMount() { this.mounted=true; this.probeAccountA(); this.probeAccountABills(); }
+  constructor(props) { super(props); this.state={view:null,records:[],unpaid:null,totals:null,detail:null,error:'',loading:false,dayRevision:0,accountACloseAvailable:false,accountAProbeError:false,accountABillsAvailable:false,accountABillsProbeError:false,walletStartAvailable:false}; this.sequence=0; this.mounted=false; }
+  componentDidMount() { this.mounted=true; this.probeAccountA(); this.probeAccountABills(); this.probeWallet(); }
+  async probeWallet() { try { const r=await window.arra.businessDays({action:'walletStatus'}); if(this.mounted) this.setState({walletStartAvailable:r?.ok===true && r.data?.available!==false && r.data?.baseline==null}); } catch (_) { if(this.mounted) this.setState({walletStartAvailable:false}); } }
   async probeAccountABills() { try { const r=await window.arra.businessDays({action:'accountABillsList'}); if(this.mounted) this.setState({accountABillsAvailable:r.ok===true,accountABillsProbeError:!r.ok && r.denied!==true}); } catch (_) { if(this.mounted) this.setState({accountABillsAvailable:false,accountABillsProbeError:true}); } }
   async probeAccountA() {
     try {
@@ -28,7 +29,7 @@ export class FinancialVisibility extends React.Component {
       this.setState({records:records.data,totals:totals.data,unpaid:unpaid.data,loading:false});
     } catch (_) { if(sequence===this.sequence) this.setState({loading:false,error:'Could not load financial information. Please try again.'}); }
   }
-  selectView(view) { this.sequence++; this.setState({view,detail:null,error:'',loading:false}); if(view==='history') this.load(); }
+  selectView(view) { this.sequence++; this.setState({view,detail:null,error:'',loading:false}); if(view==='history') this.load(); if(!view) this.probeWallet(); }
   detail(id) { return this.open('detail',id); }
   unpaidDetail(id) { return this.open('unpaidDetail',id); }
   async open(action,id) {
@@ -42,6 +43,7 @@ export class FinancialVisibility extends React.Component {
   render() {
     const h=React.createElement,s=this.state, t=key=>financeText(this.props.language,key);
     const options=[['performance',activityText(this.props.language,'Waiter performance'),activityText(this.props.language,'Review sales, payments and cancellations by waiter')],['billHistory',t('Bill history'),t('Review paid bills by business day')],['today',t("Current day turnover"),t("See today’s payments and totals")],['reports',t("Previous days & reports"),t("Review a closed day or date range")],['history',t("Payment history"),t("Find payments and unpaid bills")],['shift',t('Close shift'),t('Review this shift and start the next one.')],['close',t("Close current day"),t("Review outstanding orders before closing")]];
+    if(s.walletStartAvailable) options.push(['walletStart',t('Start shift'),t('Count the shared cash wallet')]);
     if(s.accountABillsAvailable) options.push(['accountABills',t('Print Account A bills'),t('Preview paid bills and totals by day')]);
     if(s.accountACloseAvailable) options.push(['accountAClose',t('Close Account A'),t('Review and close Account A for a closed day')]);
     const title=options.find(x=>x[0]===s.view)?.[1];
@@ -54,6 +56,7 @@ export class FinancialVisibility extends React.Component {
       s.view==='reports' && h(SalesReports,{language:this.props.language,key:'reports-'+s.dayRevision,mode:'reports'}),
       s.view==='close' && h(BusinessDays,{language:this.props.language,onReviewOrders:this.props.onReviewOrders,onReviewCancellationNotices:this.props.onReviewCancellationNotices,onDaysChanged:()=>this.setState({dayRevision:this.state.dayRevision+1})}),
       s.view==='shift' && h(ShiftClose,{language:this.props.language,onDone:()=>this.selectView(null)}),
+      s.view==='walletStart' && h(ShiftClose,{language:this.props.language,onDone:()=>this.selectView(null)}),
       s.view==='accountABills' && h(AccountABills,{language:this.props.language}),
       s.view==='accountAClose' && h(AccountAClosing,{language:this.props.language}),
       s.view==='history' && h(React.Fragment,null,h('p',{className:'admin-intro'},t("Recorded payments available to your account.")),h('section',{className:'history-panel'},s.detail && h('button',{onClick:()=>this.load()},t("← All payment history")),s.loading ? h('p',{role:'status'},t("Loading financial information…")) : s.error ? h('div',null,h('p',{role:'alert'},t(s.error)),h('button',{onClick:()=>this.load()},t("Reload history"))) : !s.detail && s.totals && h('div',{className:'finance-metrics'},h('div',null,h('span',null,t("Payments")),h('strong',null,s.totals.count)),h('div',null,h('span',null,t("Total")),h('strong',null,s.totals.total)))),!s.loading && !s.error && (s.detail ? h(FinancialDetail,{language:this.props.language,data:s.detail}) : h(PaymentLists,{language:this.props.language,records:s.records,unpaid:s.unpaid,openPayment:id=>this.open('detail',id),openBill:id=>this.open('unpaidDetail',id)}))));

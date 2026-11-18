@@ -163,6 +163,9 @@ input { font-family: inherit; }
 .finance-metrics span, .finance-metrics strong { display: block; } .finance-metrics span { color: #64748b; font-size: 14px; } .finance-metrics strong { margin-top: 5px; font-size: 22px; }
 .finance-issues p { margin: 8px 0 0; color: #475569; } .finance-day { margin: 16px 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 12px; } .finance-day h3 { margin: 0; }
 .finance-confirm { margin-top: 12px; padding: 16px; background: #fff7ed; color: #7c2d12; border: 1px solid #fed7aa; border-radius: 12px; }
+.admin-content .wallet-form label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; max-width: 320px; }
+.wallet-form input, .wallet-form select { box-sizing: border-box; width: 100%; min-height: 44px; padding: 8px 10px; font: inherit; border: 1px solid #94a3b8; border-radius: 8px; }
+.wallet-form button { margin: 4px 8px 4px 0; }
 .day-turnover { margin: 18px 0; padding: 18px; border-radius: 12px; background: #112548; color: #fff; }
 .day-turnover span, .day-turnover strong, .day-turnover small { display: block; }
 .day-turnover strong { font-size: 28px; margin: 6px 0; }

@@ -335,6 +335,30 @@ const migrations = [
     CREATE TRIGGER shift_print_attempts_no_delete BEFORE DELETE ON shift_print_attempts BEGIN SELECT RAISE(ABORT,'Print attempts are retained'); END;
     CREATE TRIGGER shift_print_results_no_update BEFORE UPDATE ON shift_print_results BEGIN SELECT RAISE(ABORT,'Print results are retained'); END;
     CREATE TRIGGER shift_print_results_no_delete BEFORE DELETE ON shift_print_results BEGIN SELECT RAISE(ABORT,'Print results are retained'); END;` },
+  { version: 41, sql: `CREATE TABLE wallet_baselines (shift_id INTEGER PRIMARY KEY REFERENCES restaurant_shifts(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), recorded_at INTEGER NOT NULL, amount INTEGER NOT NULL CHECK(amount>=0), payment_boundary INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('opening','midshift','carry'))) STRICT;
+    CREATE TABLE wallet_movements (id INTEGER PRIMARY KEY, shift_id INTEGER NOT NULL REFERENCES restaurant_shifts(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), recorded_at INTEGER NOT NULL, direction TEXT NOT NULL CHECK(direction IN ('in','out')), amount INTEGER NOT NULL CHECK(amount>0), reason TEXT NOT NULL CHECK(length(trim(reason)) BETWEEN 1 AND 200)) STRICT;
+    CREATE TABLE wallet_closings (shift_id INTEGER PRIMARY KEY REFERENCES restaurant_shifts(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), recorded_at INTEGER NOT NULL, expected INTEGER NOT NULL, counted INTEGER NOT NULL CHECK(counted>=0), variance INTEGER NOT NULL, retained INTEGER CHECK(retained>=0), taken INTEGER CHECK(taken>=0), day_close INTEGER NOT NULL CHECK(day_close IN (0,1))) STRICT;
+    CREATE TABLE wallet_requests (request_id TEXT PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), action TEXT NOT NULL, payload TEXT NOT NULL, result TEXT NOT NULL) STRICT;
+    CREATE TABLE wallet_prepared (request_id TEXT PRIMARY KEY, actor_id INTEGER NOT NULL REFERENCES local_users(id), action TEXT NOT NULL, payload TEXT NOT NULL, operation TEXT NOT NULL) STRICT;
+    CREATE TABLE wallet_cancellations (request_id TEXT PRIMARY KEY REFERENCES wallet_prepared(request_id), actor_id INTEGER NOT NULL REFERENCES local_users(id), cancelled_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER wallet_baselines_no_update BEFORE UPDATE ON wallet_baselines BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_baselines_no_delete BEFORE DELETE ON wallet_baselines BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_movements_no_update BEFORE UPDATE ON wallet_movements BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_movements_no_delete BEFORE DELETE ON wallet_movements BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_closings_no_update BEFORE UPDATE ON wallet_closings BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_closings_no_delete BEFORE DELETE ON wallet_closings BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_requests_no_update BEFORE UPDATE ON wallet_requests BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_requests_no_delete BEFORE DELETE ON wallet_requests BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_prepared_no_update BEFORE UPDATE ON wallet_prepared BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_prepared_no_delete BEFORE DELETE ON wallet_prepared BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_cancellations_no_update BEFORE UPDATE ON wallet_cancellations BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_cancellations_no_delete BEFORE DELETE ON wallet_cancellations BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_baselines_no_replace BEFORE INSERT ON wallet_baselines WHEN EXISTS(SELECT 1 FROM wallet_baselines WHERE shift_id=NEW.shift_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_movements_no_replace BEFORE INSERT ON wallet_movements WHEN EXISTS(SELECT 1 FROM wallet_movements WHERE id=NEW.id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_closings_no_replace BEFORE INSERT ON wallet_closings WHEN EXISTS(SELECT 1 FROM wallet_closings WHERE shift_id=NEW.shift_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_requests_no_replace BEFORE INSERT ON wallet_requests WHEN EXISTS(SELECT 1 FROM wallet_requests WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_prepared_no_replace BEFORE INSERT ON wallet_prepared WHEN EXISTS(SELECT 1 FROM wallet_prepared WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
+    CREATE TRIGGER wallet_cancellations_no_replace BEFORE INSERT ON wallet_cancellations WHEN EXISTS(SELECT 1 FROM wallet_cancellations WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.
@@ -390,7 +414,13 @@ function openDatabase(dataDirectory) {
   fs.mkdirSync(dataDirectory, { recursive: true });
   const db = new DatabaseSync(path.join(dataDirectory, 'arra.sqlite'));
   try {
+    // Another connection can be opening or upgrading this database at the same
+    // time. Wait briefly for its migration transaction without changing the
+    // lock behavior of subsequent service operations on this connection.
+    const busyTimeout = db.prepare('PRAGMA busy_timeout').get().timeout;
+    db.exec('PRAGMA busy_timeout = 5000');
     migrate(db);
+    db.exec(`PRAGMA busy_timeout = ${busyTimeout}`);
     return db;
   } catch (error) {
     db.close();

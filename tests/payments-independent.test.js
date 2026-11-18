@@ -59,21 +59,28 @@ test('simultaneous separate connections and subsequent retries cannot duplicate 
     let readyResolve, resultResolve, reject;
     const ready = new Promise((resolve, fail) => { readyResolve = resolve; reject = fail; });
     const result = new Promise((resolve, fail) => { resultResolve = resolve; worker.on('error', fail); });
+    // A startup failure can reject before the result is awaited.
+    result.catch(() => {});
     worker.on('error', reject);
     worker.on('message', message => message === 'ready' ? readyResolve() : resultResolve(message));
-    return { ready, result };
+    return { worker, ready, result };
   }
   const workers = [start(), start()];
-  await Promise.all(workers.map(w => w.ready));
-  Atomics.store(new Int32Array(shared), 0, 1); Atomics.notify(new Int32Array(shared), 0, 2);
-  const results = await Promise.all(workers.map(w => w.result));
-  assert.ok(results.some(r => r.ok));
-  const request = { billId: 1, method: 'card', account: 'A' };
-  assert.equal(call(request).ok, true);
-  assert.equal(call(request).ok, true);
-  assert.equal(db.prepare('SELECT count(*) n FROM payments WHERE bill_id=1').get().n, 1);
-  assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE entity_type='payment'").get().n, 1);
-  assert.equal(db.prepare('SELECT status FROM orders WHERE id=1').get().status, 'completed');
+  try {
+    await Promise.all(workers.map(w => w.ready));
+    Atomics.store(new Int32Array(shared), 0, 1); Atomics.notify(new Int32Array(shared), 0, 2);
+    const results = await Promise.all(workers.map(w => w.result));
+    assert.ok(results.some(r => r.ok));
+    const request = { billId: 1, method: 'card', account: 'A' };
+    assert.equal(call(request).ok, true);
+    assert.equal(call(request).ok, true);
+    assert.equal(db.prepare('SELECT count(*) n FROM payments WHERE bill_id=1').get().n, 1);
+    assert.equal(db.prepare("SELECT count(*) n FROM application_audit WHERE entity_type='payment'").get().n, 1);
+    assert.equal(db.prepare('SELECT status FROM orders WHERE id=1').get().status, 'completed');
+  } finally {
+    Atomics.store(new Int32Array(shared), 0, 1); Atomics.notify(new Int32Array(shared), 0, 2);
+    await Promise.all(workers.map(w => w.worker.terminate()));
+  }
 });
 
 test('failed simulated preparation printing does not prevent payment or erase history', t => {
