@@ -8,6 +8,8 @@ The owner identified the fiscal printer in a photograph as a Synergy PF700 and c
 
 The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. The owner subsequently ran paper test v2 on that POS and confirmed the PF700 printed the diagnostic slip. Fiscal sale registration and the official daily report still need verification.
 
+The resulting diagnostic slip identifies the printer as **SYNERGY FP-700CRX**, with firmware **1.00MK** dated **23 October 2014**, and lists **RS232 at 9600 bps**. The slip does not identify the tax group assigned to coffee in the restaurant's menu.
+
 In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
 
 The Windows sample package from version 1.0.2 includes `check-pf700.ps1` alongside `electron.exe`. Calling it without arguments runs the offline check. A later, operator-authorized hardware session requires the full `-ReadDeviceStatus` option. The equivalent source entry is `node src/desktop/pf700-status-cli.js`, with `--read-device-status` reserved for that session.
