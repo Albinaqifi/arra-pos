@@ -4,6 +4,11 @@ const date=value=>new Date(value).toLocaleString();
 // Unacknowledged operations survive navigation but never cross authenticated actors.
 const retryTokens=new Map(), uncertainCloses=new Map();
 const identityKey=data=>String(data?.actorId ?? 'unknown')+':'+String(data?.scope ?? 'unknown');
+function shiftCloseEffect(response,dayId) {
+  if(!response?.ok || response.data?.dayId!==dayId || !Array.isArray(response.data.shifts)) return null;
+  const shifts=response.data.shifts.filter(shift=>shift.dayId===dayId);
+  return shifts.some(shift=>shift.closedAt!==null) && shifts.some(shift=>shift.closedAt===null && shift.reportable);
+}
 function issueText(j,t) {
   const label=j.id==null ? t(j.result || 'Unavailable') : (j.kind==='cancellation'?t('Cancellation notice'):j.kind==='preparation'?t('Preparation ticket'):t('Simulated ticket'))+' '+t('#{id} · {status}',{id:j.id,status:t(j.result || 'Unavailable')});
   return label+(j.retryBlocked?' · '+t('Do not retry: ticket contains a cancellation. Tell preparation staff in person.'):(j.kind==='cancellation' || j.cancellationNotice)?' · '+t('Tell preparation staff in person.'):'');
@@ -79,25 +84,32 @@ export class BusinessDays extends React.Component {
   async review(id) {
     if(this.state.busy || this.state.unknownId) return;
     const sequence=++this.sequence;
-    this.setState({busy:true,error:'',confirmId:null,preview:null,success:''});
+    this.setState({busy:true,error:'',confirmId:null,preview:null,success:'',finishesShift:false});
     try {
-      const [day, report] = await Promise.all([
+      const [day, report, shifts] = await Promise.all([
         window.arra.businessDays({action:'list'}),
-        window.arra.financialVisibility({action:'report',from:null,to:null,dayId:id,account:null,method:null})
+        window.arra.financialVisibility({action:'report',from:null,to:null,dayId:id,account:null,method:null}),
+        Promise.resolve().then(()=>window.arra.businessDays({action:'shiftList'})).catch(()=>null)
       ]);
       if(sequence!==this.sequence) return;
       if (!day.ok || !report.ok || !day.data.days.some(d=>d.id===id && d.closedAt===null))
         return this.setState({busy:false,error:'Could not prepare the close. Refresh and try again.'});
-      this.setState({busy:false,data:day.data,turnover:report.data,preview:report.data,confirmId:id});
+      const finishesShift=shiftCloseEffect(shifts,id);
+      this.setState({busy:false,data:day.data,turnover:report.data,preview:report.data,confirmId:id,finishesShift});
     } catch (_) { if(sequence===this.sequence) this.setState({busy:false,error:'Could not prepare the close. Refresh and try again.'}); }
   }
   async close(id) {
-    if(this.state.busy || this.state.unknownId || this.state.confirmId!==id) return;
+    if(this.closeInFlight || this.state.busy || this.state.unknownId || this.state.confirmId!==id) return;
+    this.closeInFlight=true;
     const sequence=++this.sequence;
     const ownerKey=identityKey(this.state.data);
-    uncertainCloses.set(ownerKey,id);
     this.setState({busy:true,error:'',success:'',successDay:null,lastRetry:null});
     try {
+      const shifts=await Promise.resolve().then(()=>window.arra.businessDays({action:'shiftList'})).catch(()=>null);
+      if(sequence!==this.sequence) return;
+      const finishesShift=shiftCloseEffect(shifts,id);
+      if(finishesShift!==this.state.finishesShift) return this.setState({busy:false,finishesShift,error:'Shift status changed. Review this confirmation again.'});
+      uncertainCloses.set(ownerKey,id);
       const r=await window.arra.businessDays({action:'close',dayId:id});
       if(sequence!==this.sequence) return;
       if(!r.ok) { this.setState({busy:false,confirmId:null,unknownId:id,error:'The close result is unavailable. Check the day before trying again.'}); return; }
@@ -108,6 +120,7 @@ export class BusinessDays extends React.Component {
       if(reloadSequence!==this.sequence) return;
       this.pollReports(); if(this.props.onDaysChanged) this.props.onDaysChanged();
     } catch (_) { if(sequence===this.sequence) this.setState({busy:false,confirmId:null,unknownId:id,error:'The close result is unavailable. Check the day before trying again.'}); }
+    finally { this.closeInFlight=false; }
   }
   async checkClose() {
     const id=this.state.unknownId;
@@ -194,6 +207,8 @@ export class BusinessDays extends React.Component {
         completed ? h('div',{className:'finance-day day-completion'},h('h3',null,t('Day #{id} is closed',{id:completed.id})),h('p',null,t('Closed {date}',{date:date(completed.closedAt)})),h('p',null,t('A new business day is open.')),completionReport,h('button',{onClick:()=>this.setState({completedId:null,success:'',lastRetry:null})},t('Go to current day'))) :
         open && s.confirmId===open.id ? h('div',{className:'finance-day finance-confirm',role:'group','aria-label':t('Confirm business day close')},h('h3',null,t('Close day #{id}?',{id:open.id})),
           h('p',null,t('This closes the shared day for both owners. A new day opens. Transfer-manager corrections for this day stop.')),
+          s.finishesShift && h('p',null,t('Closing the day also finishes the active shift.')),
+          s.finishesShift===null && h('p',null,t('Shift status is unavailable. Closing the day will finish any active shift.')),
           s.data.issues?.orders?.length>0 && h('p',null,t('Open orders ({count})',{count:s.data.issues.orders.length})+' · '+t('Open orders stay open. Payments recorded after closing belong to the new day.')),
           h('p',null,t('The permitted non-fiscal restaurant report will be sent to the configured printer.')),
           h('p',null,t('Turnover and outstanding work shown during review may change. The final report uses the state when you confirm.')),
