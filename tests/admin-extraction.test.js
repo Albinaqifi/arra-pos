@@ -65,7 +65,7 @@ test('switch blocks table identification and sign-out until clear and grid loadi
     vm.runInNewContext(require('./support/admin-bundle')(),ctx); vm.runInNewContext(require('./support/waiter-views')() + require('./support/renderer-bundle')()+'\nthis.Demo=WaiterDemo;',ctx);
     const app=new ctx.Demo(); arrange(app, {screen:'admin',adminAccess:true,waiter:{name:'Admin'}});
     const pending=app.session.switchWaiter();
-    app.session.requestTable(2); app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); await app.session.signOut();
+    app.session.requestTable(2); await app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await app.session.signOut();
     assert.equal(selected,0); assert.equal(signedOut,0); assert.equal(app.session.state.waiter,null); assert.equal(app.session.state.switching,true);
     releaseClear({ok:success});
     if (success) { await new Promise(setImmediate); app.session.requestTable(2); await app.session.submitPin(); await app.session.signOut(); assert.equal(selected,0); assert.equal(signedOut,0); releaseWaiters({ok:true,data:[]}); }

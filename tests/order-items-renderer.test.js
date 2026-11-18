@@ -111,6 +111,6 @@ test('a replay after a lost send response warns that newly added items remain pe
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.tableOrders.openTable(1);
   await app.pending.addProduct('p'); await app.sendWorkflow.send(); await app.pending.addProduct('p'); await app.sendWorkflow.send();
   assert.equal(sends[0],sends[1]); assert.equal(routeOf(app),'tables'); assert.match(app.session.state.handoffNotice,/still pending/);
-  app.session.requestTable(1); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); assert.equal(routeOf(app),'order'); assert.equal(app.tableOrders.state.items[1].status,'pending');
+  app.session.requestTable(1); await app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); assert.equal(routeOf(app),'order'); assert.equal(app.tableOrders.state.items[1].status,'pending');
   await app.sendWorkflow.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'tables'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
 });

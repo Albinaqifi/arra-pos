@@ -71,7 +71,9 @@ export class SessionModel extends FeatureState {
   setPin(pin) {
     if (this.disposed || this.selecting || this.switching || !this.state.pinFor) return;
     const length = this.state.pinFor.isTransfer ? 6 : 4;
-    this._set({ pin: String(pin).replace(/[^0-9]/g, '').slice(0, length) });
+    const value = String(pin).replace(/[^0-9]/g, '').slice(0, length);
+    this._set({ pin: value, waiterMessage: '' });
+    if (!this.state.pinFor.isTransfer && value.length === length) return this.submitPin();
   }
   pinPress(key) {
     if (this.disposed || this.selecting || this.switching || !this.state.pinFor) return;
@@ -79,7 +81,7 @@ export class SessionModel extends FeatureState {
     if (key === 'Clear') pin = '';
     else if (key === 'Del') pin = pin.slice(0, -1);
     else if (/^[0-9]$/.test(key)) pin += key;
-    this.setPin(pin);
+    return this.setPin(pin);
   }
   cancelPin() {
     if (this.selecting || this.switching) return;
@@ -104,10 +106,9 @@ export class SessionModel extends FeatureState {
       if (!this._current(generation)) return;
       if (!result?.ok) throw new Error('denied');
       const waiter = { ...result.data, color: '#1D4ED8' };
-      this.pinOrigin = null;
       this.clearProtectedData();
       this.dismissSelectedOrder();
-      this._set({ waiter, adminAccess: false, pinFor: null, pin: '', screen: target.isTransfer ? 'transferCorrection' : 'waiter' });
+      this._set({ waiter, adminAccess: false, pin: '', screen: target.isTransfer ? 'transferCorrection' : 'waiter' });
       if (!target.isTransfer) {
         if (this.bridge) await this.loadProtectedData();
         if (!this._current(generation)) return;
@@ -115,15 +116,17 @@ export class SessionModel extends FeatureState {
         if (!this._current(generation)) return;
         if (!opened) throw new Error('denied');
       }
+      this.pinOrigin = null;
+      this._set({ pinFor: null });
     } catch (_) {
       if (!this._current(generation)) return;
-      this.pinOrigin = null;
       this.clearProtectedData(); this.dismissSelectedOrder();
-      this._set({ waiter: null, adminAccess: false, pinFor: null, pin: '', screen: 'waiter', waiterMessage: this.t('PIN or table access was denied.') });
+      this._set({ waiter: null, adminAccess: false, pinFor: target.isTransfer ? null : target, pin: '', screen: 'waiter', waiterMessage: this.t('PIN or table access was denied.') });
+      if (target.isTransfer) this.pinOrigin = null;
       // A lost reply can still have selected an actor; clear before exposing the grid.
       if (this.bridge) {
         try { if (!(await this.bridge.clearWaiter()).ok) throw new Error(); }
-        catch (_) { if (this._current(generation)) this._set({ recoveryRequired: true, waiterMessage: this.t('Could not clear the session. Retry or sign out.') }); return; }
+        catch (_) { if (this._current(generation)) { this.pinOrigin = null; this._set({ pinFor: null, recoveryRequired: true, waiterMessage: this.t('Could not clear the session. Retry or sign out.') }); } return; }
         if (this._current(generation)) await this.loadEntryTables();
       }
     } finally {
@@ -168,7 +171,7 @@ export class SessionModel extends FeatureState {
       user: state.user, pass: state.pass, onUser: event => this.setUsername(event.target.value), onPass: event => this.setPassword(event.target.value), login: () => this.login(),
       switching: state.switching, handoffNotice: state.handoffNotice, waiterMessage: state.waiterMessage, desktop: !!this.bridge,
       pinName: '', pinInitial: '', pinAv: avatar('#475569', 84), pinPrompt: t(selected?.isTransfer ? 'Enter the manager 6-digit PIN' : 'Enter your 4-digit PIN'),
-      pin: state.pin, onPin: event => this.setPin(event.target.value), submitPin: () => this.submitPin(), pinTarget: selected?.isTransfer ? t('Manager') : t('Table {id}', { id: selected?.tableId }),
+      pin: state.pin, onPin: event => this.setPin(event.target.value), submitPin: () => this.submitPin(), pinIsManager: !!selected?.isTransfer, pinTarget: selected?.isTransfer ? t('Manager') : t('Table {id}', { id: selected?.tableId }),
       pinDots: Array.from({ length: selected?.isTransfer ? 6 : 4 }, (_, index) => ({ style: index < state.pin.length ? 'width:22px; height:22px; border-radius:999px; background:#0F172A' : 'width:22px; height:22px; border-radius:999px; border:3px solid #94A3B8; box-sizing:border-box' })),
       keys: ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', 'Del'].map(key => ({ label: key === 'Del' ? t('Delete') : key === 'Clear' ? t('Clear') : key, aria: key === 'Del' ? t('Delete last digit') : key === 'Clear' ? t('Clear PIN') : t('Digit {digit}', { digit: key }), press: () => this.pinPress(key), style: 'height:64px; border-radius:18px; border:2px solid #E2E8F0; background:' + (key.length > 1 ? '#F1F5F9' : '#FFFFFF') + '; color:#0F172A; font-size:' + (key.length > 1 ? '18px' : '28px') + '; font-weight:800' })),
       pinBack: () => this.cancelPin(),

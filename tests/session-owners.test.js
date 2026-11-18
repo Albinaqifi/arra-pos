@@ -38,8 +38,8 @@ test('account owner preserves leading zero PINs and isolates waiter, transfer an
     if (index) owner.requestManager(); else owner.requestTable(7);
     assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.accountView().pinDots.length, pins[index].length);
     await owner.submitPin(); assert.equal(owner.state.pin, ''); assert.ok(owner.state.pinFor);
-    for (const digit of pins[index]) owner.pinPress(digit);
-    await owner.submitPin();
+    for (const digit of pins[index]) await owner.pinPress(digit);
+    if (index) await owner.submitPin();
     assert.equal(owner.state.screen, index ? 'transferCorrection' : 'waiter');
     assert.equal(selections.at(-1).pin, pins[index]); assert.equal(owner.state.adminAccess, false);
     await owner.switchWaiter();
@@ -55,7 +55,7 @@ test('switch hides protected records immediately and blocks entry after a failed
   let release, success = false;
   const api = { identifyStaff: async () => ({ ok: true, data: {id:1,name:'Sample'} }), clearWaiter: () => new Promise(resolve => { release = resolve; }) };
   const { owner, calls } = session(api);
-  owner.state.screen='waiter'; owner.requestTable(1); owner.setPin('1234'); await owner.submitPin();
+  owner.state.screen='waiter'; owner.requestTable(1); await owner.setPin('1234');
   for (success of [false, true]) {
     const before = calls.clear, pending = owner.switchWaiter();
     const entries = calls.entry;
@@ -73,7 +73,7 @@ test('an old administration callback cannot revoke a newer staff identity', asyn
   const { owner, calls } = session(api);
   owner.setUsername('sample owner'); owner.setPassword(randomBytes(18).toString('hex')); await owner.login();
   const checking = owner.refreshAdminAccess(owner.state.identityGeneration);
-  await owner.signOut(); admin=false; owner.setUsername('restaurant'); owner.setPassword('sample'); await owner.login(); owner.requestTable(1); owner.setPin('1234'); await owner.submitPin();
+  await owner.signOut(); admin=false; owner.setUsername('restaurant'); owner.setPassword('sample'); await owner.login(); owner.requestTable(1); await owner.setPin('1234');
   const before = calls.clear;
   release({ ok: true, signedIn: false, selected: false, admin: false });
   assert.equal(await checking, false); assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.state.waiter.name, 'New staff'); assert.equal(calls.clear, before);

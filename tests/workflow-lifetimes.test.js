@@ -54,7 +54,7 @@ test('an unacknowledged send retains its outbound request through language and w
   const app = new context.RendererModules.WaiterDemo(); app._mounted = true;
   arrange(app, { screen: 'order', waiter: { id: 1, name: 'First' }, tableId: 1, orders: { 1: { id: 7, log: [] } } });
   await app.sendWorkflow.send(); await app.settings.changeLanguage('sq'); await app.session.switchWaiter();
-  app.session.requestTable(2); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); assert.equal(routeOf(app),'order');
+  app.session.requestTable(2); await app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); assert.equal(routeOf(app),'order');
   await app.sendWorkflow.send();
   assert.equal(requests.length, 2); assert.deepEqual(requests[1], requests[0]);
   assert.equal(requests[0].orderId, 7); assert.equal(sequence, 1);

@@ -17,7 +17,7 @@ function harness(api) {
 }
 const row = status => ({id:1,productId:'p',name:'Dish',unitPrice:10,quantity:1,status,sentAt:Date.now(),note:'',modifiers:[]});
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const reenter = async (app, tableId = 1, pin = String(randomInt(10000)).padStart(4,'0')) => { app.session.requestTable(tableId); app.session.setPin(pin); await app.session.submitPin(); };
+const reenter = async (app, tableId = 1, pin = String(randomInt(10000)).padStart(4,'0')) => { app.session.requestTable(tableId); await app.session.setPin(pin); };
 const grid = async () => ({ok:true,data:[{id:1,area:'Inside',occupied:true}]});
 const selected = async () => ({ok:true,data:{id:2,name:'Next',isTransfer:false}});
 const open = async tableId => ({ok:true,data:{id:5,tableId,openedAt:1}});

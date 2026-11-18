@@ -49,7 +49,7 @@ test('desktop login and sign-out traverse the bridge and clear credentials', asy
   assert.doesNotThrow(() => app.render());
   assert.equal(app.session.state.waiter,null); assert.ok(app.tableOrders.state.sections.length);
   const waiterId = db.prepare("SELECT id FROM local_users WHERE username='sample-waiter'").get().id;
-  app.session.requestTable(1); app.session.setPin(staffPin); await app.session.submitPin();
+  app.session.requestTable(1); await app.session.setPin(staffPin);
   assert.equal(session.currentUserId(), waiterId);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(routeOf(app), 'order');
@@ -59,7 +59,7 @@ test('desktop login and sign-out traverse the bridge and clear credentials', asy
   await app.session.switchWaiter();
   assert.equal(routeOf(app), 'tables'); assert.equal(session.currentUserId(), null);
   assert.ok(app.tableOrders.state.sections.length); assert.equal(app.tableOrders.state.items.length,0); assert.doesNotThrow(() => app.render());
-  app.session.requestTable(1); app.session.setPin(staffPin); await app.session.submitPin();
+  app.session.requestTable(1); await app.session.setPin(staffPin);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.tableOrders.state.tableLoad, 'ready'); assert.equal(session.currentUserId(), waiterId);
   await app.session.signOut();

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { randomInt } = require('node:crypto');
-const enterTable = async (app, tableId=1) => { app.session.requestTable(tableId); app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); };
+const enterTable = async (app, tableId=1) => { app.session.requestTable(tableId); await app.session.setPin(String(randomInt(10000)).padStart(4,'0')); };
 const identified = async () => ({ok:true,data:{id:1,name:'Sample waiter',isTransfer:false}});
 
 test('inaccessible occupied tables show neutral denial in English and Albanian without item details', async () => {

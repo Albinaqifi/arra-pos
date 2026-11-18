@@ -13,7 +13,7 @@ export function renderShellHeader(identity, clock) {
 
 export function renderShellFrame({ desktopBill, account, header, printing, content, dialogs, toast }) {
   return React.createElement(React.Fragment, null, desktopBill, '\n',
-    React.createElement('div', { style: style("height: 100vh; min-height: 820px; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden") },
+    React.createElement('div', { style: style("height: 100vh; min-height: 0; display: flex; flex-direction: column; background: #F4F6FB; color: #0F172A; font-family: 'Figtree', system-ui, sans-serif; overflow: hidden") },
       account, header, printing, content, dialogs,
       toast.hasToast ? React.createElement('div', { role: 'status', style: style(toast.toastStyle) }, toast.toastText) : null));
 }
