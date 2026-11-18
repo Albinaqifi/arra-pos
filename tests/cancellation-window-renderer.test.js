@@ -16,10 +16,11 @@ test('deadline keeps cancellation available and requests owner approval in both 
   now=1000500; fireTimer(1000); // Clock moved back, but remains after the send time.
   now=1119999; fireTimer(1000);
   assert.equal(app.correction.open(1),true);app.correction.chooseReason('Entered by mistake');app.correction.review();
-  now=1120000; fireTimer(1); assert.equal(refreshes,4); assert.equal(timers.size,0); const nodes=sentControl();assert.equal(nodes.find(n=>n.type==='button').props.disabled,false);assert.ok(nodes.some(n=>n.type==='span' && /Combined|kombinuar/i.test(n.children[0])));
+  now=1120000; fireTimer(1); assert.equal(refreshes,4); assert.equal(timers.size,0); const nodes=sentControl();assert.equal(nodes.find(n=>n.type==='button').props.disabled,false);assert.ok(nodes.some(n=>n.type==='span' && /admin/i.test(n.children[0])));
   // Effects that install DOM focus are not needed for this state-level check.
   React.useEffect=()=>{}; await app.correction.confirm();assert.equal(app.tableOrders.state.items[0].cxQty,0);assert.equal(app.correction.state.dialog.phase,'pin');
-  const pinView=walk(ctx.Pin({t:app.correction.view().t,dialog:app.correction.state.dialog,onChange(){},onKey(){},onVerify(){},onCancel(){}}));assert.ok(pinView.some(n=>n.type==='input'&&n.props.type==='password'));assert.equal(pinView.filter(n=>n.type==='button').length,14);assert.equal(pinView.some(n=>n.type==='input'&&n.props.type==='text'),false);
+  const pinView=walk(ctx.Pin({t:app.correction.view().t,dialog:app.correction.state.dialog,onChange(){},onKey(){},onVerify(){},onCancel(){}}));assert.ok(pinView.some(n=>n.type==='input'&&n.props.type==='password'&&n.props['aria-label']));assert.equal(pinView.filter(n=>n.type==='button').length,14);assert.equal(pinView.some(n=>n.type==='input'&&n.props.type==='text'),false);assert.equal(pinView.filter(n=>n.props.className==='owner-pin-dot').length,6);assert.equal(pinView.find(n=>n.props.className==='owner-pin-dots').props['aria-hidden'],true);
+  app.correction.pinKey(String(require('node:crypto').randomInt(10)));app.correction.pinKey(String(require('node:crypto').randomInt(10)));const filled=walk(ctx.Pin({t:app.correction.view().t,dialog:app.correction.state.dialog,onChange(){},onKey(){},onVerify(){},onCancel(){}}));assert.equal(filled.filter(n=>n.props.className==='owner-pin-dot filled').length,2);app.correction.pinKey('Delete');app.correction.pinKey('Clear');assert.equal(app.correction.state.dialog.pin,'');
   app.correction.dismiss();assert.equal(app.correction.open(1),true);assert.equal(app.correction.state.dialog.phase,'pin');
  }
 });

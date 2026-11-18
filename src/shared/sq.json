@@ -344,7 +344,6 @@
   "waiter.Account B bill": "Fatura e llogarisë B",
   "waiter.Not yet attempted; check paper before printing": "Ende nuk është provuar; kontrolloni letrën para printimit",
   "waiter.Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.": "Pagesa liron tavolinën dhe krijon një detyrë për faturë testuese jo fiskale. Printimi mund të mos jetë i disponueshëm. Kontrolloni letrën; pranimi nga Windows nuk konfirmon printimin. Kërkoni nga një administrator i autorizuar të rikuperojë printimet.",
-  "waiter.After two minutes, a Combined owner must approve this cancellation with their PIN.": "Pas dy minutash, pronari i llogarisë së kombinuar duhet ta miratojë anulimin me PIN.",
   "waiter.Owner 6-digit PIN": "PIN-i 6-shifror i pronarit",
   "waiter.Owner approval is unavailable in demo mode.": "Miratimi i pronarit nuk është i disponueshëm në modalitetin demonstrues.",
   "waiter.Owner approval": "Miratimi i pronarit",
@@ -352,5 +351,6 @@
   "waiter.Checking…": "Po kontrollohet…",
   "waiter.Verify PIN": "Verifiko PIN-in",
   "waiter.Could not close owner approval. Try again.": "Miratimi i pronarit nuk mund të mbyllej. Provoni përsëri.",
-  "waiter.Retry closing": "Provo sërish mbylljen"
+  "waiter.Retry closing": "Provo sërish mbylljen",
+  "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "Pas dy minutash, administratori duhet ta miratojë këtë anulim me PIN-in e tij."
 }

@@ -1,4 +1,4 @@
-export const cancellationGuidance = 'After two minutes, a Combined owner must approve this cancellation with their PIN.';
+export const cancellationGuidance = 'After two minutes, Admin must approve this cancellation with their PIN.';
 export function isCancellationOpen(sentAt, now = Date.now()) {
   return Number.isSafeInteger(sentAt) && sentAt > 0 && Number.isSafeInteger(now) && sentAt <= now && now - sentAt < 120000;
 }
