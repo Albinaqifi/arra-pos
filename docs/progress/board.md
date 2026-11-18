@@ -4,7 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
-| S-092 | In progress | Review, full suite and sample desktop checks passed; full host-offline verification and PR merge outstanding. |
+| S-092 | In progress | Draft PR #132 open; review, full suite and sample desktop checks passed; full host-offline verification and merge outstanding. |
 | S-090 | In progress | PR #130 merged as `0ba16b2`; independent review and focused tests passed; baseline full-suite failures, desktop, offline and physical-paper verification outstanding. |
 | S-089 | In progress | PR #128 merged as `e64d17b`; independent review and focused tests passed. Desktop, offline and full-suite verification outstanding. |
 | S-088 | Done | Independent review and focused tests passed; PR #126 merged as `c607388`. Concurrent-payment startup race recorded separately. |
