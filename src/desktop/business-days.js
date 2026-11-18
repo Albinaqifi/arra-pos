@@ -2,6 +2,7 @@ const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const shifts = require('./shifts');
+const shiftPrint = require('./shift-print');
 const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
@@ -50,6 +51,8 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
       !((req.action === 'list' && Reflect.ownKeys(req).length === 1) ||
         (req.action === 'shiftList' && Reflect.ownKeys(req).length === 1) ||
         (req.action === 'shiftClose' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0) ||
+        (req.action === 'shiftPrintStatus' && Reflect.ownKeys(req).length === 3 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0 && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
+        (req.action === 'shiftPrint' && Reflect.ownKeys(req).length === 4 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'close' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.dayId) && req.dayId > 0) ||
         (req.action === 'retryStatus' && (Reflect.ownKeys(req).length === 3 || (Reflect.ownKeys(req).length === 4 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'retry' && (Reflect.ownKeys(req).length === 4 || (Reflect.ownKeys(req).length === 5 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
@@ -59,7 +62,14 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
       const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope;
       if (!actor || actor !== session.authenticatedUserId() || !['A','B','combined'].includes(scope) ||
           !hasPermissions(db, session, scope === 'combined' ? 'business_days.close' : 'employees.view')) return { ok: false };
-      if (req.action === 'shiftList' || req.action === 'shiftClose') return shifts.handle(req,db,session,scope,actor);
+      if (req.action === 'shiftList') {
+        const result=shifts.handle(req,db,session,scope,actor);
+        result.data.actorId=actor; result.data.scope=scope;
+        result.data.shifts=result.data.shifts.map(shift=>shift.closedAt===null?shift:{...shift,...shiftPrint.status(db,shift.id,scope)});
+        return result;
+      }
+      if (req.action === 'shiftClose') return shifts.handle(req,db,session,scope,actor);
+      if (req.action === 'shiftPrint' || req.action === 'shiftPrintStatus') return shiftPrint.handle(req,db,actor,scope,adapter);
       if ((req.action === 'configure' || (['retry','retryStatus'].includes(req.action) && Object.hasOwn(req, 'scope'))) && scope !== 'combined') return { ok: false };
       if (req.action === 'retryStatus') {
         const attempt=db.prepare(`SELECT a.id, r.result FROM day_print_attempts a JOIN day_print_jobs j ON j.id=a.job_id LEFT JOIN day_print_results r ON r.attempt_id=a.id WHERE j.day_id=? AND a.request_id=? AND a.actor_id=? AND a.scope=?`).get(req.dayId,'retry-'+req.requestId,actor,req.scope || scope);
