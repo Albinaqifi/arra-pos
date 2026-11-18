@@ -16,11 +16,11 @@ Before a hardware check, confirm COM3 still belongs to the intended adapter, the
 
 ### Paper test with no sale
 
-Build the small add-on with `scripts/build-pf700-paper-test.ps1`. Copy `Arra-PF700-Paper-Test.zip` to the Windows POS and extract the entire ZIP. With paper loaded and the printer idle, open `PF700-Paper-Test.cmd`. The launcher uses the existing 1.0.3 offline test runtime. Typing `PRINT` and pressing Enter requests one diagnostic slip. Enter alone cancels before opening the port.
+Build the small add-on with `scripts/build-pf700-paper-test.ps1`. Copy `Arra-PF700-Paper-Test-v2.zip` to the Windows POS and extract the entire ZIP into its own folder. With paper loaded and the printer idle, open `PF700-Paper-Test.cmd` in that folder. The prompt identifies paper test v2. The launcher uses the existing 1.0.3 offline test runtime. Typing `PRINT` and pressing Enter requests one diagnostic slip. Enter alone cancels before opening the port.
 
 The tool checks the device status and whether a receipt is open, then requests the printer's diagnostic slip. This prints device information without recording a sale or closing the day. Check the paper before treating the test as successful. If the outcome is uncertain, inspect the paper and the display before considering another attempt. [Accent PF550/PF700 protocol v1.40, commands 74, 76 and 71](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
 
-The owner reported `No print command was sent. Invalid receipt-state reply.` That result means Arra received a matching checked frame for command 76 and rejected its data format before the diagnostic print command. It leaves the document state unknown. Read the format before retrying the paper test.
+The original tool stopped before printing with `Invalid receipt-state reply`. The owner then captured the masked 17-byte command-76 reply `0,####,+#########`. The first field indicated a closed receipt at the time of the check. The sign on this printer occupies a separate byte before nine digits. Paper test v2 recognizes that format and the previous nine-byte amount field. Each attempt checks the current document state again.
 
 For this case, build `scripts/build-pf700-paper-test.ps1 -CheckReplyOnly`, extract `Arra-PF700-Check-Reply.zip` on the POS, and open `PF700-Check-Reply.cmd`. It uses the installed 1.0.3 runtime to request only status and receipt state. Share the single `Reply format:` line so the layout can be compared with the manual. The tool masks amounts and other field values in its output.
 

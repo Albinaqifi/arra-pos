@@ -152,6 +152,32 @@ test('only a valid closed receipt-state tuple permits the diagnostic', async () 
     ? { data: Buffer.from('0,   0,+00000000,-00000000') } : {}));
 });
 
+test('a sign followed by nine digits in the PF700 amount permits one diagnostic only for a closed receipt', async () => {
+  for (const [payload, expected] of [
+    ['0,0000,+000000123', 'print'],
+    ['0,0042,-000000123', 'print'],
+    ['1,0000,+000000123', /open document/],
+    ['0,0000,0000000123', /Invalid receipt-state/],
+    ['0,0000,+0000000123', /Invalid receipt-state/],
+    ['0,0000,+0000001.3', /Invalid receipt-state/],
+    ['0,0000,+ 00000123', /Invalid receipt-state/],
+    ['0,0000,++00000123', /Invalid receipt-state/],
+  ]) {
+    const commands = [];
+    const exchange = step => {
+      commands.push(step.command);
+      return reply(step, step.name === 'document' ? { data: Buffer.from(payload) } : {});
+    };
+    if (expected === 'print') {
+      await runSequence(0x20, exchange);
+      assert.deepEqual(commands, [74, 76, 71]);
+    } else {
+      await assert.rejects(runSequence(0x20, exchange), expected);
+      assert.deepEqual(commands, [74, 76]);
+    }
+  }
+});
+
 test('checks status data and frame trailers for device errors, open receipts and paper out', async () => {
   for (const [byte, mask] of [[0, 0x01], [0, 0x02], [0, 0x10], [0, 0x20],
     [1, 0x02], [1, 0x08], [1, 0x20], [2, 0x01], [2, 0x04], [2, 0x08], [4, 0x20], [5, 1]]) {

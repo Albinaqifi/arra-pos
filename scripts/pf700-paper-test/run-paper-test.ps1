@@ -9,7 +9,7 @@ try {
     if (!(Test-Path -LiteralPath $tool -PathType Leaf)) {
         throw 'Extract the entire paper test ZIP, then open PF700-Paper-Test.cmd again.'
     }
-    Write-Host 'Synergy PF700 paper test on COM3'
+    Write-Host 'Synergy PF700 paper test v2 on COM3'
     Write-Host 'This prints one diagnostic slip. It records no sale and does not close the day.'
     Write-Host 'Check that the printer is idle, paper is loaded, and any earlier uncertain sale or close is resolved.'
     $confirmation = Read-Host 'Type PRINT and press Enter for one slip, or press Enter alone to cancel'

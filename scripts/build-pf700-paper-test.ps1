@@ -11,7 +11,7 @@ if ($CheckReplyOnly) {
     $filename = 'Arra-PF700-Check-Reply.zip'
     $sources += 'scripts/pf700-paper-test/PF700-Check-Reply.cmd', 'scripts/pf700-paper-test/check-reply.js'
 } else {
-    $filename = 'Arra-PF700-Paper-Test.zip'
+    $filename = 'Arra-PF700-Paper-Test-v2.zip'
     $sources += 'scripts/pf700-paper-test/PF700-Paper-Test.cmd', 'scripts/pf700-paper-test/run-paper-test.ps1', 'scripts/pf700-paper-test/paper-test.js'
 }
 $out = [IO.Directory]::CreateDirectory($OutputDirectory).FullName

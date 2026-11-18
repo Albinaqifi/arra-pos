@@ -7,9 +7,9 @@ function paperSteps(firstSequence) {
 
 function checkDocument(data) {
   const fields = data.toString('latin1').split(',');
-  // Accent specifies widths, but does not illustrate positive-sign padding.
-  // Amounts and counts are validated in memory and never shown or recorded.
-  const amount = value => value.length === 9 && /^ *[+-]?[0-9]+$/.test(value);
+  // The POS PF700 sends the sign before nine digits. Also accept the older nine-byte field.
+  const amount = value => /^[+-][0-9]{9}$/.test(value) ||
+    (value.length === 9 && /^ *[+-]?[0-9]+$/.test(value));
   if ((fields.length !== 3 && fields.length !== 4) || !/^[01]$/.test(fields[0]) ||
       fields[1].length !== 4 || !/^ *[0-9]+$/.test(fields[1]) ||
       !amount(fields[2]) || (fields.length === 4 && !amount(fields[3]))) {
@@ -47,10 +47,10 @@ async function windowsPaperTest() {
 
 async function runDiagnostic(args, live = windowsPaperTest) {
   if (args.length === 0) {
-    // Synthetic closed-document data with the owner's observed six status bytes.
+    // Synthetic figures in the closed-document format observed on the POS.
     const replies = [
       '0131204a888080e1809a04888080e1809a0530373a3a03',
-      '013b214c302c303030302c30303030303030303004888080e1809a053037323c03',
+      '013c214c302c303030302c2b30303030303030303004888080e1809a053037353803',
       '012b224704888080e1809a053034323003'
     ];
     await runSequence(0x20, () => Buffer.from(replies.shift(), 'hex'));
