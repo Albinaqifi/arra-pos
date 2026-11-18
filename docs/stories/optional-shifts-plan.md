@@ -24,6 +24,7 @@ Use the entries in [the development backlog](backlog.md#optional-shift-reporting
 | S-089 | From Financial information, an owner can review a shift, close it and return to work. Day-only operators see no added steps. | S-088 and the S-087 renderer. |
 | S-090 | An owner can find a saved shift, print it on request, or recover a failed print. | S-088 and S-089. |
 | S-091 | Separately, streamline the existing Account A screen around the selected closed day and its report status. | Existing S-084 internal close and S-087 design. This follow-up can be delivered independently of shifts. |
+| S-092 | Optionally count the shared wallet, check the closing difference and carry the confirmed float into the next shift. | S-088 and S-089. |
 
 S-087 has its own branch and verification history. Start implementation from a revision containing the applicable S-087 work. Coordinate changes to its day-close files with that work. The previous click-throughs illustrate the visual style. Their mandatory start, per-shift Account A selection and immediate fiscal handoff screens are superseded by the flow above.
 
@@ -40,3 +41,5 @@ S-087 has its own branch and verification history. Start implementation from a r
 2. For the first release, use the existing shared-day close authority and financial visibility rules for the new shared-shift action. Combined is the usual operator. Preserve restricted totals, details and paper for each identity. Only Combined can operate Close Account A. A future narrower shift permission is a separate product choice.
 3. On upgrade, start full shift tracking with the next business day if the open day already has activity. Keep the current day's ordinary service and close available, with a short explanation in the shift view. A fresh installation or a demonstrably unused open day can start with its first activity. Older records retain their original dates, day membership and reports.
 4. A manual handover sets the next opening time immediately. The next shift becomes reportable only after actual service resumes. A shift with orders but zero payments is a real shift with a zero paid total. No empty placeholder shifts need closing or printing.
+
+S-092 adds an optional **Start shift** action for Combined to enter opening cash. A count entered after service begins belongs to the current shift from the time of the count. Staff can use the automatic flow throughout the day when the owner skips wallet tracking.
