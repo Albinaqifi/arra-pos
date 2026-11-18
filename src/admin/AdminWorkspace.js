@@ -34,6 +34,8 @@ export class AdminWorkspace extends FeatureState {
     }, Page ? React.createElement(Page, {
       ref: editors.has(page) ? instance => { this.editor = instance; } : undefined,
       language, onJobsChanged: page === 'adminSentCorrections' ? jobsChanged : undefined, onBack: () => this.returnToOverview(), onAccessChanged: () => this.refreshAccess(generation),
+      onReviewOrders: page === 'financialVisibility' ? () => this.navigate('orderHistory') : undefined,
+      onReviewCancellationNotices: page === 'financialVisibility' ? () => this.navigate('admin') : undefined,
     }) : React.createElement(React.Fragment, null, settings, printing));
   }
 }

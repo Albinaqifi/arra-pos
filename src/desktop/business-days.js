@@ -5,21 +5,29 @@ const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
     orders: db.prepare(`SELECT o.id, o.table_id AS tableId FROM orders o WHERE o.status='open' AND o.retired_empty = 0 AND NOT (${untouchedOrder('o')}) ORDER BY o.id`).all(),
-    printJobs: db.prepare(`SELECT j.id, COALESCE(a.result, 'unattempted') AS result, (EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id)) AS retryBlocked FROM print_jobs j
+    printJobs: db.prepare(`SELECT j.id, 'simulated' AS kind, COALESCE(a.result, 'unattempted') AS result, (EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id)) AS retryBlocked FROM print_jobs j
       LEFT JOIN print_attempts a ON a.id=(SELECT id FROM print_attempts WHERE job_id=j.id ORDER BY id DESC LIMIT 1)
-      WHERE a.result IS NULL OR a.result != 'success' ORDER BY j.id`).all()
+      WHERE (a.result IS NULL OR a.result != 'success') AND NOT EXISTS(SELECT 1 FROM test_print_jobs tp WHERE tp.ticket_id=j.ticket_id) ORDER BY j.id`).all().concat(
+      db.prepare(`SELECT j.id, 'preparation' AS kind, j.destination, COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,
+        (EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id)) AS retryBlocked
+        FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT max(id) FROM test_print_attempts WHERE job_id=j.id)
+        LEFT JOIN test_print_results r ON r.attempt_id=a.id
+        WHERE j.ticket_id IS NOT NULL AND j.destination IN ('kitchen','kitchen2','bar') AND (r.result IS NULL OR r.result!='accepted') ORDER BY j.id`).all(),
+      db.prepare(`SELECT j.id, 'cancellation' AS kind, j.destination, COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result
+        FROM cancellation_notice_jobs j LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT max(id) FROM cancellation_notice_attempts WHERE job_id=j.id)
+        LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id WHERE r.result IS NULL OR r.result!='accepted' ORDER BY j.id`).all())
   };
 }
 function projectIssues(value, scope) {
   if (!value || !Array.isArray(value.orders) || !Array.isArray(value.printJobs)) return null;
   if (scope === 'combined') return value;
-  return { orders: value.orders.map(() => ({})), printJobs: value.printJobs.map(job => ({ result: job.result })) };
+  return { orders: value.orders.map(() => ({})), printJobs: value.printJobs.map(job => ({ result: job.result, retryBlocked:!!job.retryBlocked, cancellationNotice:job.kind==='cancellation' })) };
 }
 const flights = new WeakMap();
 function inFlight(db) { if (!flights.has(db)) flights.set(db,new Set()); return flights.get(db); }
 function reserve(db, job, requestId, actor, scope) {
-  const prior = db.prepare('SELECT job_id AS jobId, scope FROM day_print_attempts WHERE request_id=?').get(requestId);
-  if (prior) { if (prior.jobId !== job.id || prior.scope !== scope) throw Error('Invalid request'); return null; }
+  const prior = db.prepare('SELECT job_id AS jobId, scope, actor_id AS actor FROM day_print_attempts WHERE request_id=?').get(requestId);
+  if (prior) { if (prior.jobId !== job.id || prior.scope !== scope || prior.actor !== actor) throw Error('Invalid request'); return null; }
   const queue = db.prepare('SELECT queue FROM day_print_settings WHERE id=1').get().queue;
   const attemptId = db.prepare('INSERT INTO day_print_attempts(job_id,request_id,actor_id,queue,started_at,scope) VALUES(?,?,?,?,?,?)').run(job.id,requestId,actor,queue,Date.now(),scope).lastInsertRowid;
   const snapshot = JSON.parse(job.snapshot);
@@ -49,8 +57,8 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
           !hasPermissions(db, session, scope === 'combined' ? 'business_days.close' : 'employees.view')) return { ok: false };
       if ((req.action === 'configure' || (req.action === 'retry' && Object.hasOwn(req, 'scope'))) && scope !== 'combined') return { ok: false };
       if (req.action === 'list') return { ok: true, data: {
-        days: db.prepare(`SELECT d.id, d.opened_at AS openedAt, d.closed_at AS closedAt, d.closed_by AS closedBy, d.issues, j.id AS reportId, COALESCE(r.result, CASE WHEN a.id IS NOT NULL THEN 'uncertain' END) AS printResult, (SELECT count(*) FROM day_print_attempts WHERE job_id=j.id AND scope=?) AS printAttempts FROM business_days d LEFT JOIN day_print_jobs j ON j.day_id=d.id LEFT JOIN day_print_attempts a ON a.id=(SELECT max(id) FROM day_print_attempts WHERE job_id=j.id AND scope=?) LEFT JOIN day_print_results r ON r.attempt_id=a.id ORDER BY d.id DESC`).all(scope, scope).map(x => ({ ...x, issues: projectIssues(x.issues === null ? null : JSON.parse(x.issues), scope), otherPrints: scope === 'combined' && x.reportId ? ['A','B'].map(reportScope => { const status = db.prepare(`SELECT COUNT(*) AS printAttempts, COALESCE((SELECT COALESCE(r.result,'uncertain') FROM day_print_attempts a LEFT JOIN day_print_results r ON r.attempt_id=a.id WHERE a.job_id=? AND a.scope=? ORDER BY a.id DESC LIMIT 1),NULL) AS printResult FROM day_print_attempts WHERE job_id=? AND scope=?`).get(x.reportId,reportScope,x.reportId,reportScope); return {scope:reportScope,...status}; }).filter(status => status.printAttempts) : [] })),
-        scope, issues: projectIssues(issues(db), scope), queue: db.prepare('SELECT queue FROM day_print_settings WHERE id=1').get().queue
+        days: db.prepare(`SELECT d.id, d.opened_at AS openedAt, d.closed_at AS closedAt, d.closed_by AS closedBy, d.issues, j.id AS reportId, (SELECT max(id) FROM day_print_attempts WHERE job_id=j.id) AS lastAttemptId, a.id AS attemptId, COALESCE(r.result, CASE WHEN a.id IS NOT NULL THEN 'uncertain' END) AS printResult, (SELECT count(*) FROM day_print_attempts WHERE job_id=j.id AND scope=?) AS printAttempts FROM business_days d LEFT JOIN day_print_jobs j ON j.day_id=d.id LEFT JOIN day_print_attempts a ON a.id=(SELECT max(id) FROM day_print_attempts WHERE job_id=j.id AND scope=?) LEFT JOIN day_print_results r ON r.attempt_id=a.id ORDER BY d.id DESC`).all(scope, scope).map(({attemptId,lastAttemptId,...x}) => ({ ...x, reportSending: inFlight(db).has(lastAttemptId), printResult: inFlight(db).has(attemptId) ? 'pending' : x.printResult, issues: projectIssues(x.issues === null ? null : JSON.parse(x.issues), scope), otherPrints: scope === 'combined' && x.reportId ? ['A','B'].map(reportScope => { const status = db.prepare(`SELECT COUNT(*) AS printAttempts, max(id) AS attemptId, COALESCE((SELECT COALESCE(r.result,'uncertain') FROM day_print_attempts a LEFT JOIN day_print_results r ON r.attempt_id=a.id WHERE a.job_id=? AND a.scope=? ORDER BY a.id DESC LIMIT 1),NULL) AS printResult FROM day_print_attempts WHERE job_id=? AND scope=?`).get(x.reportId,reportScope,x.reportId,reportScope); const {attemptId,...visible}=status; return {scope:reportScope,...visible,printResult:inFlight(db).has(attemptId) ? 'pending' : visible.printResult}; }).filter(status => status.printAttempts) : [] })),
+        actorId:actor, scope, canReviewOrders:scope==='combined' && hasPermissions(db,session,'employees.view'), canReviewCancellationNotices:scope==='combined' && !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor), issues: projectIssues(issues(db), scope), queue: db.prepare('SELECT queue FROM day_print_settings WHERE id=1').get().queue
       } };
       if (req.action === 'configure') {
         db.prepare('UPDATE day_print_settings SET queue=? WHERE id=1').run(req.queue);

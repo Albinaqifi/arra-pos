@@ -1,0 +1,48 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { registerBusinessDays } = require('../src/desktop/business-days');
+const { registerFinancialVisibility } = require('../src/desktop/financial-visibility');
+
+test('an open order survives close and a later payment belongs to the new day', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-s087-boundary-'));
+  const db = openDatabase(dir);
+  t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'sample',x'01',x'01');
+    INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'business_days.close');
+    INSERT INTO financial_scopes VALUES(1,'combined');
+    INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES
+      (1,1,1,1,110,'before'),(2,2,1,1,220,'after');`);
+  const handlers = {};
+  const ipc = {handle: (name, fn) => { handlers[name] = fn; }};
+  const session = {currentUserId: () => 1, authenticatedUserId: () => 1};
+  const printed = [];
+  registerBusinessDays(ipc, () => true, db, session, job => { printed.push(job.snapshot); return 'accepted'; });
+  registerFinancialVisibility(ipc, () => true, db, session);
+  const call = (name, req) => handlers[name]({}, req);
+  const day = db.prepare('SELECT id FROM business_days WHERE closed_at IS NULL').get().id;
+  const report = id => call('arra:financial-visibility', {action:'report',from:null,to:null,dayId:id,account:null,method:null});
+  assert.equal(report(day).data.records.length, 0, 'preview precedes the payment');
+  db.exec("INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,2,110,'cash','A')");
+  assert.equal(call('arra:business-days', {action:'list'}).data.issues.orders.length, 2);
+  assert.equal(call('arra:business-days', {action:'close',dayId:day}).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(printed[0].dayId, day);
+  assert.equal(printed[0].total, 110, 'actual close, not the earlier empty preview');
+  assert.equal(db.prepare('SELECT status FROM orders WHERE id=2').get().status, 'open');
+  const next = db.prepare('SELECT id FROM business_days WHERE closed_at IS NULL').get().id;
+  db.exec("INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(2,1,3,220,'card','A')");
+  assert.deepEqual(report(day).data.records.map(row => row.amount), [110]);
+  assert.deepEqual(report(next).data.records.map(row => row.amount), [220]);
+  assert.equal(call('arra:business-days', {action:'retry',dayId:day,requestId:'saved-day',checked:true}).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(printed[1].dayId, day);
+  assert.equal(printed[1].total, 110);
+  assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 2);
+  assert.equal(db.prepare('SELECT count(*) n FROM business_days').get().n, 2);
+});

@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
 | S-085 | In progress | PR #122 merged; independent review and focused tests passed; desktop verification outstanding. |
 | S-084 | In progress | Owner clarified the goal includes a real Synergy PF700 fiscal report; current implementation is non-fiscal. Device integration and hardware verification outstanding. |
@@ -64,7 +65,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-055 | Done | Independent review and focused tests passed; PR #74 merged as `f41a24f`. |
 | S-056 | Done | Marked complete by owner; PR #76 merged. Paper and offline desktop verification remain outstanding. |
 | S-057 | Done | Review and focused tests passed; PR #75 merged as `d0759ee`. |
-| S-058 | In progress | Code review and focused tests passed; owner reports offline check passed. Windows queue and paper verification outstanding. |
+| S-058 | In progress | Report-recovery UX follow-up reviewed and focused tests passed; owner reports earlier offline check passed. Updated desktop and physical printer verification outstanding. |
 | S-059 | Done | Shared unpaid-bill slice reviewed and focused tests passed; PR #81 merged as `9af9306`. |
 | S-060 | In progress | Independent review and focused tests passed; PR pending. Unmarked legacy test databases unsupported. |
 | S-061 | In progress | Independent review, focused tests and owner-reported desktop and printer checks passed; PR awaiting merge. |

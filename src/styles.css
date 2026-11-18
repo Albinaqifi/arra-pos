@@ -167,6 +167,13 @@ input { font-family: inherit; }
 .day-turnover span, .day-turnover strong, .day-turnover small { display: block; }
 .day-turnover strong { font-size: 28px; margin: 6px 0; }
 .day-current h4 { margin-bottom: 6px; }
+.day-review-issues { margin-bottom: 16px; }
+.day-review-issues > p { color: #475569; margin: 8px 0; }
+.day-issue { margin: 10px 0; padding: 12px 14px; border: 1px solid #e6d69d; background: #fffbeb; border-radius: 8px; }
+.day-issue h4 { margin: 0; }
+.day-issue p { margin: 8px 0; }
+.day-completion { border-color: #b7ddc3; background: #f5fbf7; }
+.day-completion-report { margin: 16px 0; padding: 14px; background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; }
 .day-details { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
 .day-details summary { cursor: pointer; font-weight: 700; }
 .account-a-bills .report-form label { min-width: 0; max-width: 100%; }
@@ -175,6 +182,10 @@ input { font-family: inherit; }
 .account-a-bill-list li > strong { text-align: right; }
 .account-a-printer-form { margin-top: 16px; }
 .day-print-notice { margin: 16px 0; padding: 14px 16px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 12px; }
+.day-recovery-report { margin: 16px 0; padding: 16px; border: 1px solid #dc2626; border-left: 5px solid #b91c1c; border-radius: 8px; background: #fef2f2; color: #991b1b; }
+.day-report-pending { margin: 16px 0; padding: 16px; border: 1px solid #dbe4ef; border-radius: 8px; background: #f8fafc; }
+.day-recovery-report p { margin: 8px 0; }
+.day-recovery-report button { margin-top: 8px; }
 .day-print-notice p { margin: 8px 0; }
 .day-print-error, .admin-content .day-print-error[role='alert'] { padding: 12px 14px; border: 1px solid #dc2626; border-left: 5px solid #b91c1c; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 700; }
 .day-print-warning { padding: 12px 14px; border: 1px solid #d97706; border-left: 5px solid #b45309; border-radius: 8px; background: #fffbeb; color: #78350f; font-weight: 700; }
