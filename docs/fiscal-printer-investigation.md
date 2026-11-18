@@ -6,7 +6,7 @@ The owner identified the fiscal printer in a photograph as a Synergy PF700 and c
 
 ### POS connection prepared for S-084
 
-The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. This verifies communication for that connection. Physical slip output and fiscal operations still need their own evidence.
+The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. The owner subsequently ran paper test v2 on that POS and confirmed the PF700 printed the diagnostic slip. Fiscal sale registration and the official daily report still need verification.
 
 In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
 

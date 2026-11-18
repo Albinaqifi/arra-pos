@@ -12,7 +12,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
 | S-085 | In progress | PR #122 merged; independent review and focused tests passed; desktop verification outstanding. |
-| S-084 | In progress | Owner confirmed COM3 and the PF700's 17-byte receipt-state format. Paper test v2 supports that reply. Physical slip output, fiscal sales and daily report remain outstanding. |
+| S-084 | In progress | The owner confirmed that paper test v2 printed a diagnostic slip on the PF700 connected to COM3. Account A fiscal sales and the official daily report remain outstanding. |
 | S-083 | In progress | Independent review and focused tests passed; desktop, offline and physical paper verification outstanding. |
 
 | S-082 | Done | Independent review and automated tests passed; owner reports all checks passed; PR #119 merged as `9cb9f72`. |
