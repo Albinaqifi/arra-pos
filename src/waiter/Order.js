@@ -5,7 +5,7 @@ import { renderPendingList } from '../pending/PendingList.js';
 function SentCancel({ item, tr, style }) {
   const open = useCancellationOpen(item.sentAt);
   return React.createElement(React.Fragment, null,
-    React.createElement('button', { onClick: item.cancel, disabled: !open, 'aria-label': item.cancelAria, style: style('height: 44px; padding: 0 14px; border-radius: 12px; border: 2px solid #FECACA; background: #FFFFFF; color: #B91C1C; font-size: 14px; font-weight: 800') }, tr('Cancel')),
+    React.createElement('button', { onClick: item.cancel, disabled: false, 'aria-label': item.cancelAria, style: style('height: 44px; padding: 0 14px; border-radius: 12px; border: 2px solid #FECACA; background: #FFFFFF; color: #B91C1C; font-size: 14px; font-weight: 800') }, tr('Cancel')),
     !open && React.createElement('span', { style: style('max-width: 220px; font-size: 13px; color: #7c2d12') }, tr(cancellationGuidance)));
 }
 

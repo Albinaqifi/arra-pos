@@ -28,6 +28,17 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, req) => {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
     const actor = session.currentUserId();
+    if (req.action === 'ownApprovalPin' && keys(req, ['action', 'pin']) && validPin(req.pin, 6)) {
+      if (!actor || actor !== session.authenticatedUserId() || scopeOf(db, actor) !== 'combined' || !db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor)) return { ok: false, error: 'Access denied' };
+      const pin = credential(req.pin);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.prepare('UPDATE local_users SET pin_salt=?, pin_hash=? WHERE id=?').run(...pin, actor);
+        db.prepare('INSERT INTO employee_credential_audit(actor_id,target_id,password_changed,pin_changed,occurred_at) VALUES (?,?,0,1,?)').run(actor, actor, Date.now());
+        db.exec('COMMIT');
+      } catch (e) { db.exec('ROLLBACK'); throw e; }
+      session.invalidateUser(actor); return { ok: true };
+    }
     // Password-authenticated identity must be the actor; a PIN-less selection is not sufficient.
     if (!actor || actor !== session.authenticatedUserId() || !hasPermissions(db, session, req.action === 'list' ? 'employees.view' : 'employees.change')) return { ok: false, error: 'Access denied. Sign in as the administrator and select the same name.' };
     try {

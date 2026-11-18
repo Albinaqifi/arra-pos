@@ -34,6 +34,7 @@ export * from './src/billing/BillingBoundary.js';
 export * from './src/billing/DemoBilling.js';
 export * from './src/waiter/Tables.js';
 export * from './src/waiter/Order.js';
+export * from './src/waiter/OwnerApprovalPin.js';
 export * from './src/waiter/MoveTable.js';
 export * from './src/waiter/Bill.js';`,
         resolveDir: path.resolve(__dirname, '../..'),
@@ -43,7 +44,7 @@ export * from './src/waiter/Bill.js';`,
     // Legacy test aliases refer to actual module exports. Evaluate the shared
     // graph once in each VM, even when older fixtures request several helpers.
     source = `if (typeof RendererModules === 'undefined') {\n${bundled}\n}\n` +
-      ['WaiterDemo', 'PrintJobs', 'TestPrintJobs', 'DesktopBill', 'renderTables', 'renderOrder', 'renderMoveTable', 'renderBill', 'waiterTranslate', 'printDestination', 'style', 'SentItemCorrection'].map(name => `var ${name} = RendererModules.${name};`).join('\n') +
+      ['WaiterDemo', 'PrintJobs', 'TestPrintJobs', 'DesktopBill', 'renderTables', 'renderOrder', 'renderMoveTable', 'renderBill', 'waiterTranslate', 'printDestination', 'style', 'SentItemCorrection', 'OwnerApprovalPin'].map(name => `var ${name} = RendererModules.${name};`).join('\n') +
       '\nvar ArraComponents = RendererModules;\n';
   }
   return source;

@@ -343,5 +343,16 @@
   "waiter.Account A bill": "Fatura e llogarisë A",
   "waiter.Account B bill": "Fatura e llogarisë B",
   "waiter.Not yet attempted; check paper before printing": "Ende nuk është provuar; kontrolloni letrën para printimit",
-  "waiter.Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.": "Pagesa liron tavolinën dhe krijon një detyrë për faturë testuese jo fiskale. Printimi mund të mos jetë i disponueshëm. Kontrolloni letrën; pranimi nga Windows nuk konfirmon printimin. Kërkoni nga një administrator i autorizuar të rikuperojë printimet."
+  "waiter.Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.": "Pagesa liron tavolinën dhe krijon një detyrë për faturë testuese jo fiskale. Printimi mund të mos jetë i disponueshëm. Kontrolloni letrën; pranimi nga Windows nuk konfirmon printimin. Kërkoni nga një administrator i autorizuar të rikuperojë printimet.",
+  "waiter.Owner 6-digit PIN": "PIN-i 6-shifror i pronarit",
+  "waiter.Owner approval is unavailable in demo mode.": "Miratimi i pronarit nuk është i disponueshëm në modalitetin demonstrues.",
+  "waiter.Owner approval": "Miratimi i pronarit",
+  "waiter.Owner PIN could not be verified. Check the PIN or try again later.": "PIN-i i pronarit nuk u verifikua. Kontrolloni PIN-in ose provoni më vonë.",
+  "waiter.Checking…": "Po kontrollohet…",
+  "waiter.Verify PIN": "Verifiko PIN-in",
+  "waiter.Could not close owner approval. Try again.": "Miratimi i pronarit nuk mund të mbyllej. Provoni përsëri.",
+  "waiter.Retry closing": "Provo sërish mbylljen",
+  "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "Pas dy minutash, administratori duhet ta miratojë këtë anulim me PIN-in e tij.",
+  "waiter.The original item stays in the order history.": "Artikulli origjinal mbetet në historikun e porosisë.",
+  "waiter.Correction saved.": "Korrigjimi u ruajt."
 }

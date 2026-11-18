@@ -5,8 +5,8 @@ const identities = [['sample-waiter', 'waiter'], ['sample-owner-a', 'A'], ['samp
 const entryIdentities = [['sample-restaurant', 'waiter'], ['sample-owner-a', 'A'], ['sample-owner-b', 'B'], ['sample-combined', 'combined']];
 // Call only for a new or explicitly marked sample database. Existing names are
 // left entirely untouched, including their roles, grants and credentials.
-function seedSampleIdentities(db, passwords, waiterPin, transferPin) {
-  if (!Array.isArray(passwords) || passwords.length !== 4 || !passwords.every(validPassword) || new Set(passwords).size !== 4 || !/^\d{4}$/.test(waiterPin) || !/^\d{6}$/.test(transferPin)) throw new Error('Invalid sample credentials');
+function seedSampleIdentities(db, passwords, waiterPin, transferPin, ownerPin = null) {
+  if (!Array.isArray(passwords) || passwords.length !== 4 || !passwords.every(validPassword) || new Set(passwords).size !== 4 || !/^\d{4}$/.test(waiterPin) || !/^\d{6}$/.test(transferPin) || (ownerPin !== null && (typeof ownerPin !== 'string' || !/^\d{6}$/.test(ownerPin)))) throw new Error('Invalid sample credentials');
   db.exec('BEGIN IMMEDIATE');
   try {
     const lookup = db.prepare('SELECT id FROM local_users WHERE username=?');
@@ -19,7 +19,7 @@ function seedSampleIdentities(db, passwords, waiterPin, transferPin) {
       return insert.run(name, salt, hashPassword(password, salt), pinSalt, pinSalt ? hashPassword(pin, pinSalt) : null).lastInsertRowid;
     }
     entryIdentities.forEach(([name, role], i) => {
-      const id = add(name, passwords[i], null);
+      const id = add(name, passwords[i], role === 'combined' ? ownerPin : null);
       if (id === null) return;
       scope.run(id, role);
       if (i === 0) db.prepare('INSERT INTO restaurant_accounts VALUES (?)').run(id);

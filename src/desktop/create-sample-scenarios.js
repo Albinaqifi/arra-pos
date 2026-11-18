@@ -9,12 +9,13 @@ const { seedTables } = require('./tables');
 const { seedMenu } = require('./menu');
 const { seedScenarios } = require('./seed-sample-scenarios');
 
-function createSampleScenarios(passwords, waiterPin, transferPin) {
+function createSampleScenarios(passwords, waiterPin, transferPin, ownerPin) {
+  if (typeof ownerPin !== 'string' || !/^\d{6}$/.test(ownerPin)) throw new Error('Invalid sample credentials');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-sample-'));
   let db;
   try {
     db = openDatabase(directory);
-    seedSampleIdentities(db, passwords, waiterPin, transferPin);
+    seedSampleIdentities(db, passwords, waiterPin, transferPin, ownerPin);
     seedTables(db);
     seedMenu(db);
     seedScenarios(db);
@@ -33,7 +34,7 @@ if (require.main === module) {
   readline.emitKeypressEvents(process.stdin);
   process.stdin.setRawMode(true); process.stdin.resume();
   const values = []; let value = '';
-  const prompts = [...entryIdentities.map(([name]) => `Choose a distinct sample password for ${name}: `), 'Choose a four-digit sample waiter PIN: ', 'Choose a six-digit sample transfer manager PIN: '];
+  const prompts = [...entryIdentities.map(([name]) => `Choose a distinct sample password for ${name}: `), 'Choose a four-digit sample waiter PIN: ', 'Choose a six-digit sample transfer manager PIN: ', 'Choose a six-digit sample Combined owner approval PIN: '];
   const prompt = () => process.stdout.write(prompts[values.length]);
   prompt();
   process.stdin.on('keypress', (char, key) => {
@@ -44,7 +45,7 @@ if (require.main === module) {
       if (values.length < prompts.length) return prompt();
       process.stdin.setRawMode(false); process.stdin.pause();
       try {
-        const directory = createSampleScenarios(values.slice(0, 4), values[4], values[5]);
+        const directory = createSampleScenarios(values.slice(0, 4), values[4], values[5], values[6]);
         console.log(`Fresh sample database created at ${directory}`);
         console.log('Seeded four paid bills: cash A, cash B, card A, and cash B transferred to A; plus unpaid and open order examples.');
         console.log(`Launch with: npx electron . --sample-data-directory="${directory}"`);
