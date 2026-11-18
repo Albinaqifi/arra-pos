@@ -1,6 +1,7 @@
 const cancellationPrinting = require('./test-printing');
 const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
+const { markService } = require('./shifts');
 const { hashPassword } = require('./session');
 const { timingSafeEqual, randomBytes } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
@@ -99,6 +100,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
               correctionSentAt = round.sentAt;
             }
             const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
+            markService(db, now);
             const noticeId = cancellationPrinting.createCancellationJob(db, id, request.itemId, request.quantity);
             if (testPrinting) cancellationAttempt = cancellationPrinting.reserveCancellationAttempt(db, noticeId, 'initial-' + noticeId, session.currentUserId());
             recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason, source: 'waiter', ...(approvingOwner ? { approvingOwnerId: approvingOwner } : {}) });
@@ -111,7 +113,9 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             if (!pending.length) throw Error('Nothing pending');
             if (pending.length) {
               const number = db.prepare('SELECT COALESCE(MAX(number), 0) + 1 AS number FROM preparation_rounds WHERE order_id = ?').get(request.orderId).number;
-              const roundId = db.prepare('INSERT INTO preparation_rounds (order_id, request_id, number, actor_id, sent_at, table_id) VALUES (?, ?, ?, ?, ?, (SELECT table_id FROM orders WHERE id = ?))').run(request.orderId, request.requestId, number, session.currentUserId(), Date.now(), request.orderId).lastInsertRowid;
+              const sentAt = Date.now();
+              const roundId = db.prepare('INSERT INTO preparation_rounds (order_id, request_id, number, actor_id, sent_at, table_id) VALUES (?, ?, ?, ?, ?, (SELECT table_id FROM orders WHERE id = ?))').run(request.orderId, request.requestId, number, session.currentUserId(), sentAt, request.orderId).lastInsertRowid;
+              markService(db, sentAt);
               for (const destination of ['kitchen', 'kitchen2', 'bar']) {
                 const selected = pending.filter(i => i.destination === destination);
                 if (!selected.length) continue;
@@ -149,6 +153,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
           if (!Number.isSafeInteger(lastId + 1)) throw Error('Item IDs exhausted');
           const result = db.prepare("INSERT INTO order_items (id, order_id, product_id, name, unit_price, quantity, status) VALUES (?, ?, ?, ?, ?, 1, 'pending')")
             .run(lastId + 1, request.orderId, product.id, product.name, price);
+          markService(db, Date.now());
           for (const option of selected) db.prepare('INSERT INTO order_item_modifiers VALUES (?, ?, ?, ?)').run(result.lastInsertRowid, groups.find(g => g.id === option.groupId).name, option.name, option.adjustment);
           recordAudit(db, session.currentUserId(), 'add', 'order_item', result.lastInsertRowid, request.orderId, { productId: product.id, name: product.name, unitPrice: price, quantity: 1, modifiers: selected.map(o => ({ group: groups.find(g => g.id === o.groupId).name, option: o.name, adjustment: o.adjustment })) });
         } else if (request.action !== 'list') {
@@ -162,6 +167,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             db.prepare('DELETE FROM order_items WHERE id = ?').run(item.id);
           else db.prepare('UPDATE order_items SET quantity = ? WHERE id = ?').run(item.quantity + (request.action === 'increment' ? 1 : -1), item.id);
           if (request.action !== 'note' || item.note !== request.note) {
+            markService(db, Date.now());
             const context = request.action === 'note' ? {} : { productId: item.productId, name: item.name, unitPrice: item.unitPrice, beforeQuantity: item.quantity, afterQuantity: removed ? 0 : item.quantity + (request.action === 'increment' ? 1 : -1) };
             if (removed) context.modifiers = modifiers;
             recordAudit(db, session.currentUserId(), request.action === 'note' ? 'note_changed' : removed ? 'remove' : 'quantity_changed', 'order_item', item.id, request.orderId, context);

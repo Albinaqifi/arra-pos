@@ -1,6 +1,7 @@
 const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
+const shifts = require('./shifts');
 const CHANNEL = 'arra:business-days';
 function issues(db) {
   return {
@@ -47,6 +48,8 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
     if (req && typeof req.action === 'string' && req.action.startsWith('accountA')) return require('./account-a-close').handleAccountA(event, req, isAllowedSender, db, session, adapter);
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype ||
       !((req.action === 'list' && Reflect.ownKeys(req).length === 1) ||
+        (req.action === 'shiftList' && Reflect.ownKeys(req).length === 1) ||
+        (req.action === 'shiftClose' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.shiftId) && req.shiftId > 0) ||
         (req.action === 'close' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.dayId) && req.dayId > 0) ||
         (req.action === 'retryStatus' && (Reflect.ownKeys(req).length === 3 || (Reflect.ownKeys(req).length === 4 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'retry' && (Reflect.ownKeys(req).length === 4 || (Reflect.ownKeys(req).length === 5 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
@@ -56,6 +59,7 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
       const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope;
       if (!actor || actor !== session.authenticatedUserId() || !['A','B','combined'].includes(scope) ||
           !hasPermissions(db, session, scope === 'combined' ? 'business_days.close' : 'employees.view')) return { ok: false };
+      if (req.action === 'shiftList' || req.action === 'shiftClose') return shifts.handle(req,db,session,scope,actor);
       if ((req.action === 'configure' || (['retry','retryStatus'].includes(req.action) && Object.hasOwn(req, 'scope'))) && scope !== 'combined') return { ok: false };
       if (req.action === 'retryStatus') {
         const attempt=db.prepare(`SELECT a.id, r.result FROM day_print_attempts a JOIN day_print_jobs j ON j.id=a.job_id LEFT JOIN day_print_results r ON r.attempt_id=a.id WHERE j.day_id=? AND a.request_id=? AND a.actor_id=? AND a.scope=?`).get(req.dayId,'retry-'+req.requestId,actor,req.scope || scope);
@@ -83,6 +87,7 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         const day = db.prepare('SELECT id,opened_at AS openedAt FROM business_days WHERE id=? AND closed_at IS NULL').get(req.dayId);
         if (!day) { db.exec('ROLLBACK'); return { ok: false }; }
         const outstanding = issues(db), now = Date.now();
+        shifts.finalizeDay(db,day.id,actor,now);
         const records = db.prepare(`SELECT p.id AS paymentId,p.bill_id AS billId,p.paid_at AS paidAt,p.amount,p.method,o.table_id AS tableId,COALESCE(c.account,p.account) AS account FROM payments p JOIN payment_business_days pd ON pd.payment_id=p.id JOIN bills b ON b.id=p.bill_id JOIN orders o ON o.id=b.order_id LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE pd.business_day_id=? ORDER BY p.paid_at,p.id`).all(day.id);
         let total=0;
         for (const row of records) { total += row.amount; if (!Number.isSafeInteger(row.amount) || row.amount < 0 || !Number.isSafeInteger(total)) throw Error('Invalid report total'); }

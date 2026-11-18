@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
+const { untouchedOrder } = require('./untouched-order');
 
 // Once released, migrations are historical records: append new versions instead
 // of changing these statements. Each version and its schema changes commit together.
@@ -306,6 +307,28 @@ const migrations = [
     CREATE TRIGGER IF NOT EXISTS account_a_results_no_replace BEFORE INSERT ON account_a_results WHEN EXISTS(SELECT 1 FROM account_a_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
   { version: 38, sql: `CREATE TABLE IF NOT EXISTS account_a_bill_print_settings (id INTEGER PRIMARY KEY CHECK(id=1), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
     INSERT OR IGNORE INTO account_a_bill_print_settings SELECT 1,queue FROM bill_printer_queues WHERE account='A';` },
+  { version: 39, sql: `CREATE TABLE shift_coverage_unavailable (day_id INTEGER PRIMARY KEY REFERENCES business_days(id)) STRICT;
+    INSERT INTO shift_coverage_unavailable SELECT d.id FROM business_days d WHERE d.closed_at IS NULL AND (
+      EXISTS(SELECT 1 FROM payment_business_days pd WHERE pd.business_day_id=d.id) OR
+      EXISTS(SELECT 1 FROM preparation_rounds r WHERE r.sent_at>=d.opened_at) OR
+      EXISTS(SELECT 1 FROM application_audit a WHERE a.occurred_at>=d.opened_at AND a.action IN ('add','send','remove','quantity_changed','note_changed','correct_sent','generate','record')) OR
+      EXISTS(SELECT 1 FROM application_audit a WHERE a.occurred_at>=d.opened_at AND a.action='move' AND a.entity_type='order' AND NOT EXISTS(SELECT 1 FROM orders o WHERE o.id=a.order_id AND (NOT EXISTS (SELECT 1 FROM order_items i WHERE i.order_id=o.id AND (i.status<>'sent' OR i.quantity<>COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id),0)))
+        AND NOT EXISTS (SELECT 1 FROM bills b WHERE b.order_id=o.id)
+        AND EXISTS (SELECT 1 FROM application_audit h WHERE h.order_id=o.id AND h.action='open' AND h.entity_type='order')
+        AND NOT EXISTS (SELECT 1 FROM application_audit h WHERE h.order_id=o.id AND NOT ((h.action IN ('open','move') AND h.entity_type='order') OR (h.action IN ('add','remove','quantity_changed','note_changed','correct_sent') AND h.entity_type='order_item') OR (h.action='send' AND h.entity_type='preparation_round') OR (h.action='print_retry' AND h.entity_type='print_attempt')))))) OR
+      EXISTS(SELECT 1 FROM order_items i JOIN orders o ON o.id=i.order_id WHERE o.status='open' AND NOT EXISTS(SELECT 1 FROM application_audit a WHERE a.action='add' AND a.entity_type='order_item' AND a.entity_id=CAST(i.id AS TEXT) AND a.occurred_at<d.opened_at)));
+    CREATE TABLE restaurant_shifts (id INTEGER PRIMARY KEY, day_id INTEGER NOT NULL REFERENCES business_days(id), opened_at INTEGER NOT NULL, reportable INTEGER NOT NULL CHECK(reportable IN (0,1))) STRICT;
+    CREATE INDEX restaurant_shifts_day ON restaurant_shifts(day_id,id);
+    CREATE TABLE shift_closes (shift_id INTEGER PRIMARY KEY REFERENCES restaurant_shifts(id), closed_at INTEGER NOT NULL, actor_id INTEGER NOT NULL REFERENCES local_users(id), snapshot TEXT NOT NULL) STRICT;
+    CREATE TABLE payment_shifts (payment_id INTEGER PRIMARY KEY REFERENCES payments(id), shift_id INTEGER NOT NULL REFERENCES restaurant_shifts(id)) STRICT;
+    CREATE TRIGGER restaurant_shifts_update_guard BEFORE UPDATE ON restaurant_shifts WHEN OLD.reportable!=0 OR NEW.reportable!=1 OR OLD.id!=NEW.id OR OLD.day_id!=NEW.day_id OR OLD.opened_at!=NEW.opened_at OR EXISTS(SELECT 1 FROM shift_closes WHERE shift_id=OLD.id) BEGIN SELECT RAISE(ABORT,'Shift is immutable'); END;
+    CREATE TRIGGER restaurant_shifts_no_delete BEFORE DELETE ON restaurant_shifts BEGIN SELECT RAISE(ABORT,'Shifts are retained'); END;
+    CREATE TRIGGER shift_closes_no_replace BEFORE INSERT ON shift_closes WHEN EXISTS(SELECT 1 FROM shift_closes WHERE shift_id=NEW.shift_id) BEGIN SELECT RAISE(ABORT,'Shift close is immutable'); END;
+    CREATE TRIGGER payment_shifts_no_replace BEFORE INSERT ON payment_shifts WHEN EXISTS(SELECT 1 FROM payment_shifts WHERE payment_id=NEW.payment_id) BEGIN SELECT RAISE(ABORT,'Payment shift is immutable'); END;
+    CREATE TRIGGER shift_closes_no_update BEFORE UPDATE ON shift_closes BEGIN SELECT RAISE(ABORT,'Shift close is immutable'); END;
+    CREATE TRIGGER shift_closes_no_delete BEFORE DELETE ON shift_closes BEGIN SELECT RAISE(ABORT,'Shift close is immutable'); END;
+    CREATE TRIGGER payment_shifts_no_update BEFORE UPDATE ON payment_shifts BEGIN SELECT RAISE(ABORT,'Payment shift is immutable'); END;
+    CREATE TRIGGER payment_shifts_no_delete BEFORE DELETE ON payment_shifts BEGIN SELECT RAISE(ABORT,'Payment shift is immutable'); END;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.
