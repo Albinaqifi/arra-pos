@@ -1,13 +1,28 @@
 const cancellationPrinting = require('./test-printing');
 const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
+const { hashPassword } = require('./session');
+const { timingSafeEqual } = require('node:crypto');
 const CHANNEL = 'arra:order-items';
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const cancellationOpen = (sentAt, now) => Number.isSafeInteger(sentAt) && sentAt > 0 && Number.isSafeInteger(now) && sentAt <= now && now - sentAt < 120000;
 
 function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting = null) {
+  const key = 'sent-correction-owner-pin-attempts';
+  const readAttempts = () => { try { return JSON.parse(db.prepare('SELECT value FROM app_metadata WHERE key=?').get(key)?.value || '{}'); } catch (_) { return { until: Number.MAX_SAFE_INTEGER }; } };
+  const writeAttempts = value => db.prepare('INSERT INTO app_metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
+  function approve(username, pin) {
+    const state = readAttempts(), now = Date.now();
+    if (Number.isSafeInteger(state.until) && now < state.until) throw Error('Owner approval failed');
+    const row = db.prepare("SELECT u.id, u.pin_salt, u.pin_hash FROM local_users u JOIN financial_scopes f ON f.user_id=u.id WHERE u.username=? AND u.active=1 AND f.scope='combined' AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id=u.id AND p.permission='orders.correct_sent') AND NOT EXISTS (SELECT 1 FROM pending_staff p WHERE p.user_id=u.id)").get(username);
+    const candidate = hashPassword(pin, row?.pin_salt || Buffer.alloc(16));
+    const expected = row?.pin_hash ? Buffer.from(row.pin_hash) : Buffer.alloc(32);
+    if (!row?.pin_salt || expected.length !== candidate.length || !timingSafeEqual(candidate, expected)) throw Error('Owner approval failed');
+    writeAttempts({ failures: 0, until: 0 });
+    return row.id;
+  }
   ipcMain.handle(CHANNEL, (event, request) => {
-    const keys = { correct: ['action', 'orderId', 'itemId', 'quantity', 'reason', 'requestId'], list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
+    const keys = { correct: Object.hasOwn(request || {}, 'ownerUsername') ? ['action', 'orderId', 'itemId', 'quantity', 'reason', 'requestId', 'ownerUsername', 'ownerPin'] : ['action', 'orderId', 'itemId', 'quantity', 'reason', 'requestId'], list: ['action', 'orderId'], send: ['action', 'orderId', 'requestId'], add: Object.hasOwn(request || {}, 'optionIds') ? ['action', 'orderId', 'productId', 'optionIds'] : ['action', 'orderId', 'productId'],
       note: ['action', 'orderId', 'itemId', 'note'], increment: ['action', 'orderId', 'itemId'], decrement: ['action', 'orderId', 'itemId'], remove: ['action', 'orderId', 'itemId'] };
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) ||
         Object.getPrototypeOf(request) !== Object.prototype || !Object.hasOwn(keys, request.action) ||
@@ -17,12 +32,12 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
         (request.action === 'add' && (typeof request.productId !== 'string' || !request.productId.trim() || (request.optionIds !== undefined && (!Array.isArray(request.optionIds) || request.optionIds.some(x => typeof x !== 'string' || !x.trim()) || new Set(request.optionIds).size !== request.optionIds.length)))) ||
         (['increment', 'decrement', 'remove', 'note'].includes(request.action) && !validId(request.itemId)) ||
         (request.action === 'note' && typeof request.note !== 'string') ||
-        (request.action === 'correct' && (!validId(request.itemId) || !validId(request.quantity) || typeof request.reason !== 'string' || !request.reason.trim() || request.reason.length > 500)))
+        (request.action === 'correct' && (!validId(request.itemId) || !validId(request.quantity) || typeof request.reason !== 'string' || !request.reason.trim() || request.reason.length > 500 || (Object.hasOwn(request, 'ownerUsername') && (typeof request.ownerUsername !== 'string' || request.ownerUsername !== request.ownerUsername.trim() || !request.ownerUsername || request.ownerUsername.length > 128 || typeof request.ownerPin !== 'string' || !/^\d{6}$/.test(request.ownerPin))))))
       return { ok: false, rejected: true, error: 'Invalid request', ...(request?.action === 'correct' ? {code:'invalid_input'} : {}) };
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, rejected: true, error: 'Access denied', ...(request.action === 'correct' ? {code:'access_denied'} : {}) };
     try {
       const testAttempts = [];
-      let cancellationAttempt, correctionSentAt;
+      let cancellationAttempt, correctionSentAt, approvingOwner;
       db.exec('BEGIN IMMEDIATE');
       try {
         const priorCorrection = request.action === 'correct' ? db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId) : null;
@@ -37,12 +52,14 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             if (!item || request.quantity > item.quantity - corrected) throw Error('Invalid correction');
             const now = Date.now(), reason = request.reason.trim();
             const round = db.prepare('SELECT r.sent_at AS sentAt FROM preparation_ticket_items ti JOIN preparation_tickets t ON t.id=ti.ticket_id JOIN preparation_rounds r ON r.id=t.round_id WHERE ti.item_id=?').get(request.itemId);
-            if (!round || !cancellationOpen(round.sentAt, now)) throw Error('Cancellation window expired');
-            correctionSentAt = round.sentAt;
+            if (!round || !cancellationOpen(round.sentAt, now)) {
+              if (!request.ownerUsername) throw Error('Cancellation window expired');
+              approvingOwner = approve(request.ownerUsername, request.ownerPin);
+            } else correctionSentAt = round.sentAt;
             const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
             const noticeId = cancellationPrinting.createCancellationJob(db, id, request.itemId, request.quantity);
             if (testPrinting) cancellationAttempt = cancellationPrinting.reserveCancellationAttempt(db, noticeId, 'initial-' + noticeId, session.currentUserId());
-            recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason, source: 'waiter' });
+            recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason, source: 'waiter', ...(approvingOwner ? { approvingOwnerId: approvingOwner } : {}) });
           }
         } else if (request.action === 'send') {
           const prior = db.prepare('SELECT order_id FROM preparation_rounds WHERE request_id = ?').get(request.requestId);
@@ -127,7 +144,18 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
       } catch (error) {
         try { db.exec('ROLLBACK'); } catch (_) { return { ok: false, uncertain: request.action === 'correct' }; }
         if (request.action === 'correct') {
-          const codes = { 'Invalid order':'unavailable', 'Invalid correction':'unavailable', 'Invalid retry':'invalid_input', 'Order billed':'already_billed', 'Cancellation window expired':'window_expired' };
+          if (error.message === 'Owner approval failed') {
+            try {
+              db.exec('BEGIN IMMEDIATE');
+              const now = Date.now(), state = readAttempts();
+              if (!(Number.isSafeInteger(state.until) && now < state.until)) {
+                const failures = (Number.isSafeInteger(state.failures) && state.failures >= 0 ? state.failures : 0) + 1;
+                writeAttempts({ failures: failures >= 5 ? 0 : failures, until: failures >= 5 ? now + 60000 : 0 });
+              }
+              db.exec('COMMIT');
+            } catch (_) { try { db.exec('ROLLBACK'); } catch (_) {} return { ok: false, rejected: false }; }
+          }
+          const codes = { 'Invalid order':'unavailable', 'Invalid correction':'unavailable', 'Invalid retry':'invalid_input', 'Order billed':'already_billed', 'Cancellation window expired':'window_expired', 'Owner approval failed':'approval_failed' };
           const code = codes[error.message];
           return code ? { ok: false, rejected: true, code } : { ok: false, rejected: false };
         }

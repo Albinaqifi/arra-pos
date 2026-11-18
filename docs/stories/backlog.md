@@ -1,5 +1,17 @@
 # Development backlog
 
+### S-085 — Approve late sent-item cancellation with the Combined owner's PIN
+
+**Goal:** After the S-081 two-minute window, keep the sent-item Cancel action available and allow an authorized Combined owner to approve the waiter's correction in the same dialog with their PIN. **Depends on:** S-081 and existing Combined account and correction access. This owner decision supersedes S-081's disabled-button and administrator-page guidance for late cancellations.
+
+**Acceptance:**
+
+- Preserve ordinary waiter cancellation during the window. After expiry, including expiry while a dialog is open or invalid send timestamps, require a valid active Combined owner's PIN and existing `orders.correct_sent` authority before a new correction can commit. The same dialog retains quantity, reason and confirmation. Pending items and the separate administrator flow retain existing rules.
+- Provide authorized local setup and reset for Combined owner PINs without default credentials, exposure in logs, records or renderer state beyond entry, or weakened existing account boundaries. Protect against unauthorized direct requests, invalid or absent credentials, deactivated or unprivileged accounts, and identity changes.
+- Record the waiter and approving owner for late corrections without losing existing history, totals, notices, financial restrictions or attribution. Bind approval to the exact correction; preserve idempotent recovery, shared order-write exclusion, and uncertain-request identity across expiry or retries. Do not allow paid-order corrections.
+- Work offline, in English and Albanian, with keyboard access and supported desktop layouts. Verify setup, reset, invalid and valid PINs, role restrictions, direct requests, cutoff boundaries and open dialogs, retry and rollback, identity changes, history, billing, notices and restart. Independently review authorization, financial integrity and renderer ownership.
+
+
 ### S-083 — Print bills through account printers when recording payment
 
 **Goal:** Simplify the generated-bill screen so staff choose Cash or Card, select Account A or B for cash, and use the payment choice to print the bill and release the table. Add independently configurable Account A and Account B bill printers in administration. **Depends on:** the existing bill, payment and test-printing flows (S-023, S-024 and S-056); review their actual state and outstanding printer verification before implementation.

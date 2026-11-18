@@ -1,7 +1,7 @@
 import { configText } from './config-i18n.js';
 const h = React.createElement;
 export class AdminSentCorrections extends React.Component {
-  constructor(props) { super(props); this.state = { items: [], loading: true, error: '', selected: null, quantity: 1, reason: '', busy: false, pending: null, uncertain: false, notice: '' }; }
+  constructor(props) { super(props); this.state = { items: [], authorized: false, loading: true, error: '', selected: null, quantity: 1, reason: '', busy: false, pending: null, uncertain: false, notice: '' }; }
   t(key) { return configText(this.props.language,key); }
   componentDidMount() { this.load(); }
   leaveEditor() { return !this.state.busy && !this.state.pending; }
@@ -10,7 +10,7 @@ export class AdminSentCorrections extends React.Component {
     try {
       const result = await window.arra.adminSentCorrection({action:'list'});
       if (!result.ok || !Array.isArray(result.data?.items)) throw Error();
-      this.setState({items:result.data.items,loading:false,error:''});
+      this.setState({items:result.data.items,authorized:true,loading:false,error:''});
     } catch (_) { this.setState({loading:false,error:this.t('Open orders unavailable or access denied.')}); }
   }
   async submit() {
@@ -28,6 +28,29 @@ export class AdminSentCorrections extends React.Component {
       else { this.setState({busy:false,pending:null}); await this.load(); this.setState({error:this.t('Correction was rejected. Refresh and check the order.')}); }
     } catch (_) { this.setState({busy:false,uncertain:true,error:this.t('The result is uncertain. Retry the same correction.')}); }
   }
+  async setOwnerPin(event) {
+    event.preventDefault();
+    if (this.state.busy || this.state.pending) return;
+    const input = event.currentTarget.elements.pin, pin = input.value;
+    input.value = '';
+    if (!/^\d{6}$/.test(pin)) { this.setState({ error: this.t('Enter a 6-digit PIN.') }); return; }
+    if (!window.confirm(this.t('Set your owner approval PIN? Your session will end.'))) return;
+    this.setState({ busy: true, error: '' });
+    try {
+      const result = await window.arra.employeeConfig({ action: 'ownApprovalPin', pin });
+      if (result.uncertain) {
+        if (this.props.onAccessChanged && !(await this.props.onAccessChanged())) return;
+        this.setState({ busy: false, error: this.t('PIN result unknown. Sign in again and check before retrying.') });
+        return;
+      }
+      if (!result.ok) { this.setState({ busy: false, error: this.t('Could not set owner approval PIN.') }); return; }
+      if (this.props.onAccessChanged) await this.props.onAccessChanged();
+      else this.setState({ busy: false, notice: this.t('PIN saved. Sign in again.') });
+    } catch (_) {
+      if (this.props.onAccessChanged && !(await this.props.onAccessChanged())) return;
+      this.setState({ busy: false, error: this.t('PIN result unknown. Sign in again and check before retrying.') });
+    }
+  }
   render() {
     const s=this.state, t=x=>this.t(x), item=s.items.find(i=>i.itemId===s.selected), locked=!!s.pending || s.busy;
     const groups=new Map(); s.items.forEach(i=>{ if (!groups.has(i.tableId)) groups.set(i.tableId,[]); groups.get(i.tableId).push(i); });
@@ -36,6 +59,7 @@ export class AdminSentCorrections extends React.Component {
       h('h1',null,t('Correct sent items')),
       h('p',null,t('Find a table, select a sent item, then enter how many to cancel and why.')),
       h('p',{className:'floor-note'},t('A correction reduces the remaining quantity on an unbilled open order. Tell preparation staff in person; a printed notice does not guarantee they have seen it.')),
+      s.authorized && h('details',{className:'floor-list'},h('summary',null,t('Set owner approval PIN')),h('p',null,t('Use this PIN to approve late sent-item cancellations. Saving ends your current session.')),h('form',{onSubmit:e=>this.setOwnerPin(e)},h('label',null,t('New 6-digit PIN'),h('input',{name:'pin',type:'password',inputMode:'numeric',pattern:'[0-9]{6}',minLength:6,maxLength:6,required:true,disabled:locked,autoComplete:'new-password'})),h('button',{type:'submit',disabled:locked},t('Set owner approval PIN')))),
       s.loading && h('p',{role:'status'},t('Loading…')),s.error && h('p',{role:'alert'},s.error),s.notice && h('p',{role:'status'},s.notice),
       !s.loading && !s.pending && s.error && h('button',{type:'button',onClick:()=>this.load()},t('Refresh list')),
       !s.loading && !s.error && !s.items.length && h('p',{className:'floor-empty'},t('No sent items available for correction.')),

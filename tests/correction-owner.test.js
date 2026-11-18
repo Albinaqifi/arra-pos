@@ -85,3 +85,16 @@ test('correction rejects pending items and suppresses disposed completions', asy
   calls[0].resolve({ ok: true, data: { items: [] } }); await pending;
   assert.equal(orders.state.items.length, 1); assert.equal(notices.length, 0); assert.equal(orders.writeBusy, false);
 });
+
+test('late correction retries the same payload without retaining an owner PIN', async () => {
+  const { workflow, orders, calls } = fixture();
+  const pin=String(require('node:crypto').randomInt(0,1000000)).padStart(6,'0');
+  orders._set({ items: orders.state.items.map(item => ({ ...item, sentAt: Date.now()-120001 })) });
+  assert.equal(workflow.open(100),true); workflow.chooseReason('Entered by mistake'); workflow.setOwnerUsername('owner'); workflow.setOwnerPin(pin);
+  const first=workflow.confirm(); assert.equal(calls[0].payload.ownerPin,pin);assert.equal(workflow.state.dialog.ownerPin,'');assert.equal(Object.hasOwn(workflow.state.dialog.payload,'ownerPin'),false);
+  calls[0].reject(Error('Lost response'));await first; workflow.setOwnerUsername('other');assert.equal(workflow.state.dialog.ownerUsername,'owner');
+  const retry=workflow.confirm();assert.equal(calls[1].payload.ownerPin,undefined); assert.equal(calls[1].payload.requestId,calls[0].payload.requestId);
+  calls[1].resolve({ok:false,rejected:true,code:'window_expired'});await retry;assert.equal(workflow.state.dialog.unresolved,true);
+  workflow.setOwnerPin(pin);const again=workflow.confirm();assert.equal(calls[2].payload.ownerUsername,'owner');assert.equal(calls[2].payload.requestId,calls[0].payload.requestId);assert.equal(workflow.state.dialog.ownerPin,'');
+  calls[2].resolve({ok:true,data:{items:[]}});await again;assert.equal(workflow.state.dialog,null);
+});

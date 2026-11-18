@@ -44,7 +44,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   },
   async employeeConfig(request) {
     try { return await ipcRenderer.invoke('arra:employee-config', request); }
-    catch (_) { return { ok: false, error: 'Employee configuration unavailable' }; }
+    catch (_) { return { ok: false, uncertain: request?.action === 'ownApprovalPin', error: 'Employee configuration unavailable' }; }
   },
   async menuConfig(request) {
     try { return await ipcRenderer.invoke('arra:menu-config', request); }
@@ -102,6 +102,10 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     if (action === 'correct') {
       if (!value || !Number.isSafeInteger(value.itemId) || !Number.isSafeInteger(value.quantity) || typeof value.reason !== 'string' || typeof value.requestId !== 'string') return { ok: false, rejected: true, code: 'invalid_input' };
       Object.assign(request, { itemId: value.itemId, quantity: value.quantity, reason: value.reason, requestId: value.requestId });
+      if (value.ownerUsername !== undefined || value.ownerPin !== undefined) {
+        if (typeof value.ownerUsername !== 'string' || typeof value.ownerPin !== 'string') return { ok: false, rejected: true, code: 'invalid_input' };
+        Object.assign(request, { ownerUsername: value.ownerUsername, ownerPin: value.ownerPin });
+      }
     } else if (action === 'send') {
       if (typeof value !== 'string') return { ok: false };
       request.requestId = value;
@@ -130,7 +134,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
       }
       if (action === 'correct' && response?.ok === false) {
         const rejected = response.rejected === true;
-        const code = rejected && ['invalid_input', 'access_denied', 'already_billed', 'unavailable', 'window_expired'].includes(response.code) ? response.code : undefined;
+        const code = rejected && ['invalid_input', 'access_denied', 'already_billed', 'unavailable', 'window_expired', 'approval_failed'].includes(response.code) ? response.code : undefined;
         return code ? { ok: false, rejected, code } : { ok: false, rejected };
       }
     } catch (_) {}

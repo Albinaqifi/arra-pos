@@ -437,5 +437,13 @@
   "Remaining after correction:": "Mbeten pas korrigjimit:",
   "Choose a whole quantity within the remaining amount.": "Zgjidhni një numër të plotë brenda sasisë së mbetur.",
   "Reason (required)": "Arsyeja (e detyrueshme)",
-  "Review and save correction": "Shqyrto dhe ruaj korrigjimin"
+  "Review and save correction": "Shqyrto dhe ruaj korrigjimin",
+  "Set owner approval PIN": "Vendos PIN-in e miratimit të pronarit",
+  "Use this PIN to approve late sent-item cancellations. Saving ends your current session.": "Përdorni këtë PIN për të miratuar anulimet e artikujve të dërguar pas afatit. Ruajtja përfundon sesionin tuaj.",
+  "Enter a 6-digit PIN.": "Shkruani një PIN me 6 shifra.",
+  "Set your owner approval PIN? Your session will end.": "Të vendoset PIN-i i miratimit? Sesioni juaj do të përfundojë.",
+  "PIN saved.": "PIN-i u ruajt.",
+  "Could not set owner approval PIN.": "PIN-i i miratimit nuk mund të vendosej.",
+  "PIN saved. Sign in again.": "PIN-i u ruajt. Hyni përsëri.",
+  "PIN result unknown. Sign in again and check before retrying.": "Rezultati i ruajtjes së PIN-it nuk dihet. Hyni përsëri dhe kontrolloni para se të provoni sërish."
 }

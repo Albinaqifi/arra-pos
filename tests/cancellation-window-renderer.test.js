@@ -1,6 +1,6 @@
 const {orderProps}=require('./support/renderer-view'), {arrange}=require('./support/renderer-fixture');
 const test=require('node:test'), assert=require('node:assert/strict'), vm=require('node:vm');
-test('deadline disables sent cancellation and an open confirmation in both languages', async()=>{
+test('deadline keeps cancellation available and requests owner approval in both languages', async()=>{
  for(const language of ['en','sq']) {
   let now=1000000, refreshes=0, nextTimer=0; const timers=new Map(); class FakeDate extends Date { constructor(...args){super(...(args.length?args:[now]));} static now(){return now;} }
   class Component {setState(update){Object.assign(this.state,update)} forceUpdate(){}}
@@ -16,9 +16,9 @@ test('deadline disables sent cancellation and an open confirmation in both langu
   now=1000500; fireTimer(1000); // Clock moved back, but remains after the send time.
   now=1119999; fireTimer(1000);
   assert.equal(app.correction.open(1),true);app.correction.chooseReason('Entered by mistake');app.correction.review();
-  now=1120000; fireTimer(1); assert.equal(refreshes,4); assert.equal(timers.size,0); const nodes=sentControl();assert.equal(nodes.find(n=>n.type==='button').props.disabled,true);assert.ok(nodes.some(n=>n.type==='span' && /administrator|administrator/i.test(n.children[0])));
+  now=1120000; fireTimer(1); assert.equal(refreshes,4); assert.equal(timers.size,0); const nodes=sentControl();assert.equal(nodes.find(n=>n.type==='button').props.disabled,false);assert.ok(nodes.some(n=>n.type==='span' && /Combined|kombinuar/i.test(n.children[0])));
   // Effects that install DOM focus are not needed for this state-level check.
-  React.useEffect=()=>{}; const dialog=walk(ctx.Correction({v:app.correction.view(),modal:app.correction.state.dialog}));assert.equal(dialog.find(n=>n.props.className==='correction-primary').props.disabled,true);
+  React.useEffect=()=>{}; const dialog=walk(ctx.Correction({v:app.correction.view(),modal:app.correction.state.dialog}));assert.equal(dialog.find(n=>n.props.className==='correction-primary').props.disabled,false);assert.ok(dialog.some(n=>n.type==='input'&&n.props.type==='password'));
   await app.correction.confirm();assert.equal(app.tableOrders.state.items[0].cxQty,0);assert.ok(app.correction.state.dialog.error);
  }
 });

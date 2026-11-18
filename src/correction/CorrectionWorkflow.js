@@ -7,6 +7,7 @@ import { SentItemCorrection } from '../waiter/SentItemCorrection.js';
 const reasons = ['Customer changed mind', 'Entered by mistake', 'Kitchen can’t make it', 'Took too long', 'Other'];
 const rejections = {
   window_expired: cancellationGuidance,
+  approval_failed: 'Owner approval failed. Check the account and PIN, or try again later.',
   access_denied: 'Correction denied. Sign in as a waiter with order access.',
   already_billed: 'This order has already been billed. The item cannot be cancelled here.',
   unavailable: 'The order or item is unavailable, or the remaining quantity changed. Return to the order and check it.',
@@ -25,7 +26,7 @@ export class CorrectionWorkflow extends FeatureState {
     if (this.disposed || this.locked || this.orders.writeBusy() || !this.canOpen()) return false;
     const target = this.orders.captureTarget();
     const item = this.orders.snapshot().items.find(value => value.id === itemId && value.tableId === target.tableId);
-    if (!item || item.status !== 'sent' || item.qty <= item.cxQty || !isCancellationOpen(item.sentAt, Date.now())) return false;
+    if (!item || item.status !== 'sent' || item.qty <= item.cxQty) return false;
     this._set({ dialog: { type: 'cancel', itemId, qty: 1, reason: '', other: '', confirming: false, target, draftId: ++this.draftSequence } });
     return true;
   }
@@ -44,6 +45,8 @@ export class CorrectionWorkflow extends FeatureState {
   }
   chooseReason(reason) { if (reasons.includes(reason)) this._edit({ reason }); }
   setOther(other) { this._edit({ other }); }
+  setOwnerUsername(ownerUsername) { const d = this.state.dialog; if (d && !d.saving && !d.payload?.ownerUsername) this._set({ dialog: { ...d, ownerUsername } }); }
+  setOwnerPin(ownerPin) { const d = this.state.dialog; if (d && !d.saving) this._set({ dialog: { ...d, ownerPin } }); }
   review() {
     const dialog = this.state.dialog;
     if (!dialog || dialog.saving) return;
@@ -62,11 +65,13 @@ export class CorrectionWorkflow extends FeatureState {
     if (!dialog.reason || (dialog.reason === 'Other' && !dialog.other.trim())) return;
     const item = this._item(dialog);
     if (!item || (!dialog.requestId && (item.status !== 'sent' || dialog.qty > item.qty - item.cxQty))) return;
-    if (!dialog.requestId && !isCancellationOpen(item.sentAt, Date.now())) { this._set({ dialog: { ...dialog, error: this.t(cancellationGuidance) } }); return; }
+    const expired = !isCancellationOpen(item.sentAt, Date.now());
+    if (expired && !dialog.requestId && (!dialog.ownerUsername?.trim() || !/^\d{6}$/.test(dialog.ownerPin || ''))) { this._set({ dialog: { ...dialog, error: this.t(cancellationGuidance) } }); return; }
     const lease = this.orders.acquireWrite('correct', dialog.target);
     if (!lease) return;
     if (!this.bridge) {
       try {
+        if (expired) { this._set({ dialog: { ...dialog, ownerPin: '', error: this.t('Owner approval is unavailable in demo mode.') } }); return; }
         this.orders.applyDemoCorrection(dialog.itemId, dialog.qty, dialog.reason === 'Other' ? dialog.other.trim() : dialog.reason, this.getActor());
         this._set({ dialog: null });
         this.notify(this.t('Correction saved. Tell preparation staff in person.'));
@@ -75,10 +80,12 @@ export class CorrectionWorkflow extends FeatureState {
     }
     // The first attempt freezes every field. A later rejection cannot prove that
     // an earlier uncertain attempt did not commit, so it must retain this payload.
-    const payload = dialog.payload || Object.freeze({ itemId: dialog.itemId, quantity: dialog.qty, reason: dialog.reason === 'Other' ? dialog.other.trim() : dialog.reason, requestId: this.requestId() });
-    this._set({ dialog: { ...dialog, payload, requestId: payload.requestId, saving: true, error: '' } });
+    const payload = dialog.payload || Object.freeze({ itemId: dialog.itemId, quantity: dialog.qty, reason: dialog.reason === 'Other' ? dialog.other.trim() : dialog.reason, requestId: this.requestId(), ...(expired ? { ownerUsername: dialog.ownerUsername.trim() } : {}) });
+    const { ownerUsername: boundOwner, ...correction } = payload;
+    const request = dialog.ownerPin ? { ...correction, ownerUsername: boundOwner || dialog.ownerUsername?.trim(), ownerPin: dialog.ownerPin } : boundOwner ? correction : payload;
+    this._set({ dialog: { ...dialog, ownerPin: '', payload, requestId: payload.requestId, saving: true, error: '' } });
     try {
-      const result = await this.bridge.orderItems('correct', dialog.target.orderId, payload);
+      const result = await this.bridge.orderItems('correct', dialog.target.orderId, request);
       if (!this._current(dialog)) return;
       if (result?.ok) {
         await this.orders.refreshAvailability(lease);
@@ -110,6 +117,7 @@ export class CorrectionWorkflow extends FeatureState {
       cxInc: () => this.changeQuantity(1), cxDec: () => this.changeQuantity(-1),
       cxReasons: reasons.map(reason => ({ label: t(reason), pressed: String(dialog.reason === reason), pick: () => this.chooseReason(reason) })),
       cxReasonLabel: dialog.reason === 'Other' ? dialog.other.trim() : t(dialog.reason), cxIsOther: dialog.reason === 'Other', cxOther: dialog.other,
+      cxOwnerUsername: dialog.ownerUsername || '', cxOwnerPin: dialog.ownerPin || '', onCxOwnerUsername: event => this.setOwnerUsername(event.target.value), onCxOwnerPin: event => this.setOwnerPin(event.target.value),
       onCxOther: event => this.setOther(event.target.value), cxDisabled: !dialog.reason || (dialog.reason === 'Other' && !dialog.other.trim()),
       cxInfo: t(this.bridge ? 'Tell preparation staff in person. Check cancellation print status; earlier output may still arrive.' : 'Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.'),
       cxConfirm: () => this.confirm(), cxReview: () => this.review(), cxEditOrDismiss: () => this.editOrDismiss(), closeModal: () => this.dismiss(),
