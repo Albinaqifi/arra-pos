@@ -55,6 +55,8 @@ function createBillHistorySample(passwords, now = new Date()) {
         }
         if (day < 364) { close.run(end.getTime(), owner, JSON.stringify({orders:[],printJobs:[]})); open.run(end.getTime()); }
       }
+      // Synthetic historical inserts bypass service hooks; do not present partial shift coverage.
+      db.exec('INSERT INTO shift_coverage_unavailable(day_id) SELECT id FROM business_days WHERE closed_at IS NULL');
       db.exec('COMMIT');
     } catch (error) { db.exec('ROLLBACK'); throw error; }
     fs.writeFileSync(path.join(directory, 'SAMPLE-DATA-ONLY'), 'Isolated sample data only. No real sales.\n', {flag:'wx'});

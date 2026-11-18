@@ -1,5 +1,6 @@
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
+const { markService, assignPayment } = require('./shifts');
 const CHANNEL = 'arra:payment';
 const { createBillJob, reserveAttempt, dispatch } = require('./test-printing');
 
@@ -20,7 +21,10 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
         }
         const bill = db.prepare("SELECT b.order_id AS orderId, b.total FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=? AND o.status='open' AND o.retired_empty = 0").get(request.billId);
         if (!bill) throw Error('Bill unavailable');
-        const id = db.prepare('INSERT INTO payments (bill_id, actor_id, paid_at, amount, method, account) VALUES (?, ?, ?, ?, ?, ?)').run(request.billId, session.currentUserId(), Date.now(), bill.total, request.method, request.account).lastInsertRowid;
+        const paidAt = Date.now();
+        const id = db.prepare('INSERT INTO payments (bill_id, actor_id, paid_at, amount, method, account) VALUES (?, ?, ?, ?, ?, ?)').run(request.billId, session.currentUserId(), paidAt, bill.total, request.method, request.account).lastInsertRowid;
+        markService(db, paidAt);
+        assignPayment(db, id, paidAt);
         db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty = 0").run(bill.orderId);
         recordAudit(db, session.currentUserId(), 'record', 'payment', id, bill.orderId, {});
         let job = db.prepare('SELECT id FROM test_print_jobs WHERE bill_id=?').get(request.billId);

@@ -1,6 +1,7 @@
 const { createHash } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
+const { markService } = require('./shifts');
 const CHANNEL = 'arra:bill';
 
 function snapshot(db, orderId) {
@@ -46,7 +47,9 @@ function registerBills(ipcMain, isAllowedSender, db, session) {
         const data = snapshot(db, request.orderId);
         if (request.action === 'generate') {
           if (data.fingerprint !== request.fingerprint) throw Error('Order changed; review the bill again');
-          const id = db.prepare('INSERT INTO bills (order_id, actor_id, generated_at, total, fingerprint) VALUES (?, ?, ?, ?, ?)').run(request.orderId, session.currentUserId(), Date.now(), data.total, data.fingerprint).lastInsertRowid;
+          const generatedAt = Date.now();
+          const id = db.prepare('INSERT INTO bills (order_id, actor_id, generated_at, total, fingerprint) VALUES (?, ?, ?, ?, ?)').run(request.orderId, session.currentUserId(), generatedAt, data.total, data.fingerprint).lastInsertRowid;
+          markService(db, generatedAt);
           for (const line of data.lines) db.prepare('INSERT INTO bill_lines (bill_id, item_id, name, unit_price, quantity, modifiers) VALUES (?, ?, ?, ?, ?, ?)').run(id, line.itemId, line.name, line.unitPrice, line.quantity, JSON.stringify(line.modifiers));
           recordAudit(db, session.currentUserId(), 'generate', 'bill', id, request.orderId, {});
           data.id = id;

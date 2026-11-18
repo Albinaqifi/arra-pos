@@ -47,7 +47,7 @@ test('upgrade excludes earlier closed days and preserves the existing printer se
   const session={currentUserId:()=>1,authenticatedUserId:()=>1};
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session,()=> 'failed');
   const old=handler({},{action:'list'}).data.days[0].id; assert.equal(handler({},{action:'close',dayId:old}).ok,true);
-  await new Promise(resolve=>setImmediate(resolve)); db.close(); db=openDatabase(dir);
+  await new Promise(resolve=>setImmediate(resolve)); db.exec('DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; '); db.close(); db=openDatabase(dir);
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session,()=> 'failed');
   let state=handler({},{action:'accountAList'}).data; assert.equal(state.queue,'sample A'); assert.equal(state.days.length,0);
   assert.equal(handler({},{action:'accountAClose',dayId:old,language:'en'}).ok,false);

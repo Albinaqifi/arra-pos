@@ -1,5 +1,6 @@
 const cancellationPrinting = require('./test-printing');
 const { recordAudit } = require('./audit');
+const { markService } = require('./shifts');
 const plain = x => x && typeof x === 'object' && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const fields = (x, names) => Reflect.ownKeys(x).length === names.length && names.every(n => Object.hasOwn(x,n));
 const id = n => Number.isSafeInteger(n) && n > 0;
@@ -25,7 +26,9 @@ function registerAdminSentCorrection(ipcMain, isAllowedSender, db, session, test
           const item=db.prepare(`SELECT i.quantity FROM order_items i JOIN orders o ON o.id=i.order_id JOIN dining_tables t ON t.id=o.table_id LEFT JOIN dining_areas a ON a.id=t.area_id WHERE i.id=? AND i.order_id=? AND i.status='sent' AND o.status='open' AND o.retired_empty=0 AND t.active=1 AND COALESCE(a.active,1)=1 AND NOT EXISTS(SELECT 1 FROM bills b WHERE b.order_id=o.id)`).get(req.itemId,req.orderId);
           const corrected=db.prepare('SELECT COALESCE(SUM(quantity),0) AS n FROM sent_item_corrections WHERE item_id=?').get(req.itemId).n;
           if (!item || req.quantity > item.quantity-corrected) throw Error('Invalid correction');
-          const result=db.prepare('INSERT INTO sent_item_corrections(request_id,item_id,order_id,actor_id,quantity,reason,occurred_at) VALUES(?,?,?,?,?,?,?)').run(req.requestId,req.itemId,req.orderId,actor,req.quantity,req.reason.trim(),Date.now());
+          const now=Date.now();
+          const result=db.prepare('INSERT INTO sent_item_corrections(request_id,item_id,order_id,actor_id,quantity,reason,occurred_at) VALUES(?,?,?,?,?,?,?)').run(req.requestId,req.itemId,req.orderId,actor,req.quantity,req.reason.trim(),now);
+          markService(db,now);
           const noticeId=cancellationPrinting.createCancellationJob(db,result.lastInsertRowid,req.itemId,req.quantity);
           if (testPrinting) attempt=cancellationPrinting.reserveCancellationAttempt(db,noticeId,'initial-'+noticeId,actor);
           recordAudit(db,actor,'correct_sent','order_item',req.itemId,req.orderId,{correctionId:result.lastInsertRowid,quantity:req.quantity,reason:req.reason.trim(),source:'administrator'});
