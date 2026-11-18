@@ -77,6 +77,7 @@ export class MoveWorkflow extends FeatureState {
             this._set({ dialog: { ...this.state.dialog, saving: false, unresolved: false, dest: null, request: null, error: this.t('Order was not moved. Check the destination and try again.') } });
           } else {
             this._set({ dialog: null });
+            this.orders.releaseWrite(lease);
             this.orders.abandonChangedOrder(lease);
             this.notify(this.t('Order location changed. Select a table to continue.'), 'warn');
           }

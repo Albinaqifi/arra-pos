@@ -172,11 +172,11 @@ test('failed waiter selection revokes the prior waiter but leaves a direct owner
   const session=registerSession(ipc,e=>e===event,db); registerEmployeeConfig(ipc,e=>e===event,db,session);
   const call=(name,req)=>handlers['arra:'+name](event,req);
   assert.equal(call('sign-in',{username:'owner',password:ownerPassword}).ok,true);
-  assert.equal(call('select-waiter',{id:1,pin:firstPin}).ok,false); assert.equal(session.currentUserId(),1);
+  assert.equal(call('identify-staff',{kind:'waiter',pin:firstPin}).ok,false); assert.equal(session.currentUserId(),1);
   assert.equal(call('employee-config',{action:'createRestaurant',username:'restaurant',password:restaurantPassword}).ok,true);
   assert.equal(call('employee-config',{action:'create',username:'staff',password:staffPassword,pin:firstPin}).ok,true);
   const waiter=db.prepare("SELECT id FROM local_users WHERE username='staff'").get().id;
   call('sign-out',{}); assert.equal(call('sign-in',{username:'restaurant',password:restaurantPassword}).ok,true);
-  assert.equal(call('select-waiter',{id:waiter,pin:firstPin}).ok,true); assert.equal(session.currentUserId(),waiter);
-  assert.equal(call('select-waiter',{id:waiter,pin:badPin}).ok,false); assert.equal(session.currentUserId(),null);
+  assert.equal(call('identify-staff',{kind:'waiter',pin:firstPin}).ok,true); assert.equal(session.currentUserId(),waiter);
+  assert.equal(call('identify-staff',{kind:'waiter',pin:badPin}).ok,false); assert.equal(session.currentUserId(),null);
 });

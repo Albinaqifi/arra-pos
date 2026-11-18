@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const vm = require('node:vm');
+const { randomInt } = require('node:crypto');
 const { openDatabase: realOpenDatabase } = require('../src/desktop/database');
 const { authorizedDatabase } = require('./support/authorized-database');
 const openDatabase = directory => authorizedDatabase(realOpenDatabase(directory));
@@ -58,7 +59,7 @@ test('desktop renderer clears prior financial state across sign-out and denies s
   let resolveOld;
   const oldTables = new Promise(resolve => { resolveOld = resolve; });
   let owner = false;
-  const api = { signOut:async()=>({ok:true}), selectWaiter:async()=>({ok:true}), getMenu:async()=>({ok:false}), getTables:()=>owner ? Promise.resolve({ok:false}) : oldTables };
+  const api = { signOut:async()=>({ok:true}), signIn:async()=>({ok:true,admin:false}), identifyStaff:async()=>({ok:true,data:{id:2,name:'waiter',isTransfer:false}}), clearWaiter:async()=>({ok:true}), openOrder:async()=>({ok:false}), getEntryTables:async()=>owner?{ok:false}:{ok:true,data:[]}, getMenu:async()=>({ok:false}), getTables:()=>owner ? Promise.resolve({ok:false}) : oldTables };
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
   const context = { React:{Component,createElement(){}}, ReactDOM:{createRoot(){return {render(){}};}}, document:{getElementById(){}}, window:{arra:api}, setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){} };
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
@@ -66,7 +67,7 @@ test('desktop renderer clears prior financial state across sign-out and denies s
   arrange(app, {screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
   app.loadDesktopData(); await app.session.signOut();
   assert.equal(routeOf(app),'login'); assert.equal(app.tableOrders.state.sections.length,0); assert.equal(Object.keys(app.tableOrders.state.orders).length,0); assert.equal(app.tableOrders.state.items.length,0); assert.equal(app.tableOrders.state.tableId,null);
-  owner=true; await app.session.chooseWaiter({id:2,name:'owner'},''); await new Promise(setImmediate);
+  owner=true; app.session.setUsername('restaurant'); app.session.setPassword('sample password'); await app.session.login(); app.session.requestTable(1); app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); await new Promise(setImmediate);
   assert.equal(app.tableOrders.state.tableLoad,'error'); assert.equal(app.tableOrders.state.sections.length,0); assert.equal(app.tableOrders.state.items.length,0);
   resolveOld({ok:true,data:[{id:1,area:'previous',orderId:4,openedAt:1}]}); await new Promise(setImmediate);
   assert.equal(app.tableOrders.state.sections.length,0); assert.equal(Object.keys(app.tableOrders.state.orders).length,0); assert.equal(app.tableOrders.state.items.length,0);

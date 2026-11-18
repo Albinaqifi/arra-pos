@@ -33,8 +33,8 @@ async function desktop(items = []) {
 
 test('demo modifier opening, cancellation and invalid submission do not create an order', async () => {
   const app = appFor();
-  await app.session.chooseWaiter({ name: 'Sample' }, '');
-  await app.tableOrders.openTable(1);
+  app.session.setUsername('sample'); app.session.setPassword('sample password'); await app.session.login();
+  app.session.requestTable(1); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin();
   assert.equal(app.tableOrders.state.orders[1], undefined);
   app.pending.addProduct('qebapa');
   assert.equal(app.tableOrders.state.orders[1], undefined);

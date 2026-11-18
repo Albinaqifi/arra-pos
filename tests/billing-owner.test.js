@@ -52,9 +52,9 @@ test('unknown then definite failure freezes the payment payload and blocks all s
   assert.equal(paid, 1); assert.ok(calls.every(request => request === calls[0]));
 });
 
-test('payment holds the shared lease then a continuous navigation lock through clear and waiter loading', async () => {
+test('payment holds the shared lease then a continuous navigation lock through clear and grid loading', async () => {
   const response = deferred(), clear = deferred(), staff = deferred(); let sends = 0, payments = 0, clears = 0;
-  const { app, bill: createBill } = harness({ payment: () => { payments++; return response.promise; }, orderItems: async () => { sends++; return { ok: false }; }, clearWaiter: () => { clears++; return clear.promise; }, getWaiters: () => staff.promise });
+  const { app, bill: createBill } = harness({ payment: () => { payments++; return response.promise; }, orderItems: async () => { sends++; return { ok: false }; }, clearWaiter: () => { clears++; return clear.promise; }, getEntryTables: () => staff.promise });
   const bill = createBill(); Object.assign(bill.state, { method: 'card', account: 'A' });
   const paying = bill.pay(); assert.equal(app.tableOrders.writeBusy, true); assert.equal(app.billing.locked, true);
   await app.sendWorkflow.send(); await app.session.switchWaiter(); app.tableOrders.showTables(); app.moveWorkflow.open(); app.correction.open(1); app.pending.openNote(1);
@@ -67,7 +67,7 @@ test('payment holds the shared lease then a continuous navigation lock through c
   await bill.pay(); assert.equal(payments, 1); clear.resolve({ ok: true }); await tick();
   assert.equal(app.billing.locked, true); assert.equal(app.session.state.switching, true);
   staff.resolve({ ok: true, data: [] }); await paying;
-  assert.equal(app.billing.locked, false); assert.equal(routeOf(app), 'waiters'); unsubscribe();
+  assert.equal(app.billing.locked, false); assert.equal(routeOf(app), 'tables'); unsubscribe();
 });
 
 test('uncertain desktop payment retains the boundary lock after the service lease releases', async () => {
@@ -131,7 +131,7 @@ test('demo bill gates pending items and preserves backup, reprint, totals and on
   const paying = app.demoBilling.paid(); await app.demoBilling.paid(); await paying;
   assert.equal(app.demoBilling.state.history.length, 5); assert.equal(app.demoBilling.state.billNo, 1046);
   const record = app.demoBilling.state.history[0]; assert.equal(record.total, 100); assert.equal(record.count, 1); assert.equal(record.account, 'B');
-  assert.equal(app.tableOrders.state.orders[1], undefined); assert.equal(routeOf(app), 'waiters');
+  assert.equal(app.tableOrders.state.orders[1], undefined); assert.equal(routeOf(app), 'tables');
   assert.equal(app.demoBilling.historyView().hCount, '5');
   for (const field of ['modal', 'history', 'billNo']) assert.equal(Object.hasOwn(app.state || {}, field), false);
   assert.equal(app.state, undefined, 'the root no longer stores feature state');

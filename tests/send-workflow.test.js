@@ -21,10 +21,10 @@ function harness(api) {
   return { app, context };
 }
 
-test('send lock spans the item response, print lookup, waiter clearing and staff loading', async () => {
+test('send lock spans the item response, print lookup, waiter clearing and grid loading', async () => {
   const item = deferred(), print = deferred(), clear = deferred(), staff = deferred();
   let sends = 0, clears = 0, opens = 0;
-  const { app } = harness({ orderItems: () => { sends++; return item.promise; }, printJobs: () => print.promise, clearWaiter: () => { clears++; return clear.promise; }, getWaiters: () => staff.promise, openOrder: () => { opens++; return { ok: false }; } });
+  const { app } = harness({ orderItems: () => { sends++; return item.promise; }, printJobs: () => print.promise, clearWaiter: () => { clears++; return clear.promise; }, getEntryTables: () => staff.promise, openOrder: () => { opens++; return { ok: false }; } });
   const sending = app.sendWorkflow.send();
   assert.equal(app.sendWorkflow.state.busy, true); assert.equal(app.tableOrders.writeBusy, true);
   await app.sendWorkflow.send(); await app.pending.incItem(1); app.tableOrders.showTables();
@@ -36,9 +36,10 @@ test('send lock spans the item response, print lookup, waiter clearing and staff
   assert.equal(opens, 0); assert.equal(clears, 0); assert.equal(app.billing.state.desktop, null); assert.equal(app.demoBilling.state.dialog, null); assert.equal(app.pending.state.dialog, null);
   assert.equal(app.moveWorkflow.state.dialog, null); assert.equal(app.correction.state.dialog, null);
   print.resolve({ ok: true, data: { jobs: [] } }); await tick();
-  assert.equal(clears, 1); assert.equal(app.sendWorkflow.state.busy, true); assert.equal(routeOf(app), 'waiters');
+  assert.equal(clears, 1); assert.equal(app.sendWorkflow.state.busy, true); assert.equal(routeOf(app), 'tables'); assert.equal(app.session.state.waiter,null);
+  app.session.requestTable(1); app.session.requestManager(); assert.equal(app.session.state.pinFor,null);
   await app.sendWorkflow.send(); clear.resolve({ ok: true }); await tick();
-  assert.equal(app.sendWorkflow.state.busy, true); assert.equal(app.session.state.switching, true);
+  assert.equal(app.sendWorkflow.state.busy, true); assert.equal(app.session.state.switching, true); app.session.requestTable(1); app.session.requestManager(); assert.equal(app.session.state.pinFor,null);
   await app.sendWorkflow.send(); staff.resolve({ ok: true, data: [] }); await sending;
   assert.equal(sends, 1); assert.equal(app.sendWorkflow.state.busy, false); assert.equal(app.session.state.switching, false);
   assert.match(app.session.state.handoffNotice, /Test print output is not confirmed/);
@@ -48,7 +49,7 @@ test('failed and thrown sends release the lease and retain one request until con
   const requests = []; let outcome = 'throw';
   const { app } = harness({
     orderItems: async (action, orderId, token) => { requests.push({ orderId, token }); if (outcome === 'throw') throw Error('lost response'); return outcome === 'fail' ? { ok: false } : { ok: true, data: { items: [row()] } }; },
-    printJobs: async () => ({ ok: false }), clearWaiter: async () => ({ ok: true }), getWaiters: async () => ({ ok: true, data: [] }),
+    printJobs: async () => ({ ok: false }), clearWaiter: async () => ({ ok: true }), getEntryTables: async () => ({ ok: true, data: [] }),
   });
   await app.sendWorkflow.send(); outcome = 'fail'; await app.sendWorkflow.send();
   assert.equal(app.tableOrders.writeBusy, false); assert.equal(app.sendWorkflow.state.busy, false); assert.match(app.shell.state.toast.msg, /Could not save order items/);

@@ -34,7 +34,7 @@ export class DemoPrinting extends FeatureState {
     this.appendActivity(tableId, 'Sent round ' + round + ': ' + parts.join(', ') + (bad.length ? ' (' + bad.join(' and ') + ' ticket did not print)' : ''), actor);
     this._set({ jobs: [...this.state.jobs, ...jobs] });
     return bad.length
-      ? this.t('Round {round} is saved, but the {destinations} ticket did not print. Select a waiter to retry using the red bar.', { round, destinations: bad.map(label => this.t(label)).join(this.getLanguage() === 'sq' ? ' dhe ' : ' and ') })
+      ? this.t('Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar.', { round, destinations: bad.map(label => this.t(label)).join(this.getLanguage() === 'sq' ? ' dhe ' : ' and ') })
       : this.t('Round {round} sent. {details}.', { round, details: displayParts.join(', ') });
   }
   retry(id) {

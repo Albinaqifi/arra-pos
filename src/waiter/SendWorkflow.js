@@ -51,7 +51,7 @@ export class SendWorkflow extends FeatureState {
       const physicalNotice = data.testPrintEnabled
         ? this.t('Test print output is not confirmed. Check the printer and paper.')
         : this.t('No physical ticket was printed.');
-      const notice = [pending ? this.t('Table {id} has new items still pending. Select a waiter, reopen the table and send again.', { id: target.tableId }) : '', printNotice, physicalNotice].filter(Boolean).join(' ');
+      const notice = [pending ? this.t('Table {id} has new items still pending. Reopen the table with your PIN and send again.', { id: target.tableId }) : '', printNotice, physicalNotice].filter(Boolean).join(' ');
       await this.completeHandoff(notice);
     } finally { this._set({ busy: false }); }
   }

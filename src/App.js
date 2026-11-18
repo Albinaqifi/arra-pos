@@ -41,6 +41,7 @@ export class WaiterDemo extends React.Component {
       canNavigate: () => !this.sendWorkflow?.state.busy && !this.correction?.locked && !this.moveWorkflow?.locked && !this.billing?.locked,
       notify: (message, kind) => this.shell.notify(message, kind),
       getLanguage: () => this.settings.state.language,
+      getActor: () => this.session?.state.waiter?.name || '', returnToGrid: notice => this.session.switchWaiter(notice),
       onOrderOpened: () => this.catalog.clearSearch(),
       onDismiss: () => { this.pending?.dismiss(); this.moveWorkflow?.dismiss(); this.correction?.dismiss(); this.billing?.dismiss(); },
     });
@@ -141,6 +142,7 @@ export class WaiterDemo extends React.Component {
       clearProtectedData: () => this.clearDesktopData(),
       dismissSelectedOrder: () => this.tableOrders.dismissSelectedOrder(),
       loadProtectedData: () => this.loadDesktopData(),
+      loadEntryTables: () => this.tableOrders.loadEntryTables(), openSelectedTable: id => this.tableOrders.openTable(id),
       notify: (message, kind) => this.shell.notify(message, kind),
       getLanguage: () => this.settings.state.language,
       getDemoStaff: demoStaff,
@@ -176,7 +178,7 @@ export class WaiterDemo extends React.Component {
     const shell = this.shell.view();
     let content = null;
     if (screen === 'waiter') {
-      if (this.tableOrders.state.screen === 'tables') content = renderTables(this.tableOrders.tableView({ language, now: shell.now, failedTables: this.demoPrinting.failedTableIds(), canAdmin: identity.adminAccess, openAdmin: () => this.session.openAdministration() }), style);
+      if (this.tableOrders.state.screen === 'tables') content = renderTables(this.tableOrders.tableView({ language, now: shell.now, failedTables: this.demoPrinting.failedTableIds(), canAdmin: identity.adminAccess, openAdmin: () => this.session.openAdministration(), entry: !this.session.state.waiter, handoffNotice: this.session.state.handoffNotice, entryMessage: this.session.state.waiterMessage, openTable: id => this.session.requestTable(id) }), style);
       else if (this.tableOrders.state.screen === 'order') content = renderOrder({
         catalog: this.catalog.view({ language, pendingItems: this.tableOrders.selectedPendingItems(), addProduct: id => this.pending.addProduct(id) }),
         order: this.tableOrders.orderView({ language, now: shell.now, onCorrect: id => this.correction.open(id) }),
@@ -187,7 +189,7 @@ export class WaiterDemo extends React.Component {
     return renderShellFrame({
       desktopBill: this.billing.render(), account: renderAccountEntry(this.session.accountView()),
       header: screen === 'waiter' ? renderShellHeader(this.session.headerView(), shell.clock) : null,
-      printing: screen === 'waiter' ? React.createElement(React.Fragment, null, desktopBridge ? React.createElement(PrintJobs, { language, printing: this.printing }) : null, renderDemoPrintStatus(this.demoPrinting.failedView())) : null,
+      printing: screen === 'waiter' && identity.name ? React.createElement(React.Fragment, null, desktopBridge ? React.createElement(PrintJobs, { language, printing: this.printing }) : null, renderDemoPrintStatus(this.demoPrinting.failedView())) : null,
       content, dialogs: React.createElement(React.Fragment, null, this.pending.render(), this.moveWorkflow.render(), this.correction.render(), this.demoBilling.render()), toast: shell,
     });
   }

@@ -356,5 +356,18 @@
   "waiter.Retry closing": "Provo sërish mbylljen",
   "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "Pas dy minutash, administratori duhet ta miratojë këtë anulim me PIN-in e tij.",
   "waiter.The original item stays in the order history.": "Artikulli origjinal mbetet në historikun e porosisë.",
-  "waiter.Correction saved.": "Korrigjimi u ruajt."
+  "waiter.Correction saved.": "Korrigjimi u ruajt.",
+  "waiter.Sign in as the restaurant to choose a table, or use your owner account for administration.": "Hyni si restorant për të zgjedhur tavolinën, ose përdorni llogarinë e pronarit për administrim.",
+  "waiter.Enter the manager 6-digit PIN": "Shkruani PIN-in 6-shifror të menaxherit",
+  "waiter.Manager": "Menaxheri",
+  "waiter.Continue": "Vazhdo",
+  "waiter.Enter a valid PIN.": "Shkruani një PIN të vlefshëm.",
+  "waiter.PIN or table access was denied.": "PIN-i ose qasja në tavolinë u refuzua.",
+  "waiter.Could not clear the session. Retry or sign out.": "Sesioni nuk u pastrua. Provoni përsëri ose dilni.",
+  "waiter.Retry clearing session": "Provo përsëri pastrimin e sesionit",
+  "waiter.Session or administration access changed. Sign in again.": "Sesioni ose qasja në administrim ndryshoi. Hyni përsëri.",
+  "waiter.Table {id} has new items still pending. Reopen the table with your PIN and send again.": "Tavolina {id} ka artikuj të rinj të padërguar. Rihapeni me PIN-in tuaj dhe dërgoni përsëri.",
+  "waiter.A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.": "Një printim kërkon vëmendje ose ka rezultat të pasigurt. Rihapni tavolinën tuaj për ta kontrolluar dhe provoni përsëri nëse duhet.",
+  "waiter.Print status unavailable. Reopen your table and check print jobs.": "Statusi i printimit nuk është i disponueshëm. Rihapni tavolinën tuaj dhe kontrolloni printimet.",
+  "waiter.Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar.": "Raundi {round} u ruajt, por fleta për {destinations} nuk u printua. Rihapni tavolinën për të provuar përsëri nga shiriti i kuq."
 }

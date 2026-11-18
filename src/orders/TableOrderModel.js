@@ -5,14 +5,15 @@ import { tableView } from './table-view.js';
 import { orderView } from './order-view.js';
 
 export class TableOrderModel extends FeatureState {
-  constructor({ bridge, demoOrders, nextId, canNavigate = () => true, notify = () => {}, getLanguage = () => 'en', onOrderOpened = () => {}, onDismiss = () => {} }) {
+  constructor({ bridge, demoOrders, nextId, canNavigate = () => true, notify = () => {}, getLanguage = () => 'en', getActor = () => '', onOrderOpened = () => {}, onDismiss = () => {}, returnToGrid = () => {} }) {
     super({ screen: 'tables', sections: [], orders: {}, items: [], tableId: null, tab: 'order', tableLoad: bridge ? 'loading' : 'ready', ...(!bridge ? demoOrders : {}), activity: null });
-    Object.assign(this, { bridge, nextId, canNavigate, notify, getLanguage, onOrderOpened, onDismiss });
+    Object.assign(this, { bridge, nextId, canNavigate, notify, getLanguage, getActor, onOrderOpened, onDismiss, returnToGrid });
     this.generation = 0;
     this.loadGeneration = 0;
     this.openingRequest = null;
     this.writeLease = null;
     this.demoOrderSequence = 0;
+    this.retiredDemoOrders = [];
   }
   get opening() { return !!this.openingRequest; }
   get writeBusy() { return !!this.writeLease; }
@@ -68,9 +69,33 @@ export class TableOrderModel extends FeatureState {
       }
     }
   }
+  async loadEntryTables() {
+    if (!this.bridge || this.disposed) return;
+    const target = this.captureTarget(), load = ++this.loadGeneration;
+    this._set({ tableLoad: 'loading', screen: 'tables' });
+    try {
+      const result = await this.bridge.getEntryTables();
+      if (!this.isCurrent(target) || load !== this.loadGeneration) return;
+      if (!result.ok) throw Error('Unavailable');
+      const rows = result.data.map(row => ({ ...row, orderId: null }));
+      this._set({ ...tableSnapshot(rows), items: [], tableId: null, tableLoad: 'ready' });
+    } catch (_) {
+      if (this.isCurrent(target) && load === this.loadGeneration) this._set({ tableLoad: 'error', sections: [], orders: {}, items: [], tableId: null });
+    }
+  }
   async openTable(tableId) {
-    if (this.disposed || this.opening || this.writeBusy || !this.canNavigate()) return;
-    if (!this.bridge) { this._set({ tableId, screen: 'order', tab: 'order' }); this.onOrderOpened(); return; }
+    if (this.disposed || this.opening || this.writeBusy || !this.canNavigate()) return false;
+    if (!this.bridge) {
+      const order = this.state.orders[tableId], actor = this.getActor();
+      const occupied = this.state.items.some(item => item.tableId === tableId && item.qty > (item.cxQty || 0));
+      if (order && occupied && order.openedBy !== actor) return false;
+      if (order && !occupied && order.openedBy !== actor) {
+        this.retiredDemoOrders.push({ tableId, order, items: this.state.items.filter(item => item.tableId === tableId) });
+        const orders = { ...this.state.orders }; delete orders[tableId];
+        this._set({ orders, items: this.state.items.filter(item => item.tableId !== tableId) });
+      }
+      this._set({ tableId, screen: 'order', tab: 'order' }); this.onOrderOpened(); return true;
+    }
     const opening = this.captureTarget(tableId);
     this.openingRequest = opening;
     try {
@@ -86,18 +111,19 @@ export class TableOrderModel extends FeatureState {
       this.applyConfirmedItems(target, resultItems.data.items);
       this._set({ tableId, screen: 'order', tab: 'order' });
       this.onOrderOpened();
+      return true;
     } catch (_) { if (this.isCurrent(opening)) this.notify(this.t('Could not open table. Try again.'), 'err'); }
     finally { if (this.openingRequest === opening) this.openingRequest = null; }
   }
   showTables() {
     if (this.disposed || this.writeBusy || this.opening || !this.canNavigate()) return;
     const { tableId, screen, items } = this.state;
+    let notice = '';
     if (screen === 'order') {
       const count = items.filter(item => item.tableId === tableId && item.status === 'pending').reduce((sum, item) => sum + item.qty, 0);
-      if (count) this.notify(this.t(count === 1 ? 'Table {id} still has {count} item not sent to the kitchen or bar.' : 'Table {id} still has {count} items not sent to the kitchen or bar.', { id: tableId, count }), 'warn');
+      if (count) notice = this.t(count === 1 ? 'Table {id} still has {count} item not sent to the kitchen or bar.' : 'Table {id} still has {count} items not sent to the kitchen or bar.', { id: tableId, count });
     }
-    this._set({ screen: 'tables' });
-    this.onDismiss();
+    return this.returnToGrid(notice);
   }
   showHistory() {
     if (this.disposed || this.writeBusy || this.opening || !this.canNavigate()) return;
@@ -140,10 +166,9 @@ export class TableOrderModel extends FeatureState {
   }
   abandonChangedOrder(target) {
     if (!this.isCurrent(target)) return;
-    this._set({ screen: 'tables', tableId: null, items: [] });
-    this.onDismiss();
+    return this.returnToGrid();
   }
-  tableView(options) { return tableView(this.state, { ...options, desktop: !!this.bridge, openTable: id => this.openTable(id) }); }
+  tableView(options) { return tableView(this.state, { ...options, desktop: !!this.bridge, openTable: options.openTable || (id => this.openTable(id)) }); }
   orderView(options) { return orderView(this.state, { ...options, desktop: !!this.bridge, selectTab: tab => this.selectTab(tab), showTables: () => this.showTables(), showHistory: () => this.showHistory() }); }
   selectedPendingItems() { return this.state.items.filter(item => item.tableId === this.state.tableId && item.status === 'pending'); }
 

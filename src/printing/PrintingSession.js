@@ -113,10 +113,10 @@ export class PrintingSession {
       const jobs = await this.listJobs();
       if (jobs.ok) {
         return jobs.data.jobs.some(job => job.result !== 'success' || job.hadUncertain)
-          ? waiterTranslate(language, 'waiter.A print job needs attention or had uncertain output. Select a waiter to review it and retry if needed.')
+          ? waiterTranslate(language, 'waiter.A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.')
           : '';
       }
     } catch (_) { /* Keep the existing unavailable warning for an unusable status response. */ }
-    return waiterTranslate(language, 'waiter.Print status unavailable. Select a waiter and check print jobs.');
+    return waiterTranslate(language, 'waiter.Print status unavailable. Reopen your table and check print jobs.');
   }
 }

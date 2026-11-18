@@ -15,6 +15,7 @@ function provisionSampleEntry(db) {
   db.prepare('INSERT INTO restaurant_accounts VALUES(?)').run(restaurant);
   db.prepare("INSERT INTO financial_scopes(user_id,scope) VALUES(1,'waiter') ON CONFLICT(user_id) DO NOTHING").run();
   db.prepare('UPDATE local_users SET pin_salt=?,pin_hash=? WHERE id=1').run(pinSalt,hashPassword(pin,pinSalt));
+  db.prepare('INSERT INTO verified_waiter_pins VALUES(1)').run();
   return { password, pin, restaurant };
 }
 
@@ -29,17 +30,17 @@ test('waiter requests reject malformed input and a deactivated restaurant sessio
   const call = (channel, request, event = trusted) => handlers['arra:' + channel](event, request);
   assert.equal(call('sign-in', { username: 'sample restaurant', password: entry.password }).ok, true);
   const wrongPin = String((Number(entry.pin) + 1) % 10000).padStart(4, '0');
-  for (const request of [null, [], {}, { id: 0, pin: '' }, { id: 1.5, pin: '' }, { id: 1, pin: 1234 }, { id: 1, pin: '', extra: true }, { id: 1, pin: wrongPin }]) {
-    assert.equal(call('select-waiter', request).ok, false);
+  for (const request of [null, [], {}, { kind: 'owner', pin: entry.pin }, { kind: 'waiter', pin: 1234 }, { kind: 'waiter', pin: '', extra: true }, { kind: 'waiter', pin: wrongPin }]) {
+    assert.equal(call('identify-staff', request).ok, false);
     assert.equal(session.currentUserId(), null);
   }
   assert.equal(call('waiters', { extra: true }).ok, false);
   assert.equal(call('waiters', {}, {}).ok, false);
-  assert.equal(call('select-waiter', { id: 1, pin: entry.pin }).ok, true);
+  assert.equal(call('identify-staff', { kind: 'waiter', pin: entry.pin }).ok, true);
   db.prepare('UPDATE local_users SET active = 0 WHERE id = ?').run(entry.restaurant);
   assert.equal(session.currentUserId(), null);
   assert.equal(call('waiters', {}).ok, false);
-  assert.equal(call('select-waiter', { id: 1, pin: '' }).ok, false);
+  assert.equal(call('identify-staff', { kind: 'waiter', pin: entry.pin }).ok, false);
 });
 
 test('version 9 database upgrades with existing user and grants intact', t => {
@@ -57,5 +58,5 @@ test('version 9 database upgrades with existing user and grants intact', t => {
   assert.equal(handlers['arra:sign-in'](trusted, { username: 'sample', password: 'sample password' }).ok, false);
   const entry = provisionSampleEntry(db);
   assert.equal(handlers['arra:sign-in'](trusted, { username: 'sample restaurant', password: entry.password }).ok, true);
-  assert.equal(handlers['arra:select-waiter'](trusted, { id: 1, pin: entry.pin }).ok, true);
+  assert.equal(handlers['arra:identify-staff'](trusted, { kind: 'waiter', pin: entry.pin }).ok, true);
 });

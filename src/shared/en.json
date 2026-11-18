@@ -356,5 +356,18 @@
   "waiter.Retry closing": "Retry closing",
   "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "After two minutes, Admin must approve this cancellation with their PIN.",
   "waiter.The original item stays in the order history.": "The original item stays in the order history.",
-  "waiter.Correction saved.": "Correction saved."
+  "waiter.Correction saved.": "Correction saved.",
+  "waiter.Sign in as the restaurant to choose a table, or use your owner account for administration.": "Sign in as the restaurant to choose a table, or use your owner account for administration.",
+  "waiter.Enter the manager 6-digit PIN": "Enter the manager 6-digit PIN",
+  "waiter.Manager": "Manager",
+  "waiter.Continue": "Continue",
+  "waiter.Enter a valid PIN.": "Enter a valid PIN.",
+  "waiter.PIN or table access was denied.": "PIN or table access was denied.",
+  "waiter.Could not clear the session. Retry or sign out.": "Could not clear the session. Retry or sign out.",
+  "waiter.Retry clearing session": "Retry clearing session",
+  "waiter.Session or administration access changed. Sign in again.": "Session or administration access changed. Sign in again.",
+  "waiter.Table {id} has new items still pending. Reopen the table with your PIN and send again.": "Table {id} has new items still pending. Reopen the table with your PIN and send again.",
+  "waiter.A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.": "A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.",
+  "waiter.Print status unavailable. Reopen your table and check print jobs.": "Print status unavailable. Reopen your table and check print jobs.",
+  "waiter.Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar.": "Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar."
 }
