@@ -6,13 +6,19 @@ The owner identified the fiscal printer in a photograph as a Synergy PF700 and c
 
 ### POS connection prepared for S-084
 
-The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. Static inspection of the old Fiscal32 program found that it reads the `Speed2` setting and defaults to **9600 baud**. The supplied configuration contains `Speed=5` and has no `Speed2` override. Its effective format with that executable is **8 data bits, no parity, one stop bit**. The old laptop's COM6 is specific to that computer. The printer's actual settings and flow control still need a hardware check.
+The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. This verifies communication for that connection. Physical slip output and fiscal operations still need their own evidence.
 
 In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
 
 The Windows sample package from version 1.0.2 includes `check-pf700.ps1` alongside `electron.exe`. Calling it without arguments runs the offline check. A later, operator-authorized hardware session requires the full `-ReadDeviceStatus` option. The equivalent source entry is `node src/desktop/pf700-status-cli.js`, with `--read-device-status` reserved for that session.
 
 Before a hardware check, confirm COM3 still belongs to the intended adapter, the port is free, and the previous POS has reconciled any sale or daily close with an unknown outcome. The printer remembers only the last command response. An intervening diagnostic could replace the response needed to resolve an earlier sale or close. The diagnostic requests immediate status once (command 74, option X), with a bounded wait. It initially selects no hardware handshake and leaves DTR and RTS off. A valid reply shows a compatible exchange. Device identity, paper output, fiscal receipts, device-day closure and reconciliation each require separate evidence.
+
+### Paper test with no sale
+
+Build the small add-on with `scripts/build-pf700-paper-test.ps1`. Copy `Arra-PF700-Paper-Test.zip` to the Windows POS and extract the entire ZIP. With paper loaded and the printer idle, open `PF700-Paper-Test.cmd`. The launcher uses the existing 1.0.3 offline test runtime. Typing `PRINT` and pressing Enter requests one diagnostic slip. Enter alone cancels before opening the port.
+
+The tool checks the device status and whether a receipt is open, then requests the printer's diagnostic slip. This prints device information without recording a sale or closing the day. Check the paper before treating the test as successful. If the outcome is uncertain, inspect the paper and the display before considering another attempt. [Accent PF550/PF700 protocol v1.40, commands 74, 76 and 71](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
 
 The existing payment flow records payment and completes the order before an ordinary non-fiscal print attempt. S-084 records an internal summary for an already closed shared day. Neither registers a fiscal sale nor requests a fiscal daily report. The printer's fiscal period may differ from the shared business day, and a later B-to-A correction does not itself create a fiscal receipt. Do not assume these totals match or send an ordinary Windows print job as a fiscal command.
 
