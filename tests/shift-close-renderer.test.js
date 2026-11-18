@@ -1,11 +1,11 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),path=require('node:path');
 const source=require('./support/renderer-bundle').moduleSource(path.resolve('src/admin/ShiftClose.js'),'Feature');
-function setup(api){class Component{constructor(props){this.props=props}setState(x){Object.assign(this.state,x)}};const context={React:{Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})},window:{arra:api}};vm.runInNewContext(source,context);return context.Feature.ShiftClose;}
+function setup(api){class Component{constructor(props){this.props=props}setState(x){Object.assign(this.state,x)}};const context={React:{Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})},window:{arra:api,localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}}};vm.runInNewContext(source,context);return context.Feature.ShiftClose;}
 const tick=()=>new Promise(setImmediate);
 function fixture(){
   let actor=1,scope='combined',coverage='available',shifts=[{id:11,dayId:5,openedAt:1000,closedAt:null,reportable:true,count:2,total:150,cash:100,card:50}],result='success';
   const calls=[];
-  const api={businessDays:async req=>{calls.push(req);if(req.action==='list')return {ok:true,data:{actorId:actor,scope,days:[{id:5,closedAt:null}],issues:{orders:[{}]}}};if(req.action==='shiftList')return {ok:true,data:{dayId:5,coverage,shifts}};if(result==='reject')return {ok:false};if(result==='throw')throw Error('lost');const closed={...shifts.find(s=>s.id===req.shiftId),closedAt:2000,total:160};shifts=[{id:12,dayId:5,openedAt:2000,closedAt:null,reportable:false,count:0,total:0,cash:0,card:0},closed];return {ok:true,data:{shift:closed}};}};
+  const api={businessDays:async req=>{calls.push(req);if(req.action==='list')return {ok:true,data:{actorId:actor,scope,days:[{id:5,closedAt:null}],issues:{orders:[{}]}}};if(req.action==='shiftList')return {ok:true,data:{dayId:5,coverage,shifts}};if(req.action==='walletStatus')return {ok:false};if(result==='reject')return {ok:false};if(result==='throw')throw Error('lost');const closed={...shifts.find(s=>s.id===req.shiftId),closedAt:2000,total:160};shifts=[{id:12,dayId:5,openedAt:2000,closedAt:null,reportable:false,count:0,total:0,cash:0,card:0},closed];return {ok:true,data:{shift:closed}};}};
   return {api,calls,setActor:(a,s)=>{actor=a;scope=s},setShifts:s=>shifts=s,setCoverage:c=>coverage=c,setResult:r=>result=r};
 }
 test('review refreshes the shift, confirms once, and presents the saved close',async()=>{

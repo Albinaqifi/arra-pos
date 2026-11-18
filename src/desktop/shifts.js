@@ -71,4 +71,4 @@ function handle(req, db, session, scope, actor) {
     const data=visibleShift(db,shift,scope); db.exec('COMMIT'); return {ok:true,data:{shift:data,replayed:false}};
   } catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
 }
-module.exports={markService,assignPayment,finalizeDay,handle,project};
+module.exports={markService,assignPayment,finalizeDay,finalize,visibleShift,currentDay,currentShift,handle,project};

@@ -18,15 +18,20 @@ test('sales report controls select a period and clear stale data', async () => {
 test('closing a business day remounts the sales report so it reloads the new period', async () => {
   class Component { constructor(props){this.props=props;} setState(x){Object.assign(this.state,x);} }
   const React={Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})};
-  const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{confirm:()=>true,arra:{businessDays:async r=>r.action==='close'?{ok:true}:{ok:true,data:{days:[],issues:{orders:[],printJobs:[]}}}}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+  let openId=1, failClose=false;
+  const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{confirm:()=>true,arra:{businessDays:async r=>{
+    if(r.action==='shiftList') return {ok:true,data:{dayId:openId,shifts:[]}};
+    if(r.action==='close') { if(failClose) return {ok:false}; openId++; return {ok:true}; }
+    return {ok:true,data:{days:[{id:openId,openedAt:1,closedAt:null}],issues:{orders:[],printJobs:[]}}};
+  },financialVisibility:async()=>({ok:true,data:{groups:[],records:[],corrections:[]}})}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Financial=ArraComponents.FinancialVisibility; this.Days=ArraComponents.BusinessDays; this.Sales=ArraComponents.SalesReports;', context);
   const parent=new context.Financial({});
   const find=(node,type)=>!node || typeof node!=='object'?null:node.type===type?node:node.children.flatMap(x=>Array.isArray(x)?x:[x]).map(x=>find(x,type)).find(Boolean);
   parent.setState({view:'today'}); assert.equal(find(parent.render(),context.Sales).props.key,'today-0'); parent.setState({view:'close'});
-  const child=new context.Days(find(parent.render(),context.Days).props); child.setState({confirmId:1}); await child.close(1);
+  const child=new context.Days(find(parent.render(),context.Days).props); await child.load(); await child.review(1); assert.equal(child.state.confirmId,1); await child.close(1);
   parent.setState({view:'today'}); assert.equal(find(parent.render(),context.Sales).props.key,'today-1');
-  context.window.arra.businessDays=async()=>({ok:false}); child.setState({confirmId:2}); await child.close(2);
+  failClose=true; await child.review(2); assert.equal(child.state.confirmId,2); await child.close(2);
   assert.equal(find(parent.render(),context.Sales).props.key,'today-1');
 });
 
@@ -47,10 +52,10 @@ test('refresh after lost close response reloads the new day in the report', asyn
   const React={Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})};
   let closed=false; const requests=[];
   const days=()=>closed?[{id:2,openedAt:10,closedAt:null},{id:1,openedAt:1,closedAt:10,closedBy:1,issues:{orders:[],printJobs:[]}}]:[{id:1,openedAt:1,closedAt:null}];
-  const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:{businessDays:async r=>{if(r.action==='close'){closed=true;throw Error('lost response');} return {ok:true,data:{days:days(),issues:{orders:[],printJobs:[]}}};},financialVisibility:async r=>{requests.push(r);return r.action==='reportDays'?{ok:true,data:days()}:{ok:true,data:{groups:[],records:[],corrections:[]}};}}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
+  const context={React,ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:{businessDays:async r=>{if(r.action==='shiftList') return {ok:true,data:{dayId:closed?2:1,shifts:[]}};if(r.action==='close'){closed=true;throw Error('lost response');} return {ok:true,data:{days:days(),issues:{orders:[],printJobs:[]}}};},financialVisibility:async r=>{requests.push(r);return r.action==='reportDays'?{ok:true,data:days()}:{ok:true,data:{groups:[],records:[],corrections:[]}};}}},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
   vm.runInNewContext(require('./support/admin-bundle')(),context);vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Financial=ArraComponents.FinancialVisibility;this.Days=ArraComponents.BusinessDays;this.Sales=ArraComponents.SalesReports;',context);
   const parent=new context.Financial({});parent.setState({view:'close'});const find=(node,type)=>!node||typeof node!=='object'?null:node.type===type?node:node.children.flatMap(x=>Array.isArray(x)?x:[x]).map(x=>find(x,type)).find(Boolean);
-  const child=new context.Days(find(parent.render(),context.Days).props);await child.load();child.setState({confirmId:1});await child.close(1);assert.ok(child.state.error);assert.equal(parent.state.dayRevision,0);
+  const child=new context.Days(find(parent.render(),context.Days).props);await child.load();await child.review(1);assert.equal(child.state.confirmId,1);await child.close(1);assert.ok(child.state.error);assert.equal(parent.state.dayRevision,0);
   await child.refresh();assert.equal(parent.state.dayRevision,1);assert.equal(child.state.data.days[0].id,2);
   parent.setState({view:'today'});const report=new context.Sales(find(parent.render(),context.Sales).props);await report.componentDidMount();assert.equal(requests.at(-1).dayId,2);
 });
@@ -77,7 +82,7 @@ test('financial landing offers focused views and payment rows keep identifiers i
   const screen=new context.ArraComponents.FinancialVisibility({onBack(){}});
   const all=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flat().flatMap(all)];
   const cards=all(screen.render()).filter(n=>n.type==='button'&&n.props.className==='finance-choice');
-  assert.equal(cards.length,6); assert.ok(cards.some(card=>JSON.stringify(card).includes('Bill history'))); assert.ok(cards.some(card=>JSON.stringify(card).includes('Waiter performance'))); assert.ok(!all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
+  assert.equal(cards.length,7); for(const label of ['Bill history','Waiter performance','Current day turnover','Previous days & reports','Payment history','Close shift','Close current day']) assert.ok(cards.some(card=>JSON.stringify(card).includes(label)),label); assert.ok(!all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
   cards.find(card=>JSON.stringify(card).includes('Current day turnover')).props.onClick(); assert.equal(screen.state.view,'today'); assert.ok(all(screen.render()).some(n=>n.type===context.ArraComponents.SalesReports));
   const report=new context.ArraComponents.SalesReports({mode:'today'}); report.setState({dayId:'3',days:[{id:3,openedAt:100,closedAt:null}],data:{groups:[{account:'A',method:'cash',count:1,total:500}],records:[{id:9,billId:42,dayId:3,paidAt:100,tableId:7,waiter:'Alex',account:'A',method:'cash',amount:500}],corrections:[]}});
   const view=JSON.stringify(report.render()); for(const x of ['Table 7','Alex','500']) assert.ok(view.includes(x)); for(const x of ['Bill #42','Day #3','Payment #9']) assert.ok(!view.includes(x));
