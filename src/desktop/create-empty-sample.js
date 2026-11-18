@@ -1,0 +1,56 @@
+// Creates a new isolated sample database with clear tables.
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const readline = require('node:readline');
+const { openDatabase } = require('./database');
+const { seedSampleIdentities, entryIdentities } = require('./sample-accounts');
+const { seedTables } = require('./tables');
+const { seedMenu } = require('./menu');
+
+function createEmptySample(passwords, waiterPin, transferPin, ownerPin) {
+  if (typeof ownerPin !== 'string' || !/^\d{6}$/.test(ownerPin)) throw new Error('Invalid sample credentials');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-sample-'));
+  let db;
+  try {
+    db = openDatabase(directory);
+    seedSampleIdentities(db, passwords, waiterPin, transferPin, ownerPin);
+    seedTables(db);
+    seedMenu(db);
+    fs.writeFileSync(path.join(directory, 'SAMPLE-DATA-ONLY'), 'Development sample data only. No real sales.\n', { flag: 'wx' });
+    return directory;
+  } finally {
+    if (db) db.close();
+  }
+}
+
+if (require.main === module) {
+  if (process.argv.length !== 2 || !process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('Run interactively: node src/desktop/create-empty-sample.js');
+    process.exit(1);
+  }
+  readline.emitKeypressEvents(process.stdin);
+  process.stdin.setRawMode(true); process.stdin.resume();
+  const values = []; let value = '';
+  const prompts = [...entryIdentities.map(([name]) => `Choose a distinct sample password for ${name}: `), 'Choose a four-digit sample waiter PIN: ', 'Choose a six-digit sample transfer manager PIN: ', 'Choose a six-digit sample Combined owner approval PIN: '];
+  const prompt = () => process.stdout.write(prompts[values.length]);
+  prompt();
+  process.stdin.on('keypress', (char, key) => {
+    if (key.ctrl && key.name === 'c') { process.stdin.setRawMode(false); process.exit(1); }
+    if (key.name === 'return' || key.name === 'enter') {
+      process.stdout.write('\n');
+      values.push(value); value = '';
+      if (values.length < prompts.length) return prompt();
+      process.stdin.setRawMode(false); process.stdin.pause();
+      try {
+        const directory = createEmptySample(values.slice(0, 4), values[4], values[5], values[6]);
+        console.log(`Fresh sample database created at ${directory}`);
+        console.log('Sample accounts, tables and menu are ready. All tables are clear; there are no orders or bills.');
+        console.log(`Launch with: npx electron . --sample-data-directory="${directory}"`);
+      } catch (_) { console.error('Sample setup failed. Check credential requirements and run again to create a fresh database.'); process.exitCode = 1; }
+      finally { values.fill(''); value = ''; }
+    } else if (key.name === 'backspace') value = value.slice(0, -1);
+    else if (char && !key.ctrl && !key.meta && value.length < 1024) value += char;
+  });
+}
+module.exports = { createEmptySample };

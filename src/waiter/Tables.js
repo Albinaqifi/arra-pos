@@ -18,8 +18,8 @@ export function renderTables(v, style) {
         h('div', { style:style('display:grid; grid-template-columns:repeat(auto-fill,minmax(172px,1fr)); gap:14px') },
           sec.tables.map(t => h('button', { key:t.num, onClick:t.open, 'aria-label':t.aria, style:style(t.style) },
             h('div', { style:style('display:flex; justify-content:space-between; width:100%; gap:8px') },
-              h('span', { style:style('font-size:44px; font-weight:800; line-height:1') }, t.num),
-              t.taken && !t.entry ? h('span', { style:style('font-size:14px; font-weight:800') }, t.mins) : null),
+              h('span', { style:style('flex:none; font-size:44px; font-weight:800; line-height:1') }, t.num),
+              t.taken && t.entry && t.waiter ? h('span', { style:style('min-width:0; font-size:15px; font-weight:700; text-align:right; overflow-wrap:anywhere') }, t.waiter) : t.taken && !t.entry ? h('span', { style:style('font-size:14px; font-weight:800') }, t.mins) : null),
             t.taken ? t.entry ? h('div', { style:style('font-size:20px; font-weight:800') }, tr('Taken')) : h('div', null,
               h('div', { style:style('font-size:22px; font-weight:800') }, t.total), h('div', { style:style('font-size:15px; font-weight:700') }, t.waiter + ' · ' + t.count)) :
               h('div', { style:style('font-size:20px; font-weight:800; color:#15803D') }, tr('Free')),

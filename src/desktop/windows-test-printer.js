@@ -4,7 +4,7 @@ function textForJob(job) {
   if (job.destination === 'account-a-close') {
     const labels = {
       en:{title:'NON-FISCAL ACCOUNT A CLOSE',day:'System day',opened:'Opened',dayClosed:'Shared day closed',close:'Account close',actor:'Actor',bill:'Bill',table:'Table',cash:'Cash',card:'Card',empty:'No paid bills for account A',payments:'PAYMENTS',total:'TOTAL',units:'minor units'},
-      sq:{title:'MBYLLJA JO FISKALE E LLOGARISË A',day:'Dita e sistemit',opened:'Hapur',dayClosed:'Dita e përbashkët u mbyll',close:'Mbyllja e llogarisë',actor:'Vepruesi',bill:'Fatura',table:'Tavolina',cash:'Para në dorë',card:'Kartë',empty:'Nuk ka fatura të paguara për llogarinë A',payments:'PAGESAT',total:'TOTALI',units:'njësi më të vogla monetare'}
+      sq:{title:'MBYLLJA JO FISKALE E LLOGARISE A',day:'Dita e sistemit',opened:'Hapur',dayClosed:'Dita e perbashket u mbyll',close:'Mbyllja e llogarise',actor:'Vepruesi',bill:'Fatura',table:'Tavolina',cash:'Para ne dore',card:'Karte',empty:'Nuk ka fatura te paguara per llogarine A',payments:'PAGESAT',total:'TOTALI',units:'njesi me te vogla monetare'}
     };
     const t=labels[s.language]; if (!t) throw Error('Invalid report language');
     const date=value=>new Date(value).toLocaleString(s.language==='sq'?'sq-AL':'en-GB');
@@ -15,7 +15,7 @@ function textForJob(job) {
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
   if (job.destination === 'account-a-bills') {
-    const labels={en:{title:'NON-FISCAL ACCOUNT A PAID BILLS',day:'Business day',bill:'Bill',empty:'No paid Account A bills',total:'TOTAL',cash:'Cash',card:'Card',units:'minor units'},sq:{title:'FATURAT E PAGUARA JO FISKALE TË LLOGARISË A',day:'Dita e punës',bill:'Fatura',empty:'Nuk ka fatura të paguara për llogarinë A',total:'TOTALI',cash:'Para në dorë',card:'Kartë',units:'njësi më të vogla monetare'}};
+    const labels={en:{title:'NON-FISCAL ACCOUNT A PAID BILLS',day:'Business day',bill:'Bill',empty:'No paid Account A bills',total:'TOTAL',cash:'Cash',card:'Card',units:'minor units'},sq:{title:'FATURAT E PAGUARA JO FISKALE TE LLOGARISE A',day:'Dita e punes',bill:'Fatura',empty:'Nuk ka fatura te paguara per llogarine A',total:'TOTALI',cash:'Para ne dore',card:'Karte',units:'njesi me te vogla monetare'}};
     const t=labels[s.language]; if(!t) throw Error('Invalid language');
     const rows=[t.title,t.day+' #'+s.id,t.units,'--------------------------------'];
     for(const r of s.records) rows.push(t.bill+' #'+r.billId+'  '+r.amount);

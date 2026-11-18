@@ -15,7 +15,7 @@ test('unknown keys and missing values do not expose keys or placeholders', () =>
   const context = { React: { Component: class {}, createElement() {} } };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
   const t = context.ArraComponents.translate;
-  assert.equal(t('sq', 'missing.key'), 'Mesazhi nuk është i disponueshëm.');
+  assert.equal(t('sq', 'missing.key'), 'Mesazhi nuk eshte i disponueshem.');
   assert.equal(t('en', 'missing.key'), 'Message unavailable.');
   assert.doesNotMatch(t('sq', 'language.saved'), /\{language\}/);
 });
@@ -54,7 +54,7 @@ test('startup shows bilingual recovery if a vendor runtime is missing', async ()
   vm.runInNewContext(require('./support/renderer-bundle').moduleSource(require.resolve('../src/desktop-status.js'), 'Startup'), context);
   await context.Startup.startRenderer(async () => { throw Error('Must not load without the runtime'); });
   assert.match(status.textContent, /Desktop application unavailable/);
-  assert.match(status.textContent, /Aplikacioni nuk është i disponueshëm/);
+  assert.match(status.textContent, /Aplikacioni nuk eshte i disponueshem/);
 });
 
 test('literal waiter translation references exist in both dictionaries', () => {

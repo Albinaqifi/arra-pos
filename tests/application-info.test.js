@@ -47,3 +47,15 @@ test('preload forwards only known correction rejection codes and keeps failures 
   response=new Error('private detail'); const uncertain=await api.orderItems('correct',1,request); assert.equal(uncertain.rejected,undefined); assert.equal(JSON.stringify(uncertain).includes('private detail'),false);
   assert.equal((await api.orderItems('correct',1,{...request,quantity:'bad'})).code,'invalid_input');
 });
+
+test('entry table preload exposes only the assigned name for occupied tables', async () => {
+  let api, response;
+  const ipcRenderer = { invoke: async () => response };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'), 'utf8'), {require:()=>({contextBridge:{exposeInMainWorld:(_name,value)=>api=value},ipcRenderer})});
+  response = {ok:true,data:[{id:1,area:'Inside',occupied:true,waiter:'Sample',orderId:99,total:123}, {id:2,area:'Inside',occupied:false,waiter:null}]};
+  assert.deepEqual(JSON.parse(JSON.stringify(await api.getEntryTables())), {ok:true,data:[{id:1,area:'Inside',occupied:true,waiter:'Sample'}, {id:2,area:'Inside',occupied:false,waiter:null}]});
+  response = {ok:true,data:[{id:2,area:'Inside',occupied:false,waiter:'Sample'}]};
+  assert.equal((await api.getEntryTables()).ok, false);
+  response = {ok:true,data:[{id:1,area:'Inside',occupied:true,waiter:{name:'Sample'}}]};
+  assert.equal((await api.getEntryTables()).ok, false);
+});

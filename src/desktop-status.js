@@ -1,7 +1,7 @@
 import { desktopBridge } from './shared/desktop-bridge.js';
 import { translate } from './shared/i18n.js';
 
-const unavailable = 'Desktop application unavailable. Close and restart Arra POS; seek support if the problem continues. / Aplikacioni nuk është i disponueshëm. Mbyllni dhe rinisni Arra POS; kërkoni ndihmë nëse problemi vazhdon.';
+const unavailable = 'Desktop application unavailable. Close and restart Arra POS; seek support if the problem continues. / Aplikacioni nuk eshte i disponueshem. Mbyllni dhe rinisni Arra POS; kerkoni ndihme nese problemi vazhdon.';
 let startup;
 
 // Repeated callers share the probe and cannot mount a second root.

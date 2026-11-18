@@ -154,11 +154,11 @@ function registerSession(ipcMain, isAllowedSender, db) {
     try {
       const restaurant = session.authenticatedUserId();
       if (!restaurant || session.currentUserId() !== null || !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurant)) return {ok:false};
-      const data = db.prepare(`SELECT t.id,COALESCE(a.name,t.area) AS area,CASE WHEN o.id IS NOT NULL AND NOT (${untouchedOrder('o')}) THEN 1 ELSE 0 END AS occupied FROM dining_tables t LEFT JOIN dining_areas a ON a.id=t.area_id LEFT JOIN orders o ON o.table_id=t.id AND o.status='open' AND o.retired_empty=0 WHERE t.active=1 AND COALESCE(a.active,1)=1 ORDER BY t.id`).all();
-      return {ok:true,data:data.map(row=>({id:row.id,area:row.area,occupied:row.occupied===1}))};
+      const data = db.prepare(`SELECT t.id,COALESCE(a.name,t.area) AS area,CASE WHEN o.id IS NOT NULL AND NOT (${untouchedOrder('o')}) THEN 1 ELSE 0 END AS occupied,u.username AS waiter FROM dining_tables t LEFT JOIN dining_areas a ON a.id=t.area_id LEFT JOIN orders o ON o.table_id=t.id AND o.status='open' AND o.retired_empty=0 LEFT JOIN order_waiter_ownership w ON w.order_id=o.id LEFT JOIN local_users u ON u.id=w.waiter_id WHERE t.active=1 AND COALESCE(a.active,1)=1 ORDER BY t.id`).all();
+      return {ok:true,data:data.map(row=>({id:row.id,area:row.area,occupied:row.occupied===1,waiter:row.occupied===1 ? row.waiter : null}))};
     } catch (_) { return {ok:false}; }
   });
-  // Staff names are not exposed on the pre-identification table screen.
+  // The pre-identification screen exposes assigned names only for occupied tables, not a staff roster.
   ipcMain.handle('arra:waiters', () => ({ ok: false }));
   // The old name-based IPC cannot bypass PIN-only ambiguity checks.
   ipcMain.handle('arra:select-waiter', event => {

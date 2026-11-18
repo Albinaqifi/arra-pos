@@ -135,7 +135,7 @@ export class CorrectionWorkflow extends FeatureState {
         this._set({ dialog: null });
         this.notify(this.t('Correction saved.'));
       } else if (result?.rejected && result.code === 'window_expired') {
-        this._set({ dialog: { ...this.state.dialog, phase: 'pin', pin: '', approvalToken: null, saving: false, error: this.t(cancellationGuidance) } });
+        this._set({ dialog: { ...this.state.dialog, phase: 'pin', pin: '', approvalToken: null, saving: false, error: '' } });
       } else if (result?.rejected && !dialog.unresolved) {
         this._set({ dialog: { ...this.state.dialog, saving: false, unresolved: false, payload: null, requestId: null, error: this.t(rejections[result.code] || 'Correction rejected. Check authorization and quantity.') } });
       } else this._unknown(dialog);
@@ -166,7 +166,7 @@ export class CorrectionWorkflow extends FeatureState {
   render() {
     const v = this.view();
     const dialog = this.state.dialog;
-    return v && ModalFrame({ title: dialog.phase === 'pin' ? v.t('Owner approval') : v.modalTitle, subtitle: dialog.phase === 'pin' ? v.t(cancellationGuidance) : v.modalSub, cardStyle: modalCardStyle(dialog.phase === 'pin' ? '440px' : '760px'), onClose: v.closeModal, closeLabel: v.t('Close'), children: dialog.phase === 'pin' ? React.createElement(OwnerApprovalPin, { t:v.t, dialog, onChange:event=>this.setPin(event.target.value), onKey:key=>this.pinKey(key), onVerify:()=>this.verifyPin(), onCancel:v.closeModal }) : React.createElement(SentItemCorrection, { v, modal: dialog }) });
+    return v && ModalFrame({ title: dialog.phase === 'pin' ? v.t('Owner approval') : v.modalTitle, subtitle: dialog.phase === 'pin' ? '' : v.modalSub, cardStyle: modalCardStyle(dialog.phase === 'pin' ? '440px' : '760px'), onClose: v.closeModal, closeLabel: v.t('Close'), children: dialog.phase === 'pin' ? React.createElement(OwnerApprovalPin, { t:v.t, dialog, onChange:event=>this.setPin(event.target.value), onKey:key=>this.pinKey(key), onVerify:()=>this.verifyPin(), onCancel:v.closeModal }) : React.createElement(SentItemCorrection, { v, modal: dialog }) });
   }
   dispose() { const token = this.state.dialog?.approvalToken; if (token) this._revokeAfterTeardown(token); this.draftSequence++; super.dispose(); }
 }
