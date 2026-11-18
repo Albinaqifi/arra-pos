@@ -345,8 +345,12 @@
   "waiter.Not yet attempted; check paper before printing": "Not yet attempted; check paper before printing",
   "waiter.Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.": "Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.",
   "waiter.After two minutes, a Combined owner must approve this cancellation with their PIN.": "After two minutes, a Combined owner must approve this cancellation with their PIN.",
-  "waiter.Owner approval failed. Check the account and PIN, or try again later.": "Owner approval failed. Check the account and PIN, or try again later.",
-  "waiter.Combined owner account": "Combined owner account",
   "waiter.Owner 6-digit PIN": "Owner 6-digit PIN",
-  "waiter.Owner approval is unavailable in demo mode.": "Owner approval is unavailable in demo mode."
+  "waiter.Owner approval is unavailable in demo mode.": "Owner approval is unavailable in demo mode.",
+  "waiter.Owner approval": "Owner approval",
+  "waiter.Owner PIN could not be verified. Check the PIN or try again later.": "Owner PIN could not be verified. Check the PIN or try again later.",
+  "waiter.Checking…": "Checking…",
+  "waiter.Verify PIN": "Verify PIN",
+  "waiter.Could not close owner approval. Try again.": "Could not close owner approval. Try again.",
+  "waiter.Retry closing": "Retry closing"
 }
