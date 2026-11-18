@@ -352,5 +352,7 @@
   "waiter.Verify PIN": "Verifiko PIN-in",
   "waiter.Could not close owner approval. Try again.": "Miratimi i pronarit nuk mund të mbyllej. Provoni përsëri.",
   "waiter.Retry closing": "Provo sërish mbylljen",
-  "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "Pas dy minutash, administratori duhet ta miratojë këtë anulim me PIN-in e tij."
+  "waiter.After two minutes, Admin must approve this cancellation with their PIN.": "Pas dy minutash, administratori duhet ta miratojë këtë anulim me PIN-in e tij.",
+  "waiter.The original item stays in the order history.": "Artikulli origjinal mbetet në historikun e porosisë.",
+  "waiter.Correction saved.": "Korrigjimi u ruajt."
 }

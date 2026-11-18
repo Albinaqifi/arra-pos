@@ -19,8 +19,9 @@ export function orderView(d, { language, now = Date.now(), desktop, onCorrect, s
   v.tabOrderStyle = tb(v.tabOrder); v.tabActStyle = tb(v.tabAct);
   v.setTabOrder = () => selectTab('order');
   v.setTabAct = () => selectTab('activity');
-  v.isEmpty = its.length === 0;
-  const sent = its.filter(i => i.status !== 'pending');
+  const visible = its.filter(i => i.status === 'pending' || bq(i) > 0);
+  v.isEmpty = visible.length === 0;
+  const sent = visible.filter(i => i.status !== 'pending');
   const byRound = {};
   sent.forEach(i => { (byRound[i.round] = byRound[i.round] || []).push(i); });
   v.rounds = Object.keys(byRound).map(Number).sort((a, b) => b - a).map(r => {
@@ -28,15 +29,15 @@ export function orderView(d, { language, now = Date.now(), desktop, onCorrect, s
     return {
       title: t('Round {round}', {round: r}), meta: t('Sent {time} by {name}', {time: hm(first.sentAt), name: first.sentBy}),
       items: L.map(i => {
-        const qq = bq(i); const all = qq === 0; const c = i.cx[i.cx.length - 1];
+        const qq = bq(i); const c = i.cx[i.cx.length - 1];
         return {
           name: i.name, mods: i.mods, hasMods: !!i.mods, note: i.note, hasNote: !!i.note,
           hasMoved: !!i.movedFrom, moved: t('From Table {id}', {id:i.movedFrom}),
-          qtyLabel: (all ? i.qty : qq) + '×',
-          qtyStyle: 'min-width:40px; height:36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; font-size:17px; font-weight:800; ' + (all ? 'background:#F1F5F9; color:#64748B; text-decoration:line-through' : 'background:#0F172A; color:#FFFFFF'),
-          nameStyle: 'font-size:17px; font-weight:800; ' + (all ? 'text-decoration:line-through; color:#64748B' : 'color:#0F172A'),
-          amount: all ? t('Cancelled') : money(qq * i.unit),
-          amountStyle: 'font-size:17px; font-weight:800; white-space:nowrap; color:' + (all ? '#B91C1C' : '#0F172A'),
+          qtyLabel: qq + '×',
+          qtyStyle: 'min-width:40px; height:36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; font-size:17px; font-weight:800; background:#0F172A; color:#FFFFFF',
+          nameStyle: 'font-size:17px; font-weight:800; color:#0F172A',
+          amount: money(qq * i.unit),
+          amountStyle: 'font-size:17px; font-weight:800; white-space:nowrap; color:#0F172A',
           routeLabel: i.route === 'bar' ? 'Bar' : t(i.route === 'kitchen2' ? 'Kitchen 2' : 'Kitchen 1'),
           routeStyle: 'height:24px; padding:0 8px; border-radius:6px; display:inline-flex; align-items:center; font-size:12px; font-weight:800; ' + (i.route === 'bar' ? 'background:#DBEAFE; color:#1E40AF' : 'background:#FFEDD5; color:#9A3412'),
           hasCx: i.cxQty > 0,

@@ -115,7 +115,7 @@ export class CorrectionWorkflow extends FeatureState {
         if (expired) { this._set({ dialog: { ...dialog, phase: 'pin', pin: '', error: this.t('Owner approval is unavailable in demo mode.') } }); return; }
         this.orders.applyDemoCorrection(dialog.itemId, dialog.qty, dialog.reason === 'Other' ? dialog.other.trim() : dialog.reason, this.getActor());
         this._set({ dialog: null });
-        this.notify(this.t('Correction saved. Tell preparation staff in person.'));
+        this.notify(this.t('Correction saved.'));
       } finally { this.orders.releaseWrite(lease); }
       return;
     }
@@ -133,7 +133,7 @@ export class CorrectionWorkflow extends FeatureState {
         this.orders.applyConfirmedItems(lease, result.data.items);
         this.jobsChanged();
         this._set({ dialog: null });
-        this.notify(this.t(result.data.testPrintEnabled ? 'Correction saved. Tell preparation staff in person.' : 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.'));
+        this.notify(this.t('Correction saved.'));
       } else if (result?.rejected && result.code === 'window_expired') {
         this._set({ dialog: { ...this.state.dialog, phase: 'pin', pin: '', approvalToken: null, saving: false, error: this.t(cancellationGuidance) } });
       } else if (result?.rejected && !dialog.unresolved) {
@@ -152,7 +152,7 @@ export class CorrectionWorkflow extends FeatureState {
     const t = (key, values) => this.t(key, values);
     const time = value => new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     return {
-      t, modalTitle: t('Cancel a sent item'), modalSub: t('It was already sent, so it stays on record, crossed out.'),
+      t, modalTitle: t('Cancel a sent item'), modalSub: t('The original item stays in the order history.'),
       cxSentAt: item?.sentAt, cxName: item?.name || '', cxMods: item?.mods || '', cxHasMods: !!item?.mods,
       cxMeta: item ? t('Round {round} · sent {time} to {destination}', { round: item.round, time: time(item.sentAt), destination: t(item.route === 'bar' ? 'Bar' : item.route === 'kitchen2' ? 'Kitchen 2' : 'Kitchen 1') }) : '',
       cxMulti: remaining > 1, cxQty: String(dialog.qty), cxMax: t('of {count}', { count: remaining }), cxMaxNumber: remaining,
@@ -160,7 +160,6 @@ export class CorrectionWorkflow extends FeatureState {
       cxReasons: reasons.map(reason => ({ label: t(reason), pressed: String(dialog.reason === reason), pick: () => this.chooseReason(reason) })),
       cxReasonLabel: dialog.reason === 'Other' ? dialog.other.trim() : t(dialog.reason), cxIsOther: dialog.reason === 'Other', cxOther: dialog.other,
       onCxOther: event => this.setOther(event.target.value), cxDisabled: !dialog.reason || (dialog.reason === 'Other' && !dialog.other.trim()),
-      cxInfo: t(this.bridge ? 'Tell preparation staff in person. Check cancellation print status; earlier output may still arrive.' : 'Tell preparation staff in person; no cancellation notice is printed and earlier output may still arrive.'),
       cxConfirm: () => this.confirm(), cxReview: () => this.review(), cxEditOrDismiss: () => this.editOrDismiss(), closeModal: () => this.dismiss(),
     };
   }

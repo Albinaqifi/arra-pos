@@ -65,6 +65,14 @@ test('a definite first rejection permits a revised request without losing the dr
   assert.equal(workflow.dismiss(), true);
 });
 
+test('desktop success shows the same concise toast whether printing is enabled', async () => {
+  for (const enabled of [true,false]) {
+    const { workflow, calls, notices } = fixture();workflow.open(100);workflow.chooseReason('Entered by mistake');const pending=workflow.confirm();
+    calls[0].resolve({ok:true,data:{items:[],testPrintEnabled:enabled}});await pending;
+    assert.equal(notices[0],'Correction saved.');
+  }
+});
+
 test('stale correction completion cannot overwrite a replacement order or release its lease', async () => {
   const { workflow, orders, calls, notices } = fixture();
   workflow.open(100); workflow.chooseReason('Entered by mistake'); const pending = workflow.confirm();
