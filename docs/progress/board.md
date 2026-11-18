@@ -4,7 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
-| S-089 | In progress | Independent review and focused tests passed; real desktop and offline verification, full-suite completion and PR merge outstanding. |
+| S-089 | In progress | Independent review and focused tests passed; desktop, offline and full-suite verification outstanding. Branch pushed; PR creation blocked by GitHub integration permissions. |
 | S-088 | Done | Independent review and focused tests passed; PR #126 merged as `c607388`. Concurrent-payment startup race recorded separately. |
 | S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
