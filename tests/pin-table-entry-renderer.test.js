@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
+const { randomInt } = require('node:crypto');
 const { routeOf } = require('./support/renderer-fixture');
 
 function harness(overrides = {}) {
@@ -21,7 +22,7 @@ function harness(overrides = {}) {
   return {app,api,calls,context};
 }
 async function login(app) { app.session.setUsername('restaurant'); app.session.setPassword('sample'); await app.session.login(); }
-async function enter(app, id, pin='0123') { app.session.requestTable(id); app.session.setPin(pin); await app.session.submitPin(); }
+async function enter(app, id, pin='0123') { app.session.requestTable(id); await app.session.setPin(pin); }
 const tick = () => new Promise(resolve=>setImmediate(resolve));
 
 test('restaurant grid is redacted and each table selection requires a PIN', async () => {
@@ -33,7 +34,7 @@ test('restaurant grid is redacted and each table selection requires a PIN', asyn
   const shqip=app.tableOrders.tableView({language:'sq',entry:true,openTable:id=>app.session.requestTable(id)});
   assert.equal(shqip.sections[0].tables[0].aria,'Tavolina 1, e zënë'); assert.equal(shqip.sections[0].tables[1].aria,'Tavolina 2, e lirë');
   view.sections[0].tables[1].open(); assert.equal(app.session.state.pinFor.tableId,2); assert.equal(app.session.state.waiter,null);
-  app.session.setPin('0123'); await app.session.submitPin();
+  await app.session.setPin('0123');
   assert.deepEqual(calls,[['0123','waiter']]); assert.equal(routeOf(app),'order'); assert.equal(app.tableOrders.state.tableId,2);
   await app.tableOrders.showTables(); assert.equal(routeOf(app),'tables'); assert.equal(app.session.state.waiter,null);
   app.session.requestTable(2); assert.equal(app.session.state.pin,''); assert.equal(app.session.state.pinFor.tableId,2);
@@ -47,12 +48,11 @@ test('Manager uses its own six-digit PIN and never opens a table', async () => {
   await app.session.switchWaiter(); assert.equal(routeOf(app),'tables'); assert.equal(app.session.state.waiter,null);
 });
 
-test('denied table and uncertain identity response clear staff before returning to grid', async () => {
+test('denied table clears staff and keeps the PIN dialog for retry', async () => {
   let clear=0, entries=0;
   const {app}=harness({openOrder:async()=>({ok:false,code:'table_unavailable'}),clearWaiter:async()=>{clear++;return {ok:true};},getEntryTables:async()=>{entries++;return {ok:true,data:[]};}});
   await login(app); await enter(app,1); assert.equal(clear,1); assert.equal(entries,2); assert.equal(app.session.state.waiter,null); assert.equal(routeOf(app),'tables');
-  assert.match(app.session.state.waiterMessage,/denied/i);
-  app.session.requestTable(1); assert.ok(app.session.state.pinFor);
+  assert.match(app.session.state.waiterMessage,/denied/i); assert.equal(app.session.state.pinFor.tableId,1);
 });
 
 test('failed identity clearing blocks entry and offers retry', async () => {
@@ -81,12 +81,59 @@ test('PIN dialog supports keyboard input, escape and English/Albanian labels', a
     let nodes=walk(app.render()), dialog=nodes.find(node=>node.props?.role==='dialog');
     assert.ok(dialog); assert.ok(walk(dialog).some(node=>node.children?.includes(title)));
     const input=walk(dialog).find(node=>node.type==='input'); assert.equal(input.props.type,'password'); assert.equal(input.props.autoFocus,true);
-    input.props.onChange({target:{value:'0012'}}); assert.equal(app.session.state.pin,'0012');
+    input.props.onChange({target:{value:'001'}}); assert.equal(app.session.state.pin,'001');
     app.session.setPin('01'); await app.session.submitPin(); dialog=walk(app.render()).find(node=>node.props?.role==='dialog');
     assert.ok(walk(dialog).some(node=>node.props?.role==='alert' && node.children.length));
     dialog.props.onKeyDown({key:'Escape',preventDefault(){}}); assert.equal(app.session.state.pinFor,null); assert.equal(app.session.state.pin,''); assert.equal(restored,1);
     nodes=walk(app.render()); assert.ok(nodes.some(node=>node.type==='button' && node.children.includes(manager)));
   }
+});
+
+test('table keypad submits the fourth digit once and retains an in-dialog error for retry', async () => {
+  const pin = '0' + String(randomInt(1000)).padStart(3,'0');
+  let resolveIdentity, resolveClear, attempts=0, clears=0;
+  const {app}=harness({identifyStaff:()=>{ attempts++; return new Promise(resolve=>{resolveIdentity=resolve;}); }, clearWaiter:()=>{clears++;return new Promise(resolve=>{resolveClear=resolve;});}});
+  const walk = node => Array.isArray(node) ? node.flatMap(walk) : !node || typeof node !== 'object' ? [] : [node,...(node.children || []).flatMap(walk)];
+  await login(app); app.session.requestTable(1);
+  let dialog=walk(app.render()).find(n=>n.props?.role==='dialog');
+  assert.ok(dialog); assert.equal(walk(dialog).some(n=>n.type==='button' && n.children.includes('Continue')),false);
+  for (const digit of pin.slice(0,3)) app.session.pinPress(digit);
+  assert.equal(attempts,0);
+  const first=app.session.pinPress(pin[3]); assert.equal(attempts,1);
+  app.session.pinPress(pin[3]); app.session.setPin(pin); assert.equal(attempts,1);
+  resolveIdentity({ok:false}); await tick(); assert.equal(clears,1); assert.equal(app.session.state.switching,true);
+  app.session.setPin(pin); assert.equal(attempts,1);
+  resolveClear({ok:true}); await first;
+  dialog=walk(app.render()).find(n=>n.props?.role==='dialog'); assert.ok(dialog);
+  assert.equal(app.session.state.pinFor.tableId,1); assert.equal(app.session.state.pin,'');
+  assert.ok(walk(dialog).some(n=>n.props?.role==='alert' && /denied/i.test(n.children.join(''))));
+  let focused=0; walk(dialog).find(n=>n.type==='input').props.ref({focus(){focused++;}}); assert.equal(focused,1);
+  const retry=app.session.setPin(pin); assert.equal(attempts,2);
+  resolveIdentity({ok:true,data:{id:5,name:'Waiter',isTransfer:false}}); await retry;
+  assert.equal(routeOf(app),'order'); assert.equal(app.session.state.pinFor,null);
+});
+
+test('pasted table PIN submits once and denied table or unknown response stays in the dialog', async () => {
+  const pin = '0' + String(randomInt(1000)).padStart(3,'0'); let attempts=0, clears=0;
+  const {app}=harness({identifyStaff:async()=>{if (++attempts === 1) throw Error('unknown'); return {ok:true,data:{id:5,name:'Waiter',isTransfer:false}};},openOrder:async()=>({ok:false}),clearWaiter:async()=>{clears++;return {ok:true};}});
+  const walk = node => Array.isArray(node) ? node.flatMap(walk) : !node || typeof node !== 'object' ? [] : [node,...(node.children || []).flatMap(walk)];
+  await login(app); app.session.requestTable(1);
+  let dialog=walk(app.render()).find(n=>n.props?.role==='dialog');
+  await walk(dialog).find(n=>n.type==='input').props.onChange({target:{value:pin}});
+  assert.equal(attempts,1); assert.equal(clears,1); assert.equal(app.session.state.pinFor.tableId,1);
+  dialog=walk(app.render()).find(n=>n.props?.role==='dialog'); assert.ok(walk(dialog).some(n=>n.props?.role==='alert'));
+  await walk(dialog).find(n=>n.type==='input').props.onChange({target:{value:pin}});
+  assert.equal(attempts,2); assert.equal(clears,2); assert.equal(app.session.state.waiter,null);
+  assert.equal(app.session.state.pinFor.tableId,1); assert.ok(walk(app.render()).some(n=>n.props?.role==='alert'));
+});
+
+test('Manager retains explicit six-digit Continue submission', async () => {
+  let attempts=0; const pin=String(randomInt(1000000)).padStart(6,'0');
+  const {app}=harness({identifyStaff:async()=>{attempts++;return {ok:true,data:{id:7,name:'Manager',isTransfer:true}};}});
+  const walk = node => Array.isArray(node) ? node.flatMap(walk) : !node || typeof node !== 'object' ? [] : [node,...(node.children || []).flatMap(walk)];
+  await login(app); app.session.requestManager(); app.session.setPin(pin); assert.equal(attempts,0);
+  const dialog=walk(app.render()).find(n=>n.props?.role==='dialog'); assert.ok(walk(dialog).some(n=>n.type==='button' && n.children.includes('Continue')));
+  await app.session.submitPin(); assert.equal(attempts,1); assert.equal(app.session.state.screen,'transferCorrection');
 });
 
 test('demo opening an untouched table does not create an order', async () => {

@@ -751,7 +751,7 @@ The [plan and design brief](optional-shifts-plan.md) applies to S-088–S-091. S
 
 ### S-093 — Protect waiter tables with individual PINs
 
-**Status:** Done. The three dependent slices were delivered and merged; the owner reports testing is complete and the result works.
+**Status:** In progress. The three original slices were delivered and merged; the owner requested a table PIN auto-submit and in-dialog error follow-up.
 
 **Delivery slices** — (1) Combined-authorized waiter PIN provisioning, reset and collision-safe transition, preserving the current entry flow; (2) trusted order ownership and legacy open-order transition across all relevant service operations, preserving administration and financial scopes; (3) PIN-only table entry, restricted Manager entry and safe handoff/recovery integration, with end-to-end offline and rendered verification. Each slice must be independently safe to deploy. Slice 2 depends on slice 1; slice 3 depends on slice 2. Existing orders must not be assigned from incomplete history. Slice 1 alone does not provide table protection.
 

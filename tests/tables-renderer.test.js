@@ -67,7 +67,7 @@ test('desktop renderer clears prior financial state across sign-out and denies s
   arrange(app, {screen:'tables',waiter:{id:1,name:'waiter'},sections:[{label:'previous',ids:[1]}],orders:{1:{id:4}},items:[{tableId:1,name:'Private item',unit:100,qty:2}],tableId:1});
   app.loadDesktopData(); await app.session.signOut();
   assert.equal(routeOf(app),'login'); assert.equal(app.tableOrders.state.sections.length,0); assert.equal(Object.keys(app.tableOrders.state.orders).length,0); assert.equal(app.tableOrders.state.items.length,0); assert.equal(app.tableOrders.state.tableId,null);
-  owner=true; app.session.setUsername('restaurant'); app.session.setPassword('sample password'); await app.session.login(); app.session.requestTable(1); app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); await new Promise(setImmediate);
+  owner=true; app.session.setUsername('restaurant'); app.session.setPassword('sample password'); await app.session.login(); app.session.requestTable(1); await app.session.setPin(String(randomInt(10000)).padStart(4,'0')); await new Promise(setImmediate);
   assert.equal(app.tableOrders.state.tableLoad,'error'); assert.equal(app.tableOrders.state.sections.length,0); assert.equal(app.tableOrders.state.items.length,0);
   resolveOld({ok:true,data:[{id:1,area:'previous',orderId:4,openedAt:1}]}); await new Promise(setImmediate);
   assert.equal(app.tableOrders.state.sections.length,0); assert.equal(Object.keys(app.tableOrders.state.orders).length,0); assert.equal(app.tableOrders.state.items.length,0);
