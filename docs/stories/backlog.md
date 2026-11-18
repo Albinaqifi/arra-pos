@@ -673,3 +673,57 @@ Start **S-044 — JSX and local build foundation**. It establishes the frontend 
 - Verify the twelve steps against the ownership contract's preimplementation matrix, then complete independent review/testing of the full diff and record actual desktop/demo/language/offline evidence and limitations in one handoff. Preserve unrelated work, historical records and tests; do not merge without explicit authorization.
 
 **Checks/review:** Capture baseline `npm run build` and `npm test`; run focused behavioral checks after each relevant extraction and final build/full tests after integration. Cover delayed/stale responses, uncertain and rejected requests, double clicks, identity transitions, dialog focus and both entry modes. Follow the twelve commit sequence and check plan in the ownership contract. Record exact commands/results and independent role findings; do not substitute source-size checks for behavioral or ownership review.
+
+## Optional shift reporting
+
+The [plan and design brief](optional-shifts-plan.md) applies to S-088–S-091. See its two restaurant scenarios, working defaults, source UI references and rendered acceptance checks. The board owns story status.
+
+### S-088 — Record optional restaurant shifts inside a business day
+
+**Goal** — Staff can serve all day without an owner action. Trusted local services record shift boundaries and paid totals when a restaurant has a handover.
+
+**Acceptance**
+
+- Keep the existing business day and its payment membership authoritative. Begin tracking the day's first shift on the first committed service activity, for example adding an item, sending an existing order or recording payment on a carried order. Viewing a table, signing in, checking a report and retrying an existing print do not start service. No login or order-entry gate. Persist opening and closing times, business day and the actor for an explicit close.
+- Offer a scoped read and an authorized handover operation for a specific active shift. Save the shift's immutable close summary with payment count, total, cash and card, then set its successor boundary. Use the plan's empty-successor and upgrade rules. On **Close current day**, finalize any active reportable shift and the old business day in one transaction. Preserve the existing day print job and automatic new business day. No shift or fiscal paper is triggered here.
+- Assign each new payment once to its business day. For days with shift tracking, assign its shift in the same transaction. On an upgrade day with earlier service, keep day totals complete and label shift coverage unavailable until the next day. Orders, unpaid bills and preparation history survive handover. Use committed transaction order for payments arriving at a boundary. A repeat request, lost response, double-click or racing day/shift close must be safe to reconcile by its original target across restart. Recovery must never rotate the successor or record another payment.
+- Preserve A/B/Combined visibility on reads, writes and report snapshots in trusted code. Eligible B-to-A corrections remain possible until day close. Card belongs to A. A transfer is counted once and the original shift snapshot remains readable as it stood at close. Derive the final effective-account day report from the day's payment records. Preserve all historical migrations and pre-feature data.
+
+**Checks** — Exercise a fresh and upgraded database, no optional handover, two handovers, idle and zero-paid shifts, a carried table paid after the boundary, a later correction, and a day crossing midnight. Test rollback, request replay after restart, competing close/payment requests and unauthorized direct requests. Reconcile both reports to the same underlying payments and exercise existing payment, transfer and day-close regression checks.
+
+### S-089 — Close a shift from Financial information
+
+**Goal** — Let an owner mark a handover quickly and see its result. Depends on S-088 and the S-087 day-close UI.
+
+**Acceptance**
+
+- Add one **Close shift** tile using the existing Financial information layout. Example subtitle: “Review this shift and start the next one.” An owner who ignores the tile can enter orders, take payments and close the day through the existing screens without visiting it. An idle or upgrade-transition state explains when a shift will be available. Do not offer a manual start or an action for an empty successor.
+- Use the actual Arra shell, spacing, typography, finance summary and button treatments described in the [design brief](optional-shifts-plan.md#design-brief-for-every-visible-change). The review identifies the shift by its opening time, count of paid bills, permitted total, cash and card. If tables remain open, state that orders carry over and later payments count in the next shift. Keep table details within existing permissions. Use one deliberate confirmation naming the shift. Suggested copy: “Close this shift? The next shift starts automatically. The business day stays open.”
+- Show completion for the closed shift, with opening time, actual closing time, saved totals and **Done** back to Financial information. An unknown close outcome offers a status check for that shift before another action. Clear stale data on identity changes. S-090 adds the working print action. Ship only controls that work.
+- Keep the S-087 day-close flow. If the owner used handover and service resumed, add a short line to the existing confirmation that closing the day also finishes the active shift. Omit this line for an idle successor. If no handover was used, the normal path has no shift prompts. Day completion and restaurant-report recovery stay anchored to the closed day. Account A remains a separate action.
+
+**Checks** — Walk through 09:00–16:00 and 16:00–00:00 on the same day with an open table. Exercise Back, Cancel, Done, empty state, stale review, rejected/unknown close and identity switch. Verify permitted scopes, day-only click count, and active shift vs. idle successor at day close. Check rendered desktop layout, English/Albanian, keyboard, offline operation, build and architecture gate. Record actual visual evidence alongside the focused tests.
+
+### S-090 — View saved shifts and print a shift report on request
+
+**Goal** — Give the owner paper for a handover when needed, with one automatic restaurant day report at day close. Depends on S-088 and S-089.
+
+**Acceptance**
+
+- Add **Print shift report** as a secondary action on shift completion. In the shift area, show previous shifts in a compact day/time list. Open one selected report at a time. Each saved report identifies the business day, shift opening and closing dates/times, scoped count, total, cash and card in MKD. Label it as a non-fiscal shift report with amounts as recorded at close. Use the existing local restaurant report printer and access controls.
+- A day close that also finalizes the evening shift produces one automatic restaurant day print attempt. The evening shift report remains accessible from shift history. Earlier shift reports retain their original amounts after an eligible later correction. A/B views and reprints must not reveal another owner's payments or transfer history.
+- Persist the original report reference, permitted scope and print attempts. Distinguish sending, sent to printer/check paper, failed, and unknown. Disable retry while in flight, require a paper check before retrying an unknown result, and reconcile lost responses against the original request. A failed or uncertain report remains discoverable by shift after restart. Printing or retrying never rotates a shift, closes a day or records a payment.
+- Follow the shared [design brief](optional-shifts-plan.md#design-brief-for-every-visible-change). Make **Done** primary after closing. Keep ordinary print status compact, show recovery where the problem occurred, and leave raw queue data and repeated retry controls out of the normal view.
+
+**Checks** — Test on-demand vs. automatic print counts, correction followed by a scoped reprint, historical day/shift selection, same-scope request replay, cross-scope denials, in-flight retry, failed/unknown outcome and restart. Verify printed content using samples, then record desktop, language, keyboard, offline and physical-paper evidence separately.
+
+### S-091 — Focus the separate Close Account A screen on the closed business day
+
+**Goal** — Make the existing Combined-only internal close understandable when a day contains one or several shifts. This independent UX follow-up uses the existing S-084 internal close and S-087 visual design. Fiscal device integration stays in S-084.
+
+**Acceptance**
+
+- From **Financial information → Close Account A**, show one eligible closed business day in focus, its opening/closing dates and times, and its Account A count, cash, card and total. One pending day opens directly. For several pending days, let the owner explicitly choose the day with a compact list, then review just that one. With none pending, show a quiet completion or empty state with access to history. A day with two shifts yields one eligible Account A day, with all its effective A payments counted once.
+- Use a short confirmation and a separate completion state anchored to that selected day. Identify the existing internal report accurately as non-fiscal. The live day and its shifts continue independently. Closing a shift or a business day never submits an Account A close or a device request. Preserve the separate Account A bill-list action.
+- Move completed days, voluntary reprints and printer settings out of the main action. Keep failed or uncertain reports visible by day. Use trustworthy sending/unknown status, operator paper check before uncertain retry, and the original report and request identity. Preserve existing authorization, snapshots, older eligible days and direct-request protections.
+- Follow the [design brief](optional-shifts-plan.md#design-brief-for-every-visible-change), especially the single selected period, time range, accessible status, primary action and completed-state layout. Verify using a rendered sample flow for zero, one and several pending days, report failure and restart. Check both languages, keyboard, offline operation, direct denials, accurate cash/card totals after correction and no duplicate close or payment. If delivered before S-088, cover one day containing both morning and evening payments here and verify actual two-shift integration when shift tracking lands.
