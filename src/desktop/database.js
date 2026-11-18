@@ -329,6 +329,12 @@ const migrations = [
     CREATE TRIGGER shift_closes_no_delete BEFORE DELETE ON shift_closes BEGIN SELECT RAISE(ABORT,'Shift close is immutable'); END;
     CREATE TRIGGER payment_shifts_no_update BEFORE UPDATE ON payment_shifts BEGIN SELECT RAISE(ABORT,'Payment shift is immutable'); END;
     CREATE TRIGGER payment_shifts_no_delete BEFORE DELETE ON payment_shifts BEGIN SELECT RAISE(ABORT,'Payment shift is immutable'); END;` },
+  { version: 40, sql: `CREATE TABLE shift_print_attempts (id INTEGER PRIMARY KEY, shift_id INTEGER NOT NULL REFERENCES shift_closes(shift_id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER NOT NULL REFERENCES local_users(id), scope TEXT NOT NULL CHECK(scope IN ('A','B','combined')), queue TEXT NOT NULL, started_at INTEGER NOT NULL) STRICT;
+    CREATE TABLE shift_print_results (attempt_id INTEGER PRIMARY KEY REFERENCES shift_print_attempts(id), result TEXT NOT NULL CHECK(result IN ('accepted','failed')), finished_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER shift_print_attempts_no_update BEFORE UPDATE ON shift_print_attempts BEGIN SELECT RAISE(ABORT,'Print attempts are retained'); END;
+    CREATE TRIGGER shift_print_attempts_no_delete BEFORE DELETE ON shift_print_attempts BEGIN SELECT RAISE(ABORT,'Print attempts are retained'); END;
+    CREATE TRIGGER shift_print_results_no_update BEFORE UPDATE ON shift_print_results BEGIN SELECT RAISE(ABORT,'Print results are retained'); END;
+    CREATE TRIGGER shift_print_results_no_delete BEFORE DELETE ON shift_print_results BEGIN SELECT RAISE(ABORT,'Print results are retained'); END;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

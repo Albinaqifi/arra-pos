@@ -176,6 +176,8 @@ input { font-family: inherit; }
 .day-completion-report { margin: 16px 0; padding: 14px; background: #fff; border: 1px solid #dbe4ef; border-radius: 8px; }
 .day-details { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
 .day-details summary { cursor: pointer; font-weight: 700; }
+.shift-history { list-style: none; padding: 0; display: grid; gap: 8px; }
+.shift-history button { width: 100%; text-align: left; }
 .account-a-bills .report-form label { min-width: 0; max-width: 100%; }
 .account-a-bills select, .account-a-bills input { max-width: 100%; }
 .account-a-bill-list { margin-bottom: 20px; }

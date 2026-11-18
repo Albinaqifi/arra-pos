@@ -37,6 +37,11 @@ function textForJob(job) {
     if (s.part===s.parts) rows.push('--------------------------------', t.total + ': ' + s.total + ' MKD');
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
+  if (job.destination === 'shift-report') {
+    if (!['A','B','combined'].includes(job.scope)) throw Error('Invalid report scope');
+    const rows=['NON-FISCAL SHIFT REPORT',job.scope==='combined'?'ACCOUNTS A AND B':'ACCOUNT '+job.scope,'Business day #'+s.dayId,'Shift #'+s.id,'Opened: '+new Date(s.openedAt).toLocaleString(),'Closed: '+new Date(s.closedAt).toLocaleString(),'Amounts as recorded at close','--------------------------------','Paid bills: '+s.count,'Cash: '+s.cash+' MKD','Card: '+s.card+' MKD','TOTAL: '+s.total+' MKD'];
+    return rows.join('\n')+'\n'+' \n'.repeat(12)+'--- CUT HERE ---';
+  }
   if (job.destination === 'turnover') {
     if (!['A','B','combined'].includes(job.scope)) throw Error('Invalid report scope');
     const rows = ['NON-FISCAL DAILY TURNOVER REPORT', job.scope === 'combined' ? 'FULL REPORT - ACCOUNTS A AND B' : 'ACCOUNT ' + job.scope + ' REPORT ONLY', 'System day #' + s.dayId, 'Opened: ' + new Date(s.openedAt).toLocaleString(), 'Closed: ' + new Date(s.closedAt).toLocaleString(), '--------------------------------'];

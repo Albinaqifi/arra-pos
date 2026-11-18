@@ -46,8 +46,8 @@ function check(db, version, before) {
 
 test('historical v33 data survives real upgrade and restart', t => {
   const {dir,before} = fixture(t);
-  let db = openDatabase(dir); check(db,39,before); db.close();
-  db = openDatabase(dir); check(db,39,before); db.close();
+  let db = openDatabase(dir); check(db,40,before); db.close();
+  db = openDatabase(dir); check(db,40,before); db.close();
 });
 
 test('verified pre-upgrade backup restores to an isolated older database', async t => {
@@ -57,11 +57,11 @@ test('verified pre-upgrade backup restores to an isolated older database', async
   const backup = path.join(parent,'backup.enc'), restored = path.join(parent,'restored');
   const secret = require('node:crypto').randomBytes(24).toString('hex');
   await createBackup(dir, backup, secret);
-  let db = openDatabase(dir); check(db,39,before); db.close();
+  let db = openDatabase(dir); check(db,40,before); db.close();
   fs.mkdirSync(restored);
   restoreBackup(backup, restored, secret);
   db = new DatabaseSync(path.join(restored,'arra.sqlite')); check(db,33,before); db.close();
-  db = openDatabase(restored); check(db,39,before); db.close();
+  db = openDatabase(restored); check(db,40,before); db.close();
 });
 
 test('SQLite full during migration is visible and rolls back; retry preserves history', t => {
@@ -71,7 +71,7 @@ test('SQLite full during migration is visible and rolls back; retry preserves hi
   db.exec(`PRAGMA max_page_count=${pages}`);
   assert.throws(() => migrate(db), /full/i);
   check(db,33,before); db.close();
-  db = openDatabase(dir); check(db,39,before); db.close();
+  db = openDatabase(dir); check(db,40,before); db.close();
 });
 
 test('process termination during migration recovers original and permits retry', t => {
@@ -80,5 +80,5 @@ test('process termination during migration recovers original and permits retry',
   const child = spawnSync(process.execPath, ['-e',program,file], { encoding:'utf8' });
   assert.equal(child.status,73,child.stderr);
   let db = new DatabaseSync(file); check(db,33,before); db.close();
-  db = openDatabase(dir); check(db,39,before); db.close();
+  db = openDatabase(dir); check(db,40,before); db.close();
 });
