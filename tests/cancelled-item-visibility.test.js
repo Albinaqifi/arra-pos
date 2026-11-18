@@ -1,4 +1,4 @@
-const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm');
+const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),{randomInt}=require('node:crypto');
 const {moduleSource}=require('./support/renderer-bundle'),{arrange}=require('./support/renderer-fixture');
 
 test('active order hides fully cancelled sent items while preserving partial, pending and history data',()=>{
@@ -12,10 +12,10 @@ test('active order hides fully cancelled sent items while preserving partial, pe
 
 test('a fully corrected item stays hidden after reopening the free desktop table',async()=>{
  let corrected=false;const row=()=>({id:1,productId:'p',name:'Sample dish',unitPrice:100,quantity:1,status:'sent',round:1,sentAt:Date.now(),sentBy:'Sample',route:'kitchen',correctedQuantity:corrected?1:0,corrections:corrected?[{quantity:1,reason:'Sample',actor:'Sample',occurredAt:Date.now()}]:[]});
- const api={getTables:async()=>({ok:true,data:[{id:1,orderId:5,openedAt:1,untouched:corrected}]}),openOrder:async()=>({ok:true,data:{id:5,openedAt:1,untouched:corrected}}),orderItems:async action=>{if(action==='correct')corrected=true;return {ok:true,data:{items:[row()]}}}};
+ const api={getEntryTables:async()=>({ok:true,data:[{id:1,area:'Inside',occupied:!corrected}]}),identifyStaff:async()=>({ok:true,data:{id:1,name:'Sample',isTransfer:false}}),clearWaiter:async()=>({ok:true}),getMenu:async()=>({ok:true,data:{categories:[],products:[]}}),getTables:async()=>({ok:true,data:[{id:1,area:'Inside',orderId:5,openedAt:1,untouched:corrected}]}),openOrder:async()=>({ok:true,data:{id:5,openedAt:1,untouched:corrected}}),orderItems:async action=>{if(action==='correct')corrected=true;return {ok:true,data:{items:[row()]}}}};
  class Component {setState(u){Object.assign(this.state,typeof u==='function'?u(this.state):u)}}
  const ctx={React:{Component,createElement(){}},ReactDOM:{createRoot:()=>({render(){}})},document:{getElementById(){}},window:{arra:api},crypto:{randomUUID:()=> 'sample-request'},setInterval(){},clearInterval(){},setTimeout(){},clearTimeout(){}};
- vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.App=WaiterDemo;',ctx);const app=new ctx.App();app.componentDidMount();arrange(app,{screen:'tables',sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}}});
+ vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.App=WaiterDemo;',ctx);const app=new ctx.App();app.componentDidMount();arrange(app,{screen:'tables',waiter:{id:1,name:'Sample'},sections:[{label:'Inside',ids:[1]}],orders:{1:{id:5,openedAt:1,untouched:false,log:[]}}});
  await app.tableOrders.openTable(1);assert.equal(app.tableOrders.orderView({language:'en'}).rounds.length,1);app.correction.open(1);app.correction.chooseReason('Entered by mistake');await app.correction.confirm();assert.equal(app.tableOrders.orderView({language:'en'}).isEmpty,true);assert.equal(app.tableOrders.state.items[0].cxQty,1);
- app.tableOrders.showTables();assert.equal(app.tableOrders.tableView({language:'en'}).sections[0].tables[0].free,true);await app.tableOrders.openTable(1);assert.equal(app.tableOrders.orderView({language:'en'}).isEmpty,true);assert.equal(app.tableOrders.orderView({language:'en'}).rounds.length,0);assert.equal(app.tableOrders.state.items[0].cx.length,1);
+ await app.tableOrders.showTables();assert.equal(app.tableOrders.tableView({language:'en'}).sections[0].tables[0].free,true);app.session.requestTable(1);app.session.setPin(String(randomInt(10000)).padStart(4,'0'));await app.session.submitPin();assert.equal(app.tableOrders.orderView({language:'en'}).isEmpty,true);assert.equal(app.tableOrders.orderView({language:'en'}).rounds.length,0);assert.equal(app.tableOrders.state.items[0].cx.length,1);
 });

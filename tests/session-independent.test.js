@@ -11,6 +11,8 @@ const { seedSampleIdentities } = require('../src/desktop/sample-accounts');
 const { randomBytes, randomInt } = require('node:crypto');
 const { registerTables, seedTables } = require('../src/desktop/tables');
 const { registerMenu, seedMenu } = require('../src/desktop/menu');
+const { registerOrders } = require('../src/desktop/orders');
+const { registerOrderItems } = require('../src/desktop/order-items');
 
 test('desktop login and sign-out traverse the bridge and clear credentials', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-auth-ui-'));
@@ -25,6 +27,8 @@ test('desktop login and sign-out traverse the bridge and clear credentials', asy
   const ipc = { handle(channel, fn) { handlers[channel] = fn; } };
   registerTables(ipc, event => event === trusted, db, session);
   registerMenu(ipc, event => event === trusted, db, session);
+  registerOrders(ipc, event => event === trusted, db, session);
+  registerOrderItems(ipc, event => event === trusted, db, session);
   let api;
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'), 'utf8'), {
     require() { return { contextBridge: { exposeInMainWorld(_name, value) { api = value; } }, ipcRenderer: {
@@ -41,23 +45,23 @@ test('desktop login and sign-out traverse the bridge and clear credentials', asy
   assert.equal(routeOf(app), 'login'); assert.equal(app.session.state.pass, ''); assert.equal(session.currentUserId(), null);
   app.session.state.pass = passwords[0];
   await app.session.login();
-  assert.equal(routeOf(app), 'waiters'); assert.equal(app.session.state.pass, ''); assert.equal(session.currentUserId(), null);
+  assert.equal(routeOf(app), 'tables'); assert.equal(app.session.state.pass, ''); assert.equal(session.currentUserId(), null);
   assert.doesNotThrow(() => app.render());
-  assert.deepEqual(Array.from(app.session.state.waiters, w => w.name).sort(), ['sample-transfer-manager', 'sample-waiter']);
-  const waiter = app.session.state.waiters.find(w => w.name === 'sample-waiter');
-  await app.session.chooseWaiter(waiter, staffPin);
-  assert.equal(session.currentUserId(), waiter.id);
+  assert.equal(app.session.state.waiter,null); assert.ok(app.tableOrders.state.sections.length);
+  const waiterId = db.prepare("SELECT id FROM local_users WHERE username='sample-waiter'").get().id;
+  app.session.requestTable(1); app.session.setPin(staffPin); await app.session.submitPin();
+  assert.equal(session.currentUserId(), waiterId);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(routeOf(app), 'tables');
+  assert.equal(routeOf(app), 'order');
   assert.equal(app.tableOrders.state.tableLoad, 'ready'); assert.equal(app.catalog.state.menuLoad, 'ready');
   assert.ok(app.tableOrders.state.sections.length); assert.ok(app.catalog.state.products.length);
   assert.doesNotThrow(() => app.render());
   await app.session.switchWaiter();
-  assert.equal(routeOf(app), 'waiters'); assert.equal(session.currentUserId(), null);
-  assert.equal(app.tableOrders.state.sections.length, 0); assert.doesNotThrow(() => app.render());
-  await app.session.chooseWaiter(waiter, staffPin);
+  assert.equal(routeOf(app), 'tables'); assert.equal(session.currentUserId(), null);
+  assert.ok(app.tableOrders.state.sections.length); assert.equal(app.tableOrders.state.items.length,0); assert.doesNotThrow(() => app.render());
+  app.session.requestTable(1); app.session.setPin(staffPin); await app.session.submitPin();
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.tableOrders.state.tableLoad, 'ready'); assert.equal(session.currentUserId(), waiter.id);
+  assert.equal(app.tableOrders.state.tableLoad, 'ready'); assert.equal(session.currentUserId(), waiterId);
   await app.session.signOut();
   assert.equal(routeOf(app), 'login'); assert.equal(app.session.state.user, ''); assert.equal(app.session.state.pass, ''); assert.equal(session.currentUserId(), null);
   app.session.state.user = 'sample-combined'; app.session.state.pass = passwords[3];

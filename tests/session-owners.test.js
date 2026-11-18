@@ -15,9 +15,9 @@ function modules(api) {
 }
 
 function session(api, overrides = {}) {
-  const calls = { clear: 0, dismiss: 0, load: 0, notices: [] };
+  const calls = { clear: 0, dismiss: 0, load: 0, entry: 0, opens: [], notices: [] };
   const { SessionModel } = modules(api);
-  const owner = new SessionModel({ bridge: api, canLeave: () => true, clearProtectedData: () => calls.clear++, dismissSelectedOrder: () => calls.dismiss++, loadProtectedData: () => calls.load++, notify: message => calls.notices.push(message), getLanguage: () => 'en', getDemoStaff: () => [], ...overrides });
+  const owner = new SessionModel({ bridge: api, canLeave: () => true, clearProtectedData: () => calls.clear++, dismissSelectedOrder: () => calls.dismiss++, loadProtectedData: () => calls.load++, loadEntryTables: () => calls.entry++, openSelectedTable: id => { calls.opens.push(id); return true; }, notify: message => calls.notices.push(message), getLanguage: () => 'en', getDemoStaff: () => [], ...overrides });
   return { owner, calls };
 }
 
@@ -25,55 +25,55 @@ test('account owner preserves leading zero PINs and isolates waiter, transfer an
   const staff = [{ id: 1, name: 'Sample waiter', hasPin: true }, { id: 2, name: 'Sample transfer', hasPin: true, isTransfer: true }];
   const pins = [String(randomInt(1000)).padStart(4, '0'), String(randomInt(100000)).padStart(6, '0')];
   const selections = [];
-  let ownerEntry = false, lists = 0;
+  let ownerEntry = false;
   const api = {
     signIn: async () => ownerEntry ? { ok: true, admin: true, name: 'Sample owner' } : { ok: true },
-    getWaiters: async () => { lists++; return { ok: true, data: staff }; },
-    selectWaiter: async (id, pin) => { selections.push({ id, pin }); return { ok: pin === pins[id - 1] }; },
+    identifyStaff: async (pin, kind) => { selections.push({ kind, pin }); const index = kind === 'transfer' ? 1 : 0; return pin === pins[index] ? { ok:true,data:staff[index] } : { ok:false }; },
     clearWaiter: async () => ({ ok: true }), signOut: async () => ({ ok: true }),
   };
   const { owner, calls } = session(api);
   owner.setUsername('sample restaurant'); owner.setPassword(randomBytes(18).toString('hex')); await owner.login();
-  assert.equal(owner.state.screen, 'waiters'); assert.equal(owner.state.pass, '');
+  assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.state.waiter, null); assert.equal(owner.state.pass, '');
   for (let index = 0; index < staff.length; index++) {
-    const person = owner.state.waiters[index];
-    owner.pickWaiter(person);
-    assert.equal(owner.state.screen, 'pin'); assert.equal(owner.accountView().pinDots.length, pins[index].length);
-    await owner.chooseWaiter(person, '');
-    assert.equal(owner.state.screen, 'pin'); assert.equal(owner.state.pin, '');
-    for (const digit of pins[index]) await owner.pinPress(digit);
+    if (index) owner.requestManager(); else owner.requestTable(7);
+    assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.accountView().pinDots.length, pins[index].length);
+    await owner.submitPin(); assert.equal(owner.state.pin, ''); assert.ok(owner.state.pinFor);
+    for (const digit of pins[index]) owner.pinPress(digit);
+    await owner.submitPin();
     assert.equal(owner.state.screen, index ? 'transferCorrection' : 'waiter');
     assert.equal(selections.at(-1).pin, pins[index]); assert.equal(owner.state.adminAccess, false);
     await owner.switchWaiter();
   }
   assert.equal(calls.load, 1, 'transfer entry cannot load waiter data');
   await owner.signOut(); ownerEntry = true;
-  const previousLists = lists;
+  const previousEntries = calls.entry;
   owner.setUsername('sample owner'); owner.setPassword(randomBytes(18).toString('hex')); await owner.login();
-  assert.equal(owner.state.screen, 'admin'); assert.equal(owner.state.adminAccess, true); assert.equal(lists, previousLists);
+  assert.equal(owner.state.screen, 'admin'); assert.equal(owner.state.adminAccess, true); assert.equal(calls.entry, previousEntries);
 });
 
-test('switch hides selection immediately but clears protected records only after a successful clear', async () => {
+test('switch hides protected records immediately and blocks entry after a failed clear', async () => {
   let release, success = false;
-  const api = { selectWaiter: async () => ({ ok: true }), clearWaiter: () => new Promise(resolve => { release = resolve; }), getWaiters: async () => ({ ok: true, data: [] }) };
+  const api = { identifyStaff: async () => ({ ok: true, data: {id:1,name:'Sample'} }), clearWaiter: () => new Promise(resolve => { release = resolve; }) };
   const { owner, calls } = session(api);
-  await owner.chooseWaiter({ id: 1, name: 'Sample' }, '');
+  owner.state.screen='waiter'; owner.requestTable(1); owner.setPin('1234'); await owner.submitPin();
   for (success of [false, true]) {
     const before = calls.clear, pending = owner.switchWaiter();
-    assert.equal(owner.state.screen, 'waiters'); assert.equal(owner.state.waiter, null); assert.equal(owner.state.switching, true); assert.equal(calls.clear, before);
+    const entries = calls.entry;
+    assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.state.waiter, null); assert.equal(owner.state.switching, true); assert.equal(calls.clear, before + 1);
     release({ ok: success }); await pending;
-    assert.equal(calls.clear, before + Number(success)); assert.equal(owner.state.switching, false);
-    if (!success) assert.match(owner.state.waiterMessage, /Could not switch/);
+    assert.equal(calls.clear, before + 1); assert.equal(owner.state.switching, false); assert.equal(calls.entry, entries + Number(success));
+    if (!success) { assert.match(owner.state.waiterMessage, /Could not clear/); owner.requestTable(1); assert.equal(owner.state.pinFor,null); }
   }
 });
 
 test('an old administration callback cannot revoke a newer staff identity', async () => {
   let release;
-  const api = { signIn: async () => ({ ok: true, admin: true, name: 'Sample owner' }), adminAccess: () => new Promise(resolve => { release = resolve; }), signOut: async () => ({ ok: true }), selectWaiter: async () => ({ ok: true }) };
+  let admin = true;
+  const api = { signIn: async () => admin ? ({ ok: true, admin: true, name: 'Sample owner' }) : ({ok:true}), adminAccess: () => new Promise(resolve => { release = resolve; }), signOut: async () => ({ ok: true }), identifyStaff: async () => ({ ok: true, data:{id:1,name:'New staff'} }) };
   const { owner, calls } = session(api);
   owner.setUsername('sample owner'); owner.setPassword(randomBytes(18).toString('hex')); await owner.login();
   const checking = owner.refreshAdminAccess(owner.state.identityGeneration);
-  await owner.signOut(); await owner.chooseWaiter({ id: 1, name: 'New staff' }, '');
+  await owner.signOut(); admin=false; owner.setUsername('restaurant'); owner.setPassword('sample'); await owner.login(); owner.requestTable(1); owner.setPin('1234'); await owner.submitPin();
   const before = calls.clear;
   release({ ok: true, signedIn: false, selected: false, admin: false });
   assert.equal(await checking, false); assert.equal(owner.state.screen, 'waiter'); assert.equal(owner.state.waiter.name, 'New staff'); assert.equal(calls.clear, before);

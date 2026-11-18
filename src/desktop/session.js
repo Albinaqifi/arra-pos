@@ -1,5 +1,6 @@
 const { randomBytes, scryptSync, timingSafeEqual } = require('node:crypto');
 const { hasPermissions, hasTableConfigPermission } = require('./permissions');
+const { untouchedOrder } = require('./untouched-order');
 const OPTIONS = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const failure = () => ({ ok: false, error: 'Sign in failed' });
 const validUsername = value => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 128;
@@ -56,6 +57,38 @@ function createSession(db) {
     },
     signOut() { generation++; activeId = null; restaurantId = null; return { ok: true }; },
     clearWaiter() { generation++; activeId = null; return { ok: true }; },
+    identifyStaff(request) {
+      generation++;
+      const fail = () => ({ ok: false, error: 'Staff identification failed' });
+      try {
+        const restaurant = restaurantActive() && !!db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId);
+        // A new attempt ends any previous staff identity, including on failure.
+        if (restaurant) activeId = null;
+        if (!restaurant || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
+            Reflect.ownKeys(request).length !== 2 || !Object.hasOwn(request, 'pin') || !Object.hasOwn(request, 'kind') ||
+            !['waiter', 'transfer'].includes(request.kind) || typeof request.pin !== 'string' ||
+            !(request.kind === 'waiter' ? /^\d{4}$/ : /^\d{6}$/).test(request.pin)) return fail();
+        // Include active unverified legacy credentials in ambiguity detection. A
+        // single unverified match is still denied until Combined resets its PIN.
+        const rows = db.prepare(`SELECT u.id,u.username,u.pin_salt,u.pin_hash,
+          EXISTS(SELECT 1 FROM verified_waiter_pins v WHERE v.user_id=u.id) AS verified
+          FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id
+          WHERE u.active=1 AND u.pin_salt IS NOT NULL AND u.pin_hash IS NOT NULL
+          AND NOT EXISTS(SELECT 1 FROM pending_staff p WHERE p.user_id=u.id)
+          AND NOT EXISTS(SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id)
+          AND (CASE WHEN ?='waiter' THEN f.scope='waiter' AND NOT EXISTS(SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id)
+                    ELSE EXISTS(SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id) END)`).all(request.kind);
+        const matches = [];
+        for (const row of rows) {
+          const actual = hashPassword(request.pin, row.pin_salt), expected = Buffer.from(row.pin_hash);
+          if (expected.length !== actual.length) return fail();
+          if (timingSafeEqual(actual, expected)) matches.push(row);
+        }
+        if (matches.length !== 1 || (request.kind === 'waiter' && matches[0].verified !== 1)) return fail();
+        activeId = matches[0].id;
+        return { ok: true, data: { id: activeId, name: matches[0].username, isTransfer: request.kind === 'transfer' } };
+      } catch (_) { return fail(); }
+    },
     listWaiters() {
       if (!restaurantActive() || !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId)) return { ok: false, error: 'Access denied' };
       try {
@@ -115,12 +148,25 @@ function registerSession(ipcMain, isAllowedSender, db) {
     return { ok: true, signedIn: session.authenticatedUserId() !== null, selected: session.currentUserId() !== null, admin: adminAccess() };
   });
   ipcMain.handle('arra:sign-in', (event, request) => isAllowedSender(event) ? session.signIn(request) : failure());
-  ipcMain.handle('arra:waiters', (event, request) => isAllowedSender(event) && request && typeof request === 'object' && !Array.isArray(request) && Object.getPrototypeOf(request) === Object.prototype && Reflect.ownKeys(request).length === 0 ? session.listWaiters() : { ok: false });
-  ipcMain.handle('arra:select-waiter', (event, request) => {
-    if (!isAllowedSender(event)) return { ok: false };
-    const result = session.selectWaiter(request);
-    if (!result.ok) return result;
-    return { ok: true, admin: adminAccess() };
+  ipcMain.handle('arra:identify-staff', (event, request) => isAllowedSender(event) ? session.identifyStaff(request) : { ok:false });
+  ipcMain.handle('arra:entry-tables', (event, request) => {
+    if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype || Reflect.ownKeys(request).length !== 0) return {ok:false};
+    try {
+      const restaurant = session.authenticatedUserId();
+      if (!restaurant || session.currentUserId() !== null || !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurant)) return {ok:false};
+      const data = db.prepare(`SELECT t.id,COALESCE(a.name,t.area) AS area,CASE WHEN o.id IS NOT NULL AND NOT (${untouchedOrder('o')}) THEN 1 ELSE 0 END AS occupied FROM dining_tables t LEFT JOIN dining_areas a ON a.id=t.area_id LEFT JOIN orders o ON o.table_id=t.id AND o.status='open' AND o.retired_empty=0 WHERE t.active=1 AND COALESCE(a.active,1)=1 ORDER BY t.id`).all();
+      return {ok:true,data:data.map(row=>({id:row.id,area:row.area,occupied:row.occupied===1}))};
+    } catch (_) { return {ok:false}; }
+  });
+  // Staff names are not exposed on the pre-identification table screen.
+  ipcMain.handle('arra:waiters', () => ({ ok: false }));
+  // The old name-based IPC cannot bypass PIN-only ambiguity checks.
+  ipcMain.handle('arra:select-waiter', event => {
+    if (isAllowedSender(event)) {
+      const authenticated = session.authenticatedUserId();
+      if (authenticated && db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(authenticated)) session.clearWaiter();
+    }
+    return { ok: false };
   });
   ipcMain.handle('arra:clear-waiter', (event, request) => isAllowedSender(event) && request && typeof request === 'object' && !Array.isArray(request) && Object.getPrototypeOf(request) === Object.prototype && Reflect.ownKeys(request).length === 0 ? session.clearWaiter() : { ok: false });
   ipcMain.handle('arra:sign-out', (event, request) => {

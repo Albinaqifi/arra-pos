@@ -172,8 +172,9 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   const context = { React: { Component, createElement() {} }, window: {}, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(rendererBundle(), context);
   const app = new context.RendererModules.WaiterDemo(); app.componentDidMount();
-  await app.session.chooseWaiter({ name: 'Sample' }, '');
-  await app.tableOrders.openTable(1);
+  app.session.setUsername('sample'); app.session.setPassword('sample password'); await app.session.login();
+  const staff=app.session.getDemoStaff(), pin=String(require('node:crypto').randomInt(Math.floor(10000/staff.length))*staff.length).padStart(4,'0');
+  app.session.requestTable(1); app.session.setPin(pin); await app.session.submitPin();
   app.pending.addProduct('qebapa');
   app.pending.chooseModifier('portion', 0); app.pending.chooseModifier('side', 0);
   await app.pending.modAdd();
@@ -181,7 +182,7 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   assert.equal(entered.length, 1); assert.equal(entered[0].qty, 1); assert.equal(entered[0].id, 'i114');
   app.pending.incItem(entered[0].id);
   app.demoPrinting.toggle('kitchen');
-  app.sendWorkflow.send();
+  await app.sendWorkflow.send();
   assert.equal(app.demoPrinting.state.jobs.length, 1); assert.equal(app.demoPrinting.state.jobs[0].id, 'j115');
   assert.equal(app.tableOrders.state.orders[1].rounds, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Added ')).length, 1);
@@ -190,7 +191,7 @@ test('replayed React updaters do not repeat demo data writes, IDs, activity or c
   assert.equal(app.demoPrinting.state.jobs[0].attempts, 3);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.startsWith('Retry of ')).length, 1);
   assert.equal(app.tableOrders.state.orders[1].log.filter(value => value.text.includes('on the backup printer')).length, 1);
-  await app.session.chooseWaiter({ name: 'Sample' }, ''); await app.tableOrders.openTable(1);
+  app.session.requestTable(1); app.session.setPin(pin); await app.session.submitPin();
   app.correction.open('i114'); app.correction.chooseReason('Entered by mistake');
   await app.correction.confirm();
   entered = app.tableOrders.state.items.filter(value => value.tableId === 1);

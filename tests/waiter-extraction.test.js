@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-test('extracted waiter views connect table, order and move controls to the existing state', () => {
+test('extracted waiter views connect table, order and move controls to the existing state', async () => {
   class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } forceUpdate() {} }
   const React = { Component, Fragment: 'fragment', createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, ArraComponents: {}, ReactDOM: { createRoot: () => ({ render() {} }) }, document: { getElementById() {} }, window: {}, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
@@ -18,9 +18,9 @@ test('extracted waiter views connect table, order and move controls to the exist
   const emptyMove = nodes(app.render()).find(n => n.type === 'button' && label(n).includes('Move whole table'));
   assert.equal(emptyMove.props.disabled, true);
   assert.equal(emptyMove.props.style.background, '#F8FAFC');
-  arrange(app, { screen: 'tables', orders: sampleOrders });
+  arrange(app, { screen: 'tables', waiter:null, orders: sampleOrders });
   let table = nodes(app.render()).find(n => n.type === 'button' && n.props['aria-label'] && n.props['aria-label'].startsWith('Table 1,'));
-  assert.ok(table); table.props.onClick(); assert.equal(routeOf(app), 'order'); assert.equal(app.tableOrders.state.tableId, 1);
+  assert.ok(table); table.props.onClick(); assert.equal(app.session.state.pinFor.tableId,1); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); assert.equal(routeOf(app), 'order'); assert.equal(app.tableOrders.state.tableId, 1);
   arrange(app, { orders: { ...app.tableOrders.state.orders, 1: { openedAt: 1, rounds: 0, log: [] } } });
   let move = nodes(app.render()).find(n => n.type === 'button' && label(n).includes('Move whole table'));
   assert.ok(move); assert.equal(move.props.disabled, false); assert.equal(move.props.style.background, '#F5F3FF'); move.props.onClick(); assert.equal(app.moveWorkflow.view().isMoveTable, true);

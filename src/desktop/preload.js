@@ -72,6 +72,23 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     } catch (_) {}
     return { ok: false };
   },
+  async getEntryTables() {
+    try {
+      const r = await ipcRenderer.invoke('arra:entry-tables', {});
+      if (r?.ok && Array.isArray(r.data) && r.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 && typeof t.area === 'string' && t.area.trim() && typeof t.occupied === 'boolean'))
+        return {ok:true,data:r.data.map(t=>({id:t.id,area:t.area,occupied:t.occupied}))};
+    } catch (_) {}
+    return {ok:false};
+  },
+  async identifyStaff(pin, kind) {
+    if (typeof pin !== 'string' || !['waiter','transfer'].includes(kind)) return {ok:false};
+    try {
+      const r = await ipcRenderer.invoke('arra:identify-staff', {pin,kind}), d = r?.data;
+      if (r?.ok && d && Number.isSafeInteger(d.id) && d.id > 0 && typeof d.name === 'string' && d.name.trim() && d.isTransfer === (kind === 'transfer'))
+        return {ok:true,data:{id:d.id,name:d.name,isTransfer:d.isTransfer}};
+    } catch (_) {}
+    return {ok:false};
+  },
   async adminAccess() {
     try { const r = await ipcRenderer.invoke('arra:admin-access', {}); return r?.ok ? { ok: true, signedIn: r.signedIn === true, selected: r.selected === true, admin: r.admin === true } : { ok: false }; } catch (_) { return { ok: false }; }
   },

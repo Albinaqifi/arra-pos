@@ -44,9 +44,9 @@ test('an unacknowledged send retains its outbound request through language and w
   const requests = []; let sequence = 0;
   const api = {
     language: async request => ({ ok: true, language: request.language }),
-    orderItems: async (action, orderId, requestId) => { requests.push({ orderId, requestId }); return { ok: false }; },
-    clearWaiter: async () => ({ ok: true }), getWaiters: async () => ({ ok: true, data: [] }),
-    selectWaiter: async () => ({ ok: true }), getMenu: async () => ({ ok: true, data: { categories: [], products: [] } }),
+    orderItems: async (action, orderId, requestId) => { if(action==='list') return {ok:true,data:{items:[]}}; requests.push({ orderId, requestId }); return { ok: false }; },
+    clearWaiter: async () => ({ ok: true }), getEntryTables: async () => ({ ok: true, data: [{id:2,area:'Inside',occupied:true}] }),
+    identifyStaff: async () => ({ ok: true, data:{id:1,name:'First',isTransfer:false} }), openOrder:async tableId=>({ok:true,data:{id:7,tableId,openedAt:1}}), getMenu: async () => ({ ok: true, data: { categories: [], products: [] } }),
     getTables: async () => ({ ok: true, data: [{ id: 2, orderId: 7, area: 'Inside', openedAt: 1 }] }),
   };
   const context = { React: { Component }, window: { arra: api }, crypto: { randomUUID: () => 'send-' + ++sequence }, setTimeout() {}, clearTimeout() {} };
@@ -54,8 +54,7 @@ test('an unacknowledged send retains its outbound request through language and w
   const app = new context.RendererModules.WaiterDemo(); app._mounted = true;
   arrange(app, { screen: 'order', waiter: { id: 1, name: 'First' }, tableId: 1, orders: { 1: { id: 7, log: [] } } });
   await app.sendWorkflow.send(); await app.settings.changeLanguage('sq'); await app.session.switchWaiter();
-  await app.session.chooseWaiter({ id: 2, name: 'Next' }, ''); await app.loadDesktopData();
-  arrange(app, { screen: 'order', tableId: 2 });
+  app.session.requestTable(2); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); assert.equal(routeOf(app),'order');
   await app.sendWorkflow.send();
   assert.equal(requests.length, 2); assert.deepEqual(requests[1], requests[0]);
   assert.equal(requests[0].orderId, 7); assert.equal(sequence, 1);

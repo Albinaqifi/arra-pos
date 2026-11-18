@@ -91,7 +91,7 @@ test('modifier dialog locks during save, closes after success and remains retrya
 test('a replay after a lost send response warns that newly added items remain pending', async () => {
   let rows = [], round = false, first = true, nextId = 1, token = 0; const sends = [];
   const api = {
-    clearWaiter: async () => ({ok:true}), getWaiters: async () => ({ok:true,data:[{id:1,name:'Sample',hasPin:false}]}), selectWaiter: async () => ({ok:true}), printJobs: async () => ({ok:true,data:{jobs:[]}}),
+    clearWaiter: async () => ({ok:true}), getEntryTables: async () => ({ok:true,data:[{id:1,area:'Inside',occupied:true}]}), identifyStaff: async () => ({ok:true,data:{id:1,name:'Sample',isTransfer:false}}), printJobs: async () => ({ok:true,data:{jobs:[]}}),
     getMenu: async () => ({ok:true,data:{categories:[{id:'c',name:'Food'}],products:[{id:'p',categoryId:'c',name:'Dish',price:10}]}}),
     getTables: async () => ({ok:true,data:[{id:1,area:'Inside',orderId:3,openedAt:1}]}),
     openOrder: async () => ({ok:true,data:{id:3,tableId:1,openedAt:1}}),
@@ -110,7 +110,7 @@ test('a replay after a lost send response warns that newly added items remain pe
   vm.runInNewContext(require('./support/renderer-bundle')()+'\nthis.Demo = WaiterDemo;',context);
   const app=new context.Demo(); app.componentDidMount(); app.loadDesktopData(); await new Promise(resolve=>setImmediate(resolve)); await app.tableOrders.openTable(1);
   await app.pending.addProduct('p'); await app.sendWorkflow.send(); await app.pending.addProduct('p'); await app.sendWorkflow.send();
-  assert.equal(sends[0],sends[1]); assert.equal(routeOf(app),'waiters'); assert.match(app.session.state.handoffNotice,/still pending/);
-  await app.session.chooseWaiter({id:1,name:'Sample',color:'#123'},''); await app.tableOrders.openTable(1); assert.equal(app.tableOrders.state.items[1].status,'pending');
-  await app.sendWorkflow.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'waiters'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
+  assert.equal(sends[0],sends[1]); assert.equal(routeOf(app),'tables'); assert.match(app.session.state.handoffNotice,/still pending/);
+  app.session.requestTable(1); app.session.setPin(String(require('node:crypto').randomInt(10000)).padStart(4,'0')); await app.session.submitPin(); assert.equal(routeOf(app),'order'); assert.equal(app.tableOrders.state.items[1].status,'pending');
+  await app.sendWorkflow.send(); assert.notEqual(sends[2],sends[1]); assert.equal(routeOf(app),'tables'); assert.equal(rows[1].status,'sent'); assert.match(app.session.state.handoffNotice,/No physical ticket/);
 });
