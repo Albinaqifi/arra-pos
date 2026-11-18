@@ -1,6 +1,6 @@
 # Development backlog
 
-### S-085 — Approve late sent-item cancellation with the Combined owner's PIN
+### S-086 — Approve late sent-item cancellation with the Combined owner's PIN
 
 **Goal:** After the S-081 two-minute window, keep the sent-item Cancel action available and allow an authorized Combined owner to approve the waiter's correction in the same dialog with their PIN. **Depends on:** S-081 and existing Combined account and correction access. This owner decision supersedes S-081's disabled-button and administrator-page guidance for late cancellations.
 
@@ -12,6 +12,37 @@
 - Hide fully cancelled sent items from the active order view while retaining partial quantities and all underlying history. Remove the waiter cancellation dialog reminder and use only “Correction saved.” as its success message, as requested by the owner. Preserve notice jobs and delivery status.
 - Work offline, in English and Albanian, with keyboard access and supported desktop layouts. Verify setup, reset, invalid and valid PINs, role restrictions, direct requests, cutoff boundaries and open dialogs, retry and rollback, identity changes, history, billing, notices and restart. Independently review authorization, financial integrity and renderer ownership.
 
+### S-085 — Print Account A bills and total without closing
+
+**Goal:** Add a separate option in Financial information to print a list of Account A paid bills, each bill's value and the sum, without closing a day or sending a fiscal report. The owner can choose a local printer independently of the fiscal printer.
+
+**Acceptance:**
+
+- Offer an Account A print option with a business-day selector including the current day and previous days. Show the selected day and preview each paid bill, its value and the total before printing, followed by cash and card totals; show a useful empty state. The printout contains the same bill values, sum and cash/card breakdown beneath the sum, and is clearly identified as non-fiscal.
+- Use effective Account A: include card and Account A cash, count a B-to-A corrected payment once, and exclude unpaid bills and Account B payments. Enforce the existing financial scope in trusted code for direct requests, preventing access to unauthorized records.
+- Let an authorized administrator configure a persistent local Windows printer queue for this output independently of fiscal, Account A closing and bill-printer settings. It may select the same physical printer. Preserve existing settings and data.
+- Printing must not close any shared or fiscal day, create a fiscal report, send fiscal commands, change payments or create a second payment. Give a useful failed or uncertain outcome and require a paper check before retrying an uncertain print; queue acceptance is not proof of paper.
+- Work offline, in English and Albanian, with keyboard access. Preserve renderer ownership and existing financial access, identity cleanup and request lifetimes.
+
+**Checks/review:** Verify selected open and closed days, empty days, cash, card and corrected payments; the overall sum and cash/card breakdown against recorded bills; scoped direct requests; separate printer settings, failure and uncertain retry; no day-close, fiscal or payment mutation; upgrade and restart. Record automated, offline desktop and physical-printer results separately.
+
+### S-084 — Close Account A after the shared business day
+
+**Goal:** Give the Combined administrator a separate Account A closing option in Financial information. After the shared business day is closed and the next day starts, review the closed day's Account A payments and close Account A for that day, printing its report to the Account A closing printer. This is a separate account-level record, not another system-day close. **Depends on:** S-057, S-058 and S-061; inspect their actual implementation and outstanding printer verification before building.
+
+**Owner direction:** Days closed before this feature exists are test data and do not need separate Account A closing. This separate workflow is Combined-only and must not change Owner A's existing financial information or day-close access. The Account A closing printer can be the same physical printer used for A bills and must have a configurable setting. This story does not authorize fiscal output.
+
+**Owner clarification, 2026-11-18:** The intended end result is an actual fiscal daily report for Account A using the pictured Synergy PF700; this supersedes the earlier exclusion of fiscal output. Prepare integration for this device; the existing S-084 report is an internal, non-fiscal summary and does not satisfy that fiscal goal. Fiscal receipt registration, the device's fiscal-day boundary, corrections and uncertain-result recovery must be designed and verified before enabling real fiscal output. The physical printer is not currently available for testing.
+
+**Acceptance:**
+
+- In Combined's Financial information, provide an Account A closing option for a shared business day closed after the feature is installed. When multiple days await Account A closing, let the owner select and close each pending day. Clearly identify the day, opening and closing times, and whether its Account A close is pending or complete. The main day close continues to start the next shared day; the separate A close does not close or interrupt that new day. Account B closing is outside this story.
+- Before confirmation, show the closed day's Account A payment count and total, with cash and card amounts. Reconcile to recorded paid bills for that business day using effective account: card belongs to A, and a B-to-A correction counts once as A. Exclude B payments and avoid treating transfers as new payments. Explain that this is a separate, non-fiscal account close.
+- On confirmation, durably record one Account A close for the selected shared day, identifying the day, actor and time, and preserve its report and history across restart. Create and attempt a print job for the A closing report through a configurable local printer setting, which can select the same queue as Account A bills. Preserve the existing main-day reports, payment and correction history, and printer settings; do not create or change payments or close another shared day. Handle repeated, concurrent or uncertain requests without duplicate account closes or print jobs.
+- Restrict the separate Account A close, its report history and print retries to authorized Combined users in trusted code, including direct requests. Do not change Owner A's existing Financial information, shared-day close or printing access. Work offline, support English and Albanian and keyboard access, and provide useful empty, denied and error states. Keep any Account B closing functionality for a later story.
+- A printer failure or uncertain outcome does not undo the Account A close. Make the outcome visible, preserve the original report and job, and allow an authorized user to retry without closing again. Require an operator paper check before retrying uncertain output; queue acceptance is not proof of physical printing. Identify the report as non-fiscal unless a separately verified fiscal integration exists.
+
+**Checks/review:** Verify shared close followed by A review and close while the new day remains usable; cash, card, corrected payments, empty days and reconciliation; multiple pending days and the pre-feature boundary; direct-request authorization and B data protection; repeat and concurrent requests, failure, uncertain output, retry and restart; printer configuration and safe upgrade of existing data and jobs. Review financial integrity, authorization, migrations and renderer ownership. Record automated, offline desktop and physical-printer results separately.
 
 ### S-083 — Print bills through account printers when recording payment
 

@@ -44,7 +44,7 @@ test('upgrade preserves a previously revoked Combined correction grant', t=>{
  db.prepare("DELETE FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").run(actor);
  db.exec('DROP TABLE order_cancellations; DROP TABLE restaurant_accounts; PRAGMA user_version=30');db.close();db=openDatabase(dir);
  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
- assert.equal(db.prepare('PRAGMA user_version').get().user_version,36);
+ assert.equal(db.prepare('PRAGMA user_version').get().user_version,37);
  assert.equal(db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor),undefined);
 });
 

@@ -8,4 +8,4 @@ Record issues found outside the current story in one short line: date, story, is
 - 2026-11-13, S-065: `table-config-flow-independent` expects an untouched opened table to have an order; current S-054 behavior returns none, obscuring that flow's verification.
 - 2026-11-13, S-068: Baseline admin-access-renderer expects an EmployeeConfig access-denied message but receives the unavailable message; the stale expectation obscures that unrelated check.
 - 2026-11-17, S-081: `audit-independent.test.js` failed a sample PIN substring assertion in the full suite but passed in isolation; timestamp digits may coincidentally match and obscure the audit check (cause unconfirmed).
-- 2026-11-18, S-085: Browser demo table availability can remain taken after the final item is corrected; active-order filtering works, but demo availability needs separate investigation.
+- 2026-11-18, S-086: Browser demo table availability can remain taken after the final item is corrected; active-order filtering works, but demo availability needs separate investigation.
