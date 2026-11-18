@@ -1,6 +1,19 @@
 const { BrowserWindow } = require('electron');
 function textForJob(job) {
   const s = job.snapshot;
+  if (job.destination === 'account-a-close') {
+    const labels = {
+      en:{title:'NON-FISCAL ACCOUNT A CLOSE',day:'System day',opened:'Opened',dayClosed:'Shared day closed',close:'Account close',actor:'Actor',bill:'Bill',table:'Table',cash:'Cash',card:'Card',empty:'No paid bills for account A',payments:'PAYMENTS',total:'TOTAL',units:'minor units'},
+      sq:{title:'MBYLLJA JO FISKALE E LLOGARISË A',day:'Dita e sistemit',opened:'Hapur',dayClosed:'Dita e përbashkët u mbyll',close:'Mbyllja e llogarisë',actor:'Vepruesi',bill:'Fatura',table:'Tavolina',cash:'Para në dorë',card:'Kartë',empty:'Nuk ka fatura të paguara për llogarinë A',payments:'PAGESAT',total:'TOTALI',units:'njësi më të vogla monetare'}
+    };
+    const t=labels[s.language]; if (!t) throw Error('Invalid report language');
+    const date=value=>new Date(value).toLocaleString(s.language==='sq'?'sq-AL':'en-GB');
+    const rows = [t.title, t.day+' #'+s.dayId, t.opened+': '+date(s.openedAt), t.dayClosed+': '+date(s.closedAt), t.close+': '+date(s.accountClosedAt), t.actor+' #'+s.closedBy, t.units, '--------------------------------'];
+    for (const r of s.records) rows.push(t.bill+' #'+r.billId+'  '+t.table+' '+r.tableId, date(r.paidAt)+'  '+t[r.method]+'  '+r.amount);
+    if (!s.records.length) rows.push(t.empty);
+    rows.push('--------------------------------', t.payments+': '+s.count, t.cash+': '+s.cash, t.card+': '+s.card, t.total+': '+s.total);
+    return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
+  }
   if (job.destination === 'bill-history') {
     const {dayLabel,translations} = require('./bill-history');
     const language=s.language, t=translations[language]; if (!t) throw Error('Invalid language');
