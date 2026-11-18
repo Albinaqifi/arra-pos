@@ -17,5 +17,5 @@ test('cancellation history renders actor, explanation and affected items in both
   for (const text of ['Cancelled order. Reason: Sample explanation','2 × Sample dish','Sample waiter','0 remaining']) assert.ok(out.includes(text), text);
   history.props.language = 'sq';
   out = JSON.stringify(history.render());
-  for (const text of ['Porosia u anulua. Arsyeja: Sample explanation','2 × Sample dish','Sample waiter','0 të mbetura','anuluar']) assert.ok(out.includes(text), text);
+  for (const text of ['Porosia u anulua. Arsyeja: Sample explanation','2 × Sample dish','Sample waiter','0 te mbetura','anuluar']) assert.ok(out.includes(text), text);
 });

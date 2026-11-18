@@ -8,7 +8,7 @@ const vm = require('node:vm');
 test('sent item correction requires review and shows concise feedback in both languages', async () => {
   for (const [language, title, reason, review, confirm, saved] of [
     ['en','Cancel a sent item','Entered by mistake','Review correction','Confirm correction','Correction saved.'],
-    ['sq','Anulo një artikull të dërguar','U shënua gabimisht','Kontrollo korrigjimin','Konfirmo korrigjimin','Korrigjimi u ruajt.']
+    ['sq','Anulo nje artikull te derguar','U shenua gabimisht','Kontrollo korrigjimin','Konfirmo korrigjimin','Korrigjimi u ruajt.']
   ]) {
     let confirming = false;
     class Component { setState(update, cb) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); if (cb) cb(); } forceUpdate() {} }
@@ -23,7 +23,7 @@ test('sent item correction requires review and shows concise feedback in both la
     const visit=(node,out=[])=>{if(Array.isArray(node))node.forEach(x=>visit(x,out));else if(node&&typeof node==='object'){out.push(node);if(typeof node.type==='function' && node.type.name==='SentCancel') visit(node.type(node.props),out);visit(node.children,out)}return out};
     const order=visit(ctx.renderOrder(orderProps(app),()=>({})));
     assert.equal(order.filter(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).length,2);
-    assert.ok(!order.some(x=>x.type==='button' && /cancel (whole )?order|anulo porosinë/i.test(String(x.children[0]))));
+    assert.ok(!order.some(x=>x.type==='button' && /cancel (whole )?order|anulo porosine/i.test(String(x.children[0]))));
     order.find(x=>x.type==='button' && /^(Cancel|Anulo)$/.test(x.children[0])).props.onClick();
     let v=app.correction.view(); assert.equal(v.modalTitle,title); assert.equal(v.cxDisabled,true);
     let nodes=visit(ctx.Correction({v,modal:app.correction.state.dialog}));

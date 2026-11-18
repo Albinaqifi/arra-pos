@@ -117,6 +117,6 @@ test('correction rejection shows safe, translated reasons without changing uncer
   app.tableOrders.applyConfirmedItems(app.tableOrders.captureTarget(), [row('sent')]);
   const en=JSON.parse(fs.readFileSync(require.resolve('../src/shared/en.json'),'utf8')), sq=JSON.parse(fs.readFileSync(require.resolve('../src/shared/sq.json'),'utf8'));
   context.ArraComponents.translate=(lang,key)=> (lang==='sq'?sq:en)[key] || key;
-  const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashmë është faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','të pavlefshme']};
+  const expected={access_denied:['Sign in as a waiter','Hyni si kamarier'],already_billed:['already been billed','tashme eshte faturuar'],unavailable:['remaining quantity changed','sasia e mbetur ka ndryshuar'],invalid_input:['details are invalid','te pavlefshme']};
   for(const language of ['en','sq']) for(const [name,texts] of Object.entries(expected)){ code=name; app.settings.state.language=language; arrange(app, {modal:{type:'cancel',itemId:1,qty:1,reason:'Entered by mistake',other:''}}); await app.correction.confirm(); assert.ok(app.correction.state.dialog.error.includes(texts[language==='sq'?1:0]),app.correction.state.dialog.error); assert.equal(app.correction.state.dialog.requestId,null); }
 });

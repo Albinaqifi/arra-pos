@@ -7,7 +7,7 @@ test('account close report identifies minor units and prints in its saved langua
   const en=textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'en'}});
   const sq=textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'sq'}});
   assert.match(en,/minor units/); assert.match(en,/Cash: 123/); assert.doesNotMatch(en,/123 den/);
-  assert.match(sq,/MBYLLJA JO FISKALE/); assert.match(sq,/njësi më të vogla monetare/); assert.match(sq,/Para në dorë: 123/);
+  assert.match(sq,/MBYLLJA JO FISKALE/); assert.match(sq,/njesi me te vogla monetare/); assert.match(sq,/Para ne dore: 123/);
   assert.throws(()=>textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'other'}}));
 });
 

@@ -18,7 +18,7 @@ test('waiter report handles selection, invalid dates, denied requests and stale 
   await view.load({preventDefault(){}}); assert.match(view.state.error,/valid date range/); assert.equal(requests.length,1);
   Object.assign(view.state,{staffId:'2',from:'2026-01-02',to:'2026-01-01'}); await view.load({preventDefault(){}}); assert.match(view.state.error,/valid date range/);
   Object.assign(view.state,{from:'2026-01-01',to:'2026-01-02'}); let pending=view.load({preventDefault(){}}); assert.equal(view.state.busy,true); resolve({ok:false}); await pending; assert.match(view.state.error,/access/);
-  view.props.language='sq'; pending=view.load({preventDefault(){}}); resolve({ok:false,tooLarge:true}); await pending; assert.match(JSON.stringify(view.render()),/Ka shumë regjistrime/);
+  view.props.language='sq'; pending=view.load({preventDefault(){}}); resolve({ok:false,tooLarge:true}); await pending; assert.match(JSON.stringify(view.render()),/Ka shume regjistrime/);
   pending=view.load({preventDefault(){}}); view.componentWillUnmount(); resolve({ok:true,data:{total:99}}); await pending; assert.equal(view.state.data,null);
 });
 test('cancellation report displays empty and failure states in Albanian and ignores unmounted result', async () => {

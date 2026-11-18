@@ -28,9 +28,9 @@ test('assignment confirms details and preserves the exact request until an unkno
 });
 test('denial hides choices and Albanian view explains one-time assignment', async () => {
   const { page } = setup(async () => ({ ok: false }), 'sq');
-  await page.load(); const denied = text(page.render()); assert.match(denied, /qasja u refuzua/); assert.doesNotMatch(denied, /Zgjidhni një porosi/);
+  await page.load(); const denied = text(page.render()); assert.match(denied, /qasja u refuzua/); assert.doesNotMatch(denied, /Zgjidhni nje porosi/);
   page.state.error = ''; page.state.orders = [{ orderId: 7, tableId: 4 }]; page.state.waiters = [{ id: 11, name: 'Sample' }];
-  const view = text(page.render()); assert.match(view, /vetëm një herë/); assert.match(view, /Cakto porosinë/); assert.match(view, /Sample/);
+  const view = text(page.render()); assert.match(view, /vetem nje here/); assert.match(view, /Cakto porosine/); assert.match(view, /Sample/);
 });
 test('a pending request blocks duplicate clicks and late results do not update an unmounted page', async () => {
   let resolve; const waiting = new Promise(r => { resolve = r; }); let assigns = 0;

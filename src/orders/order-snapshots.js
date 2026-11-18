@@ -16,7 +16,7 @@ export function tableSnapshot(tables, previous = {}) {
     if (table.orderId !== null) {
       const old = Object.values(previous).find(order => order.id === table.orderId);
       orders[table.id] = old ? { ...old, untouched: table.untouched === true } : { id: table.orderId, openedAt: table.openedAt, openedBy: '', rounds: 0, log: [], untouched: table.untouched === true };
-    } else if (table.occupied) orders[table.id] = { id:null, openedAt:null, openedBy:'', rounds:0, log:[], untouched:false, inaccessible:true };
+    } else if (table.occupied) orders[table.id] = { id:null, openedAt:null, openedBy:typeof table.waiter === 'string' ? table.waiter : '', rounds:0, log:[], untouched:false, inaccessible:true };
   }
   return { sections, orders };
 }

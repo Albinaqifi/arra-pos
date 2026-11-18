@@ -75,8 +75,8 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   async getEntryTables() {
     try {
       const r = await ipcRenderer.invoke('arra:entry-tables', {});
-      if (r?.ok && Array.isArray(r.data) && r.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 && typeof t.area === 'string' && t.area.trim() && typeof t.occupied === 'boolean'))
-        return {ok:true,data:r.data.map(t=>({id:t.id,area:t.area,occupied:t.occupied}))};
+      if (r?.ok && Array.isArray(r.data) && r.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 && typeof t.area === 'string' && t.area.trim() && typeof t.occupied === 'boolean' && (t.waiter === null || (typeof t.waiter === 'string' && t.waiter.trim())) && (t.occupied || t.waiter === null)))
+        return {ok:true,data:r.data.map(t=>({id:t.id,area:t.area,occupied:t.occupied,waiter:t.waiter}))};
     } catch (_) {}
     return {ok:false};
   },

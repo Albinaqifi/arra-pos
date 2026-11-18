@@ -9,7 +9,7 @@ function page(language) {
 test('transfer confirmation translates direction, amounts, accessible name and errors without altering data',async()=>{
   const p=page('sq'); p.setState({loading:false,records:[{id:7,tableId:2,amount:125,paidAt:1}],table:2,selected:7,reason:'sample'});
   let result=JSON.stringify(p.render());
-  assert.match(result,/Konfirmo nga B në A/); assert.match(result,/llogaria B në llogarinë A/); assert.match(result,/125 njësi/); assert.match(result,/Konfirmo korrigjimin e pagesës/);
+  assert.match(result,/Konfirmo nga B ne A/); assert.match(result,/llogaria B ne llogarine A/); assert.match(result,/125 njesi/); assert.match(result,/Konfirmo korrigjimin e pageses/);
   await p.correct(7); result=JSON.stringify(p.render()); assert.match(result,/Korrigjimi nuk u konfirmua/); assert.equal(p.state.records,null);
   p.props.language='en'; assert.match(JSON.stringify(p.render()),/Correction was not confirmed/);
 });

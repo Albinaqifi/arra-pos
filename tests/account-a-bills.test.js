@@ -43,5 +43,5 @@ test('Account A bill print renders the selected bill values and breakdown in bot
   for(const text of ['NON-FISCAL','Business day #7','Bill #1  10','Bill #2  20','TOTAL: 30','Cash: 10','Card: 20'])assert.ok(en.includes(text));
   assert.ok(en.indexOf('TOTAL: 30')<en.indexOf('Cash: 10'));
   const sq=textForJob({destination:'account-a-bills',snapshot:{...snapshot,language:'sq'}});
-  for(const text of ['JO FISKALE','Fatura #1  10','TOTALI: 30','Para në dorë: 10','Kartë: 20'])assert.ok(sq.includes(text));
+  for(const text of ['JO FISKALE','Fatura #1  10','TOTALI: 30','Para ne dore: 10','Karte: 20'])assert.ok(sq.includes(text));
 });

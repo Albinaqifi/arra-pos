@@ -113,7 +113,7 @@ export class DesktopBill extends React.Component {
         h('header', { className: 'bill-header' },
           h('div', { className: 'bill-heading' },
             h('h2', { id: 'desktop-bill-title' }, d?.id ? t('Bill generated #{id}', {id:d.id}) : t("Review bill")),
-            h('p', null, d?.id ? t("Test mode only. No card terminal is connected. Confirm the separate payment before recording it.") : t("Check the items before generating the bill."))),
+            !d?.id && h('p', null, t("Check the items before generating the bill."))),
           h('button', { type: 'button', className: 'bill-brand', 'aria-label': t('Select Cash B'), title: t('Select Cash B'), 'aria-pressed': this.state.method === 'cash' && this.state.account === 'B', disabled: !d?.id || this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash', 'B') }, h('span', { 'aria-hidden': 'true' }, 'A'), h('strong', null, 'Arra'))),
         h('div', { className: 'bill-body' },
           (this.state.loading || this.state.busy) && h('p', { role: 'status', className: 'bill-status' }, t(this.state.loading ? 'Loading bill…' : 'Working…')),
@@ -123,16 +123,14 @@ export class DesktopBill extends React.Component {
             h('ul', { className: 'bill-lines' }, d.lines.map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
             h('div', { className: 'bill-total' }, h('strong', null, t('Total: {total}', {total:money(d.total)})))),
           d?.id && h('div', { className: 'bill-payment' },
-            h('p', null, t("Payment releases the table and creates a non-fiscal test bill job. Printing may be unavailable. Check the paper; Windows queue acceptance does not confirm printing. Ask an authorized administrator to recover print jobs.")),
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),
             h('div', { className: 'bill-choices' },
               h('button', { 'aria-pressed': this.state.method === 'cash' && this.state.account === 'A', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('cash', 'A') }, t("Cash")),
-              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card"))),
-            this.state.account && h('p', { className: 'bill-selection' }, t('Selected: {method} · Account {account}', {method:t(this.state.method === 'cash' ? 'Cash' : 'Card'), account:this.state.account})))),
+              h('button', { 'aria-pressed': this.state.method === 'card', disabled: this.state.busy || this.state.uncertain, onClick: () => this.selectMethod('card') }, t("Card"))))),
         h('footer', { className: 'bill-actions' },
           h('button', { onClick: () => this.close(), disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),
           this.state.error && !this.state.uncertain && h('button', { onClick: () => this.review(), disabled: this.state.busy }, t("Review again")),
           !d?.id && d && h('button', { className: 'bill-primary', onClick: () => this.generate(), disabled: this.state.busy }, t("Generate bill")),
-          d?.id && this.state.account && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t("Record full test payment and close table")))));
+          d?.id && this.state.account && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t("confirim bill")))));
   }
 }

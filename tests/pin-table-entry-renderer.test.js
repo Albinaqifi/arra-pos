@@ -32,12 +32,30 @@ test('restaurant grid is redacted and each table selection requires a PIN', asyn
   assert.equal(view.sections[0].tables[0].total,''); assert.equal(view.sections[0].tables[0].waiter,'');
   assert.equal(view.sections[0].tables[0].aria,'Table 1, taken'); assert.equal(view.sections[0].tables[1].aria,'Table 2, free');
   const shqip=app.tableOrders.tableView({language:'sq',entry:true,openTable:id=>app.session.requestTable(id)});
-  assert.equal(shqip.sections[0].tables[0].aria,'Tavolina 1, e zënë'); assert.equal(shqip.sections[0].tables[1].aria,'Tavolina 2, e lirë');
+  assert.equal(shqip.sections[0].tables[0].aria,'Tavolina 1, e zene'); assert.equal(shqip.sections[0].tables[1].aria,'Tavolina 2, e lire');
   view.sections[0].tables[1].open(); assert.equal(app.session.state.pinFor.tableId,2); assert.equal(app.session.state.waiter,null);
   await app.session.setPin('0123');
   assert.deepEqual(calls,[['0123','waiter']]); assert.equal(routeOf(app),'order'); assert.equal(app.tableOrders.state.tableId,2);
   await app.tableOrders.showTables(); assert.equal(routeOf(app),'tables'); assert.equal(app.session.state.waiter,null);
   app.session.requestTable(2); assert.equal(app.session.state.pin,''); assert.equal(app.session.state.pinFor.tableId,2);
+});
+
+test('entry cards show the assigned waiter only for occupied tables', async () => {
+  const {app}=harness({getEntryTables:async()=>({ok:true,data:[
+    {id:1,area:'Inside',occupied:true,waiter:'Sample Waiter'},
+    {id:2,area:'Inside',occupied:false,waiter:'Ignored'},
+    {id:3,area:'Inside',occupied:true,waiter:null},
+  ]})});
+  await login(app);
+  const tables=app.tableOrders.tableView({language:'en',entry:true}).sections[0].tables;
+  assert.equal(tables[0].waiter,'Sample Waiter');
+  assert.equal(tables[0].aria,'Table 1, taken, Sample Waiter');
+  assert.equal(tables[1].waiter,''); assert.equal(tables[1].aria,'Table 2, free');
+  assert.equal(tables[2].waiter,''); assert.equal(tables[2].aria,'Table 3, taken');
+  assert.ok(tables.every(table=>table.total===''));
+  const walk = node => Array.isArray(node) ? node.flatMap(walk) : !node || typeof node !== 'object' ? [] : [node,...(node.children || []).flatMap(walk)];
+  const card=walk(app.render()).find(node=>node.type==='button' && node.props?.['aria-label']==='Table 1, taken, Sample Waiter');
+  assert.ok(card); assert.ok(walk(card).some(node=>node.children?.includes('Sample Waiter')));
 });
 
 test('Manager uses its own six-digit PIN and never opens a table', async () => {

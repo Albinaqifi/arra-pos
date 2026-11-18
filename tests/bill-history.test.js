@@ -42,7 +42,7 @@ test('spreadsheet treats values as text and escapes XML',()=>{assert.match(sprea
 
 
 
-test('Albanian output labels are translated',()=>{ const text=spreadsheet([{dayId:1,firstDay:1,openedAt:1,closedAt:null,paidAt:1,billId:1,tableId:2,method:'cash',account:'A',amount:10}],'sq'); assert.match(text,/HISTORIK I PËRKOHSHËM/); assert.match(text,/Para në dorë/); assert.match(text,/Llogaria efektive/); });
+test('Albanian output labels are translated',()=>{ const text=spreadsheet([{dayId:1,firstDay:1,openedAt:1,closedAt:null,paidAt:1,billId:1,tableId:2,method:'cash',account:'A',amount:10}],'sq'); assert.match(text,/HISTORIK I PERKOHSHEM/); assert.match(text,/Para ne dore/); assert.match(text,/Llogaria efektive/); });
 test('real session reauthentication cancels an in-flight export',async t=>{
   const {bootstrap,createSession}=require('../src/desktop/session'), crypto=require('node:crypto');
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-identity-')),db=openDatabase(dir); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
@@ -66,7 +66,7 @@ test('screen identifies amounts as minor units in both languages',()=>{
   class Component {constructor(props){this.props=props;} setState(next){Object.assign(this.state,next);}}
   const context={React:{Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})}};
   vm.runInNewContext(moduleSource(require.resolve('../src/admin/BillHistory.js'),'BillHistoryModule'),context);
-  for(const [language,label] of [['en','Amount (minor units)'],['sq','Shuma (njësi më të vogla)']]) {
+  for(const [language,label] of [['en','Amount (minor units)'],['sq','Shuma (njesi me te vogla)']]) {
     const screen=new context.BillHistoryModule.BillHistory({language});screen.setState({range:{from:1,to:2},count:{count:1,printBatch:200},records:[{id:1,dayId:1,openedAt:1,closedAt:null,paidAt:1,billId:1,tableId:1,method:'cash',account:'A',amount:123}]});
     assert.match(JSON.stringify(screen.render()),new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   }

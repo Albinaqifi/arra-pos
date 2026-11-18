@@ -30,25 +30,25 @@ test('switching language during send and uncertain payment does not repeat eithe
 
 test('Albanian sign-in failure and bill review and uncertain payment show translated states', async()=>{
   const api={signIn:async()=>({ok:false}),payment:async()=>({ok:false,uncertain:true}),bill:async r=>({ok:true,data:r.action==='review'?{total:100,lines:[],fingerprint:'x'}:{id:7,total:100,lines:[]}})};
-  const {app,ctx}=setup(api); arrange(app, {screen:'login',language:'sq',user:'sample',pass:'sample'}); await app.session.login(); assert.equal(app.shell.state.toast.msg,'Hyrja dështoi.');
+  const {app,ctx}=setup(api); arrange(app, {screen:'login',language:'sq',user:'sample',pass:'sample'}); await app.session.login(); assert.equal(app.shell.state.toast.msg,'Hyrja deshtoi.');
   const bill=new ctx.Bill({language:'sq',orderId:5,onPaid(){},onClose(){}}); await bill.review();
-  assert.ok(button(bill.render(),'Krijo faturën')); await bill.generate(); assert.ok(button(bill.render(),'Kartë'));
-  button(bill.render(),'Kartë').props.onClick(); await bill.pay();
-  assert.ok(JSON.stringify(bill.render()).includes('Rezultati i pagesës në POS është i pasigurt.')); assert.equal(button(bill.render(),'Kartë').props.disabled,true);
+  assert.ok(button(bill.render(),'Krijo faturen')); await bill.generate(); assert.ok(button(bill.render(),'Karte'));
+  button(bill.render(),'Karte').props.onClick(); await bill.pay();
+  assert.ok(JSON.stringify(bill.render()).includes('Rezultati i pageses ne POS eshte i pasigurt.')); assert.equal(button(bill.render(),'Karte').props.disabled,true);
 });
 
 test('Albanian failed-print banner offers a translated backup action',()=>{
   const {app}=setup(undefined);
   arrange(app, {language:'sq',screen:'tables',waiter:{name:'Sample'},jobs:[{id:1,status:'failed',printer:'kitchen',tableId:1,round:1,count:1,attempts:1}]});
   const rendered=JSON.stringify(app.render());
-  assert.ok(rendered.includes('Printo në printerin rezervë')); assert.ok(!rendered.includes('Print on backup printer'));
+  assert.ok(rendered.includes('Printo ne printerin rezerve')); assert.ok(!rendered.includes('Print on backup printer'));
 });
 
 test('staff PIN prompt uses the selected role and language', () => {
   const {app}=setup({});
   for (const [language, isTransfer, expected, length] of [
     ['en', false, 'Enter your 4-digit PIN', 4], ['en', true, 'Enter the manager 6-digit PIN', 6],
-    ['sq', false, 'Shkruani PIN-in tuaj me 4 shifra', 4], ['sq', true, 'Shkruani PIN-in 6-shifror të menaxherit', 6]
+    ['sq', false, 'Shkruani PIN-in tuaj me 4 shifra', 4], ['sq', true, 'Shkruani PIN-in 6-shifror te menaxherit', 6]
   ]) {
     arrange(app, {language,screen:'tables',waiter:null,pin:''}); if(isTransfer) app.session.requestManager(); else app.session.requestTable(1);
     assert.ok(JSON.stringify(app.render()).includes(expected));

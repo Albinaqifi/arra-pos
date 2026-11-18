@@ -74,7 +74,7 @@ test('category and subcategory forms distinguish creation and editing in English
     assert.ok(heading(tree, page.t('Edit '), page.t('subcategory')));
     assert.ok(has(tree, page.t('Parent category')));
     if (language === 'sq') {
-      assert.equal(page.t('subcategory'), 'nënkategori');
+      assert.equal(page.t('subcategory'), 'nenkategori');
       assert.equal(page.state.editor.parentId, 'c');
     }
   }
@@ -92,7 +92,7 @@ test('category and subcategory editors name their purpose and preserve the paren
   page.changeContext(() => {}); page.edit('category', page.state.categories[1]);
   assert.equal(page.state.editor.parentId, 'c'); assert.equal(page.state.editor.isSubcategory, true);
   page.props.language = 'sq'; tree = all(page.render());
-  assert.ok(tree.some(n => n.type === 'h2' && n.children.join('').includes('nënkategori')));
+  assert.ok(tree.some(n => n.type === 'h2' && n.children.join('').includes('nenkategori')));
   assert.ok(tree.some(n => n.type === 'label' && n.children.some(c => c && c.children?.includes('Kategoria prind'))));
 });
 test('editing explicitly promotes a subcategory and moves a leaf category under a parent', async () => {

@@ -18,7 +18,7 @@ test('opening-date selection, current-table grouping and navigation retain conte
  screen.setState({from:'2025-04-03',to:''});screen.applyDates();out=JSON.stringify(screen.render());assert.ok(out.includes('Order #3'));assert.ok(!out.includes('Order #2'));
  screen.setState({from:'2025-02-30',to:''});screen.applyDates();assert.ok(screen.state.dateError);assert.equal(screen.state.period.from,'2025-04-03');screen.setState({from:'2025-04-03',to:'2025-04-02'});screen.applyDates();assert.ok(screen.state.dateError);
  screen.setState({from:'2025-05-01',to:''});screen.applyDates();assert.ok(JSON.stringify(screen.render()).includes('No orders match'));click(screen,'All dates');assert.equal(screen.state.period,null);
- screen.props.language='sq';out=JSON.stringify(screen.render());assert.ok(out.includes('Data e hapjes'));assert.ok(out.includes('Sipas tavolinës'));
+ screen.props.language='sq';out=JSON.stringify(screen.render());assert.ok(out.includes('Data e hapjes'));assert.ok(out.includes('Sipas tavolines'));
 });
 test('late detail responses cannot replace returned results or unmounted identity',async()=>{
  let resolve;const screen=setup(id=>id===null?Promise.resolve({ok:true,data:{orders:[{id:1,tableId:1,openedAt:1,status:'open'}]}}):new Promise(r=>resolve=r));await screen.load(null);screen.setState({tableId:1});const pending=screen.load(1);click(screen,'Back to table 1');resolve({ok:true,data:{order:{id:1},items:[],events:[]}});await pending;assert.equal(screen.state.data,null);assert.equal(screen.state.tableId,1);

@@ -13,13 +13,13 @@ test('inaccessible occupied tables show neutral denial in English and Albanian w
   const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
   vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
   const app = new context.Demo(); app.componentDidMount(); await app.tableOrders.loadTables();
-  for (const [language, cardText, denied] of [['en', 'Table unavailable', 'This table is unavailable for your account. Ask a Combined administrator for help.'], ['sq', 'Tavolina nuk është e disponueshme', 'Kjo tavolinë nuk është e disponueshme për llogarinë tuaj. Kërkoni ndihmë nga administratori Combined.']]) {
+  for (const [language, cardText, denied] of [['en', 'Table unavailable', 'This table is unavailable for your account. Ask a Combined administrator for help.'], ['sq', 'Tavolina nuk eshte e disponueshme', 'Kjo tavoline nuk eshte e disponueshme per llogarine tuaj. Kerkoni ndihme nga administratori Combined.']]) {
     app.settings.state.language = language;
     const card = app.tableOrders.tableView({ language }).sections[0].tables[0];
     assert.equal(card.taken, true); assert.equal(card.count, cardText); assert.equal(card.total, '—'); assert.equal(card.mins, '');
-    assert.ok(card.aria.includes(cardText)); assert.doesNotMatch(card.aria, /open to view|hapeni për të parë/i);
+    assert.ok(card.aria.includes(cardText)); assert.doesNotMatch(card.aria, /open to view|hapeni per te pare/i);
     await app.tableOrders.openTable(1); assert.equal(app.shell.state.toast.msg, denied); assert.equal(app.tableOrders.state.screen, 'tables');
-    assert.doesNotMatch(app.shell.state.toast.msg, /older order|më të vjetër/i);
+    assert.doesNotMatch(app.shell.state.toast.msg, /older order|me te vjeter/i);
   }
 });
 
