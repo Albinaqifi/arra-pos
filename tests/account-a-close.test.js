@@ -43,7 +43,7 @@ test('upgrade excludes earlier closed days and preserves the existing printer se
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
   db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'combined',x'00',x'00'); INSERT INTO financial_scopes VALUES(1,'combined'); INSERT INTO user_permissions VALUES(1,'business_days.close');
     DROP TABLE account_a_results; DROP TABLE account_a_attempts; DROP TABLE account_a_closes; DROP TABLE account_a_settings;
-    UPDATE bill_printer_queues SET queue='sample A' WHERE account='A'; PRAGMA user_version=36;`);
+    UPDATE bill_printer_queues SET queue='sample A' WHERE account='A'; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=36;`);
   const session={currentUserId:()=>1,authenticatedUserId:()=>1};
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session,()=> 'failed');
   const old=handler({},{action:'list'}).data.days[0].id; assert.equal(handler({},{action:'close',dayId:old}).ok,true);

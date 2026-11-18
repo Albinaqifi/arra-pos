@@ -25,6 +25,7 @@ test('credential and grant control remains Combined-only for owners and pre-exis
   const passwords = ['sample one', 'sample two', 'sample three', 'sample four'];
   createSampleAccounts(db, passwords);
   const entry = entryFixture(db);
+  const pendingPin = (Number(entry.pin) + 1).toString().padStart(4, '0');
   // Model a pre-existing waiter with employee-administration grants.
   const grant = db.prepare('INSERT OR IGNORE INTO user_permissions(user_id, permission) VALUES (?, ?)');
   for (const p of ['employees.view', 'employees.change']) grant.run(1, p);
@@ -55,14 +56,14 @@ test('credential and grant control remains Combined-only for owners and pre-exis
   assert.equal(invoke({ action: 'account', id: pending.id, username: 'sample pending', active: true }).ok, false);
   assert.equal(session.signIn({ username: 'sample pending', password: 'sample new' }).ok, false);
   login(4);
-  assert.equal(invoke({ action: 'credential', id: pending.id, password: 'sample new', pin: entry.pin }).ok, true);
+  assert.equal(invoke({ action: 'credential', id: pending.id, password: 'sample new', pin: pendingPin }).ok, true);
   assert.equal(invoke({ action: 'permissions', id: pending.id, permissions: ['orders.view'] }).ok, true);
   assert.equal(invoke({ action: 'account', id: pending.id, username: 'sample pending', active: true }).ok, true);
   assert.equal(db.prepare("SELECT count(*) AS n FROM application_audit WHERE actor_id=2 AND action='create' AND entity_type='employee' AND entity_id=?").get(String(pending.id)).n, 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM employee_credential_audit WHERE actor_id=4 AND target_id=?').get(pending.id).n, 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM employee_permission_audit WHERE actor_id=4 AND target_id=?').get(pending.id).n, 1);
   assert.equal(session.signIn({ username: 'sample restaurant', password: entry.password }).ok, true);
-  assert.equal(session.selectWaiter({ id: pending.id, pin: entry.pin }).ok, true);
+  assert.equal(session.selectWaiter({ id: pending.id, pin: pendingPin }).ok, true);
   // A different password-authenticated identity cannot use a selected admin's rights.
   assert.equal(session.selectWaiter({ id: 4, pin: '' }).ok, false);
   assert.equal(invoke({ action: 'credential', id: 2, password: 'sample replacement', pin: null }).ok, false);
@@ -77,10 +78,10 @@ test('waiter-only version 27 upgrade preserves identity without silently grantin
   bootstrap(db, 'sample legacy', 'sample legacy password');
   db.prepare("UPDATE financial_scopes SET scope='waiter' WHERE user_id=1").run();
   db.prepare("DELETE FROM user_permissions WHERE user_id=1 AND permission='business_days.close'").run();
-  db.exec('DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27');
+  db.exec('DROP TABLE IF EXISTS verified_waiter_pins; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=27');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope, 'waiter');
   assert.equal(db.prepare("SELECT count(*) AS n FROM financial_scopes WHERE scope='combined'").get().n, 0);
   assert.throws(() => bootstrap(db, 'sample second', 'sample second password'));
@@ -117,6 +118,7 @@ test('financial administration rolls back on audit failure and retains an active
   assert.equal(db.prepare("SELECT count(*) AS n FROM application_audit WHERE action='financial_access' AND actor_id=4").get().n, 1);
   assert.equal(call({ action: 'financialAccess', id: 4, scope: 'waiter', close: false }).ok, false);
   assert.equal(call({ action: 'account', id: 4, username: 'sample-combined', active: false }).ok, false);
+  assert.equal(call({ action: 'account', id: 1, username: 'sample-waiter', active: false }).ok, true);
   assert.equal(call({ action: 'financialAccess', id: 1, scope: 'waiter', close: false }).ok, true);
   assert.equal(db.prepare("SELECT count(*) AS n FROM local_users u JOIN financial_scopes f ON f.user_id=u.id WHERE u.active=1 AND f.scope='combined'").get().n, 1);
 });

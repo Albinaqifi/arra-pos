@@ -1,5 +1,5 @@
 const { recordAudit } = require('./audit');
-const { randomBytes } = require('node:crypto');
+const { randomBytes, timingSafeEqual } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
 const { hashPassword, validUsername, validPassword } = require('./session');
 const CHANNEL = 'arra:employee-config';
@@ -10,6 +10,12 @@ const keys = (x, names) => Reflect.ownKeys(x).length === names.length && names.e
 const validId = x => Number.isSafeInteger(x) && x > 0;
 const validPin = (x, length) => typeof x === 'string' && (length === 6 ? /^\d{6}$/ : /^\d{4}$/).test(x);
 function credential(value) { const salt = randomBytes(16); return [salt, hashPassword(value, salt)]; }
+// Compare against all eligible staff and owners, including inactive and legacy accounts. The
+// salted hashes cannot be compared to each other without the proposed PIN.
+function waiterPinAvailable(db, pin, exceptId = 0) {
+  const rows = db.prepare("SELECT u.pin_salt, u.pin_hash FROM local_users u WHERE u.id<>? AND u.pin_salt IS NOT NULL AND u.pin_hash IS NOT NULL AND NOT EXISTS (SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AND NOT EXISTS (SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id)").all(exceptId);
+  return rows.every(row => { const expected = Buffer.from(row.pin_hash), actual = hashPassword(pin, row.pin_salt); return expected.length === actual.length && !timingSafeEqual(actual, expected); });
+}
 function usableAdministrator(db) {
   const requireCombined = !!db.prepare("SELECT 1 FROM financial_scopes WHERE scope='combined' LIMIT 1").get();
   return db.prepare("SELECT 1 FROM local_users u JOIN financial_scopes f ON f.user_id=u.id WHERE u.active = 1 AND (? = 0 OR f.scope='combined') AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.permission = 'employees.view') AND EXISTS (SELECT 1 FROM user_permissions p WHERE p.user_id = u.id AND p.permission = 'employees.change') LIMIT 1").get(Number(requireCombined));
@@ -43,7 +49,7 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
     if (!actor || actor !== session.authenticatedUserId() || !hasPermissions(db, session, req.action === 'list' ? 'employees.view' : 'employees.change')) return { ok: false, error: 'Access denied. Sign in as the administrator and select the same name.' };
     try {
       if (req.action === 'list' && keys(req, ['action'])) {
-        const users = db.prepare('SELECT u.id, u.username, u.active, u.pin_hash IS NOT NULL AS hasPin, f.scope, EXISTS(SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AS pending, EXISTS(SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AS restaurant, EXISTS(SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id) AS isTransfer FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id ORDER BY u.username').all();
+        const users = db.prepare('SELECT u.id, u.username, u.active, u.pin_hash IS NOT NULL AS hasPin, f.scope, EXISTS(SELECT 1 FROM verified_waiter_pins v WHERE v.user_id=u.id) AS pinVerified, EXISTS(SELECT 1 FROM pending_staff ps WHERE ps.user_id=u.id) AS pending, EXISTS(SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AS restaurant, EXISTS(SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id) AS isTransfer FROM local_users u LEFT JOIN financial_scopes f ON f.user_id=u.id ORDER BY u.username').all();
         const grants = db.prepare('SELECT user_id AS userId, permission FROM user_permissions ORDER BY permission').all();
         const audit = db.prepare('SELECT actor_id AS actorId, target_id AS targetId, permission, granted, occurred_at AS occurredAt FROM employee_permission_audit ORDER BY id DESC LIMIT 100').all();
         const credentialAudit = db.prepare('SELECT actor_id AS actorId, target_id AS targetId, password_changed AS passwordChanged, pin_changed AS pinChanged, occurred_at AS occurredAt FROM employee_credential_audit ORDER BY id DESC LIMIT 100').all();
@@ -96,8 +102,10 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         const [salt, hash] = credential(req.password); const [pinSalt, pinHash] = req.pin ? credential(req.pin) : [null, null];
         db.exec('BEGIN IMMEDIATE');
         try {
+          if (!waiterPinAvailable(db, req.pin)) { db.exec('ROLLBACK'); return { ok: false, error: 'This PIN is already in use. Choose a different PIN.' }; }
           const created = db.prepare('INSERT INTO local_users(username, salt, password_hash, pin_salt, pin_hash) VALUES (?, ?, ?, ?, ?)').run(req.username, salt, hash, pinSalt, pinHash);
           db.prepare("INSERT INTO financial_scopes(user_id, scope) VALUES (?, 'waiter')").run(created.lastInsertRowid);
+          db.prepare('INSERT INTO verified_waiter_pins(user_id) VALUES (?)').run(created.lastInsertRowid);
           recordAudit(db, actor, 'create', 'employee', created.lastInsertRowid, null, {});
           db.exec('COMMIT');
         } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -108,9 +116,9 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         try {
           if (!canManageTarget(db, actor, req.id) && !(scopeOf(db, actor) === 'combined' && db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(req.id))) throw new Error('Target has additional permissions');
           if (req.active && db.prepare('SELECT 1 FROM pending_staff WHERE user_id=?').get(req.id)) throw new Error('Credentials must be provisioned first');
-          if (req.active && scopeOf(db, req.id) === 'waiter' && !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(req.id) && !db.prepare('SELECT 1 FROM local_users WHERE id=? AND pin_hash IS NOT NULL AND pin_salt IS NOT NULL').get(req.id)) throw new Error('PIN must be provisioned first');
           const previous = db.prepare('SELECT username, active FROM local_users WHERE id = ?').get(req.id);
           if (!previous) throw new Error('Missing account');
+          if (req.active && !previous.active && scopeOf(db, req.id) === 'waiter' && !db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(req.id) && !db.prepare('SELECT 1 FROM transfer_managers WHERE user_id=?').get(req.id) && !db.prepare('SELECT 1 FROM local_users u JOIN verified_waiter_pins v ON v.user_id=u.id WHERE u.id=? AND u.pin_hash IS NOT NULL AND u.pin_salt IS NOT NULL').get(req.id)) { db.exec('ROLLBACK'); return { ok: false, error: 'Combined must reset this staff PIN before activation.' }; }
           if (!db.prepare('UPDATE local_users SET username = ?, active = ? WHERE id = ?').run(req.username, Number(req.active), req.id).changes) throw new Error('Missing account');
           if (!usableAdministrator(db)) throw new Error('Last administrator');
           if (previous.username !== req.username || previous.active !== Number(req.active)) db.prepare('INSERT INTO employee_account_audit(actor_id, target_id, old_username, new_username, old_active, new_active, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(actor, req.id, previous.username, req.username, previous.active, Number(req.active), Date.now());
@@ -129,8 +137,9 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         const pin = req.pin !== null ? credential(req.pin) : null;
         db.exec('BEGIN IMMEDIATE');
         try {
+          if (pin && !isTransfer && !waiterPinAvailable(db, req.pin, req.id)) { db.exec('ROLLBACK'); return { ok: false, error: 'This PIN is already in use. Choose a different PIN.' }; }
           if (password) { db.prepare('UPDATE local_users SET salt = ?, password_hash = ? WHERE id = ?').run(...password, req.id); db.prepare('DELETE FROM pending_staff WHERE user_id=?').run(req.id); }
-          if (pin) db.prepare('UPDATE local_users SET pin_salt = ?, pin_hash = ? WHERE id = ?').run(...pin, req.id);
+          if (pin) { db.prepare('UPDATE local_users SET pin_salt = ?, pin_hash = ? WHERE id = ?').run(...pin, req.id); if (!isTransfer) db.prepare('INSERT OR IGNORE INTO verified_waiter_pins(user_id) VALUES (?)').run(req.id); }
           db.prepare('INSERT INTO employee_credential_audit(actor_id, target_id, password_changed, pin_changed, occurred_at) VALUES (?, ?, ?, ?, ?)').run(actor, req.id, Number(!!password), Number(!!pin), Date.now());
           db.exec('COMMIT');
         } catch (e) { db.exec('ROLLBACK'); throw e; }
@@ -162,6 +171,8 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         try {
           const old = scopeOf(db, req.id);
           if (!old) throw new Error('Missing account');
+          if (old !== 'waiter' && req.scope === 'waiter' && db.prepare('SELECT active FROM local_users WHERE id=?').get(req.id).active) { db.exec('ROLLBACK'); return { ok: false, error: 'Deactivate this account before changing it to staff. Then reset its PIN and reactivate it.' }; }
+          if (old !== req.scope) db.prepare('DELETE FROM verified_waiter_pins WHERE user_id=?').run(req.id);
           const oldClose = !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='business_days.close'").get(req.id);
           db.prepare('UPDATE financial_scopes SET scope=? WHERE user_id=?').run(req.scope, req.id);
           if (req.close) db.prepare("INSERT OR IGNORE INTO user_permissions VALUES (?, 'business_days.close')").run(req.id);
@@ -177,4 +188,4 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
     } catch (_) { return { ok: false, error: 'Could not save employee configuration. Check the account, permissions, and that an administrator remains active.' }; }
   });
 }
-module.exports = { CHANNEL, PERMISSIONS, registerEmployeeConfig };
+module.exports = { CHANNEL, PERMISSIONS, registerEmployeeConfig, waiterPinAvailable };

@@ -26,7 +26,7 @@ test('shared configuration and protected account boundaries survive restart', t 
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
   const passwords=['sample waiter','sample owner a','sample owner b','sample combined'];
   createSampleAccounts(db,passwords);
-  const entry=entryFixture(db);
+  const entry=entryFixture(db), newPin=(Number(entry.pin)+1).toString().padStart(4,'0');
   let session=createSession(db), handlers={}; const event={};
   function register(){ handlers={}; const ipc={handle:(name,fn)=>handlers[name]=fn}; for(const f of [registerEmployeeConfig,registerTableConfig,registerMenuConfig]) f(ipc,e=>e===event,db,session); }
   register();
@@ -38,7 +38,7 @@ test('shared configuration and protected account boundaries survive restart', t 
     assert.equal(invoke('arra:table-config',{action:'area',id:null,name:'Area '+id,active:true}).ok,true);
     assert.equal(hasPermissions(db,session,'orders.view'),false);
     assert.equal(hasPermissions(db,session,'tables.view'),false);
-    if (id === 4) assert.equal(employee({action:'create',username:'staff '+id,password:'sample staff',pin:entry.pin}).ok,true);
+    if (id === 4) assert.equal(employee({action:'create',username:'staff '+id,password:'sample staff',pin:newPin}).ok,true);
     else {
       assert.equal(employee({action:'create',username:'staff '+id,password:'sample staff',pin:''}).ok,false);
       assert.equal(employee({action:'createPending',username:'staff '+id}).ok,true);
@@ -94,10 +94,10 @@ test('upgrade grants shared administration only to existing owners', t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-shared-upgrade-')); let db=openDatabase(dir);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
   createSampleAccounts(db,['sample 1','sample 2','sample 3','sample 4']);
-  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27");
+  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=27");
   db.close(); db=openDatabase(dir);
   for(const id of [2,3,4]) for(const permission of ['tables.change','menu.change','employees.view','employees.change']) assert.ok(db.prepare('SELECT 1 FROM user_permissions WHERE user_id=? AND permission=?').get(id,permission));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   assert.equal(db.prepare("SELECT count(*) n FROM user_permissions WHERE user_id IN (2,3) AND permission='business_days.close'").get().n,0);
 });
 
@@ -135,7 +135,7 @@ test('bootstrap refuses existing operational history even with no users', t=>{
 test('pending staff remains inactive and unselectable until Combined provisions a password, including after restart',t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-pending-')); let db=openDatabase(dir);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  const passwords=['sample waiter','sample owner a','sample owner b','sample combined']; createSampleAccounts(db,passwords); const entry=entryFixture(db);
+  const passwords=['sample waiter','sample owner a','sample owner b','sample combined']; createSampleAccounts(db,passwords); const entry=entryFixture(db), newPin=(Number(entry.pin)+1).toString().padStart(4,'0');
   let session=createSession(db),handler; const event={};
   function attach(){registerEmployeeConfig({handle:(_,fn)=>handler=fn},e=>e===event,db,session);}
   const login=(name,pw)=>{session.signOut();assert.equal(session.signIn({username:name,password:pw}).ok,true)};
@@ -146,13 +146,13 @@ test('pending staff remains inactive and unselectable until Combined provisions 
   db.close();db=openDatabase(dir);session=createSession(db);attach();login('sample-combined',passwords[3],4);
   assert.equal(handler(event,{action:'permissions',id,permissions:['orders.view']}).ok,true);
   assert.equal(handler(event,{action:'account',id,username:'pending sample',active:true}).ok,false);
-  assert.equal(handler(event,{action:'credential',id,password:null,pin:entry.pin}).ok,true);
+  assert.equal(handler(event,{action:'credential',id,password:null,pin:newPin}).ok,true);
   assert.equal(handler(event,{action:'account',id,username:'pending sample',active:true}).ok,false);
   assert.equal(handler(event,{action:'credential',id,password:'sample provisioned password',pin:null}).ok,true);
   assert.equal(handler(event,{action:'account',id,username:'pending sample',active:true}).ok,true);
   session.signOut();assert.equal(session.signIn({username:'pending sample',password:'sample provisioned password'}).ok,false);
   assert.equal(session.signIn({username:'sample restaurant',password:entry.password}).ok,true);
-  assert.equal(session.selectWaiter({id,pin:entry.pin}).ok,true);assert.equal(hasPermissions(db,session,'orders.view'),true);
+  assert.equal(session.selectWaiter({id,pin:newPin}).ok,true);assert.equal(hasPermissions(db,session,'orders.view'),true);
 });
 
 test('sample legacy Combined recovery authenticates and copies without changing source or existing history',async t=>{
@@ -160,7 +160,7 @@ test('sample legacy Combined recovery authenticates and copies without changing 
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-legacy-source-')); let db=openDatabase(dir), copies=[];
   t.after(()=>{if(db)db.close();for(const copy of copies)fs.rmSync(copy,{recursive:true,force:true});fs.rmSync(dir,{recursive:true,force:true});});
   bootstrap(db,'legacy sample','sample legacy password');
-  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,123,'open'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; PRAGMA user_version=27");
+  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; UPDATE financial_scopes SET scope='waiter' WHERE user_id=1; INSERT INTO dining_tables(id,area) VALUES(1,'sample'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,123,'open'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=27");
   db.close();db=null; const file=path.join(dir,'arra.sqlite');
   await assert.rejects(recoverSampleCombined(file,'legacy sample','sample legacy password'));
   fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');

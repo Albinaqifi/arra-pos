@@ -1,6 +1,7 @@
 // Development sample identities only. Never call this against an operational database.
 const { randomBytes } = require('node:crypto');
 const { hashPassword, validPassword } = require('./session');
+const { waiterPinAvailable } = require('./employee-config');
 const identities = [['sample-waiter', 'waiter'], ['sample-owner-a', 'A'], ['sample-owner-b', 'B'], ['sample-combined', 'combined']];
 const entryIdentities = [['sample-restaurant', 'waiter'], ['sample-owner-a', 'A'], ['sample-owner-b', 'B'], ['sample-combined', 'combined']];
 // Call only for a new or explicitly marked sample database. Existing names are
@@ -25,9 +26,11 @@ function seedSampleIdentities(db, passwords, waiterPin, transferPin, ownerPin = 
       if (i === 0) db.prepare('INSERT INTO restaurant_accounts VALUES (?)').run(id);
       else for (const permission of role === 'combined' ? ['tables.change','menu.change','employees.view','employees.change','orders.correct_sent','business_days.close'] : ['tables.change','menu.change','employees.view','employees.change']) grant.run(id, permission);
     });
+    if (!lookup.get('sample-waiter') && !waiterPinAvailable(db, waiterPin)) throw new Error('Sample waiter PIN is already in use');
     const waiter = add('sample-waiter', randomBytes(32).toString('hex'), waiterPin);
     if (waiter !== null) {
       scope.run(waiter, 'waiter');
+      db.prepare('INSERT INTO verified_waiter_pins(user_id) VALUES (?)').run(waiter);
       for (const permission of ['tables.view','menu.view','orders.view','orders.change','orders.correct_sent']) grant.run(waiter, permission);
     }
     // Do not create a second transfer manager or modify an existing one.

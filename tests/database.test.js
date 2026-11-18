@@ -15,12 +15,12 @@ function temporaryDirectory(t) {
 test('fresh database migrates and preserves sample data after close and reopen', (t) => {
   const directory = temporaryDirectory(t);
   let db = openDatabase(directory);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   db.prepare('INSERT INTO app_metadata (key, value) VALUES (?, ?)').run('sample', 'retained');
   db.close();
   db = openDatabase(directory);
   assert.equal(db.prepare('SELECT value FROM app_metadata WHERE key = ?').get('sample').value, 'retained');
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   db.close();
 });
 
@@ -28,10 +28,10 @@ test('upgrades version 1 without losing existing records', (t) => {
   const directory = temporaryDirectory(t);
   let db = new DatabaseSync(path.join(directory, 'arra.sqlite'));
   db.exec(`DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; CREATE TABLE app_metadata (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) STRICT;
-    INSERT INTO app_metadata VALUES ('sample', 'existing'); DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version = 1;`);
+    INSERT INTO app_metadata VALUES ('sample', 'existing'); DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version = 1;`);
   db.close();
   db = openDatabase(directory);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   assert.deepEqual({ ...db.prepare('SELECT * FROM app_metadata').get() },
     { key: 'sample', value: 'existing', updated_at: null });
   db.close();
@@ -41,7 +41,7 @@ test('failed upgrade rolls back and leaves existing records and version intact',
   const directory = temporaryDirectory(t);
   let db = new DatabaseSync(path.join(directory, 'arra.sqlite'));
   db.exec(`DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
-    INSERT INTO app_metadata VALUES ('sample', 'existing', NULL); DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; PRAGMA user_version = 1;`);
+    INSERT INTO app_metadata VALUES ('sample', 'existing', NULL); DROP TABLE IF EXISTS financial_scopes; DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version = 1;`);
   db.close();
   assert.throws(() => openDatabase(directory));
   db = new DatabaseSync(path.join(directory, 'arra.sqlite'));

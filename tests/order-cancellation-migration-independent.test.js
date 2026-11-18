@@ -10,7 +10,7 @@ function version31(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-cancel-migration-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const db = openDatabase(dir);
-  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; INSERT INTO app_metadata(key,value) VALUES('migration_sample','preserved'); DROP TABLE order_cancellations; PRAGMA user_version=31");
+  db.exec("DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; INSERT INTO app_metadata(key,value) VALUES('migration_sample','preserved'); DROP TABLE order_cancellations; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=31");
   db.close();
   return dir;
 }
@@ -18,7 +18,7 @@ function version31(t) {
 test('version 31 upgrades to cancellation schema and preserves existing data', t => {
   const dir = version31(t);
   const db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,41);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,42);
   assert.equal(db.prepare("SELECT value FROM app_metadata WHERE key='migration_sample'").get().value, 'preserved');
   assert.equal(db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE type='trigger' AND name LIKE 'order_cancellations_no_%'").get().n, 3);
   db.close();
