@@ -14,6 +14,15 @@ function textForJob(job) {
     rows.push('--------------------------------', t.payments+': '+s.count, t.cash+': '+s.cash, t.card+': '+s.card, t.total+': '+s.total);
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
+  if (job.destination === 'account-a-bills') {
+    const labels={en:{title:'NON-FISCAL ACCOUNT A PAID BILLS',day:'Business day',bill:'Bill',empty:'No paid Account A bills',total:'TOTAL',cash:'Cash',card:'Card',units:'minor units'},sq:{title:'FATURAT E PAGUARA JO FISKALE TË LLOGARISË A',day:'Dita e punës',bill:'Fatura',empty:'Nuk ka fatura të paguara për llogarinë A',total:'TOTALI',cash:'Para në dorë',card:'Kartë',units:'njësi më të vogla monetare'}};
+    const t=labels[s.language]; if(!t) throw Error('Invalid language');
+    const rows=[t.title,t.day+' #'+s.id,t.units,'--------------------------------'];
+    for(const r of s.records) rows.push(t.bill+' #'+r.billId+'  '+r.amount);
+    if(!s.records.length) rows.push(t.empty);
+    rows.push('--------------------------------',t.total+': '+s.total,t.cash+': '+s.cash,t.card+': '+s.card);
+    return rows.join('\n')+'\n'+' \n'.repeat(12)+'--- CUT HERE ---';
+  }
   if (job.destination === 'bill-history') {
     const {dayLabel,translations} = require('./bill-history');
     const language=s.language, t=translations[language]; if (!t) throw Error('Invalid language');

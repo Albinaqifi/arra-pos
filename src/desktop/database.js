@@ -304,6 +304,8 @@ const migrations = [
     CREATE TRIGGER IF NOT EXISTS account_a_results_no_update BEFORE UPDATE ON account_a_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS account_a_results_no_delete BEFORE DELETE ON account_a_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS account_a_results_no_replace BEFORE INSERT ON account_a_results WHEN EXISTS(SELECT 1 FROM account_a_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
+  { version: 38, sql: `CREATE TABLE IF NOT EXISTS account_a_bill_print_settings (id INTEGER PRIMARY KEY CHECK(id=1), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
+    INSERT OR IGNORE INTO account_a_bill_print_settings SELECT 1,queue FROM bill_printer_queues WHERE account='A';` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

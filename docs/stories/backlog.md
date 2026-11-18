@@ -1,6 +1,6 @@
 # Development backlog
 
-### S-086 — Approve late sent-item cancellation with the Combined owner's PIN
+### S-085 — Approve late sent-item cancellation with the Combined owner's PIN
 
 **Goal:** After the S-081 two-minute window, keep the sent-item Cancel action available and allow an authorized Combined owner to approve the waiter's correction in the same dialog with their PIN. **Depends on:** S-081 and existing Combined account and correction access. This owner decision supersedes S-081's disabled-button and administrator-page guidance for late cancellations.
 
@@ -12,7 +12,7 @@
 - Hide fully cancelled sent items from the active order view while retaining partial quantities and all underlying history. Remove the waiter cancellation dialog reminder and use only “Correction saved.” as its success message, as requested by the owner. Preserve notice jobs and delivery status.
 - Work offline, in English and Albanian, with keyboard access and supported desktop layouts. Verify setup, reset, invalid and valid PINs, role restrictions, direct requests, cutoff boundaries and open dialogs, retry and rollback, identity changes, history, billing, notices and restart. Independently review authorization, financial integrity and renderer ownership.
 
-### S-085 — Print Account A bills and total without closing
+### S-086 — Print Account A bills and total without closing
 
 **Goal:** Add a separate option in Financial information to print a list of Account A paid bills, each bill's value and the sum, without closing a day or sending a fiscal report. The owner can choose a local printer independently of the fiscal printer.
 

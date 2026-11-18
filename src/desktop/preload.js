@@ -20,7 +20,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
     try { return await ipcRenderer.invoke('arra:admin-sent-correction', request); } catch (_) { return { ok: false, uncertain: true }; }
   },
   async businessDays(request) {
-    try { return await ipcRenderer.invoke('arra:business-days', request); } catch (_) { return { ok: false }; }
+    try { return await ipcRenderer.invoke('arra:business-days', request); } catch (_) { return { ok: false, uncertain: request?.action === 'accountABillsPrint' }; }
   },
   async billHistory(request) {
     try { return await ipcRenderer.invoke('arra:bill-history', request); } catch (_) { return {ok:false, uncertain:request?.action === 'print'}; }

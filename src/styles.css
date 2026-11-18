@@ -169,6 +169,11 @@ input { font-family: inherit; }
 .day-current h4 { margin-bottom: 6px; }
 .day-details { margin-top: 18px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
 .day-details summary { cursor: pointer; font-weight: 700; }
+.account-a-bills .report-form label { min-width: 0; max-width: 100%; }
+.account-a-bills select, .account-a-bills input { max-width: 100%; }
+.account-a-bill-list { margin-bottom: 20px; }
+.account-a-bill-list li > strong { text-align: right; }
+.account-a-printer-form { margin-top: 16px; }
 .day-print-notice { margin: 16px 0; padding: 14px 16px; background: #f8fafc; border: 1px solid #dbe4ef; border-radius: 12px; }
 .day-print-notice p { margin: 8px 0; }
 .day-print-error, .admin-content .day-print-error[role='alert'] { padding: 12px 14px; border: 1px solid #dc2626; border-left: 5px solid #b91c1c; border-radius: 8px; background: #fef2f2; color: #991b1b; font-weight: 700; }
