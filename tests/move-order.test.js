@@ -12,6 +12,7 @@ test('move preserves order and preparation history, rejects conflicts and is ret
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-move-')); t.after(() => fs.rmSync(dir, {recursive:true, force:true}));
   let db = authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'),(3,2,'open'); UPDATE dining_tables SET active=0 WHERE id=4");
+  db.exec("INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders");
   let move, items, tables; const event = {}; let actor = 1;
   const register = () => {
     registerMoveOrder({handle:(_,fn)=>move=fn}, e=>e===event, db, {currentUserId: () => actor, authenticatedUserId: () => actor});
@@ -39,6 +40,7 @@ test('move preserves order and preparation history, rejects conflicts and is ret
 test('failed audit rolls back the move and permits retry', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-move-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const db=authorizedDatabase(openDatabase(dir)); seedTables(db); db.exec("INSERT INTO orders (table_id,opened_at,status) VALUES (1,1,'open'); CREATE TRIGGER fail_move BEFORE INSERT ON application_audit WHEN NEW.action='move' BEGIN SELECT RAISE(ABORT,'failure'); END");
+  db.exec("INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders");
   let move; registerMoveOrder({handle:(_,fn)=>move=fn},()=>true,db,{currentUserId: () => 1, authenticatedUserId: () => 1});
   const req={orderId:1,sourceId:1,destinationId:2,requestId:'retry'};
   assert.equal(move({},req).ok,false); assert.equal(db.prepare('SELECT table_id FROM orders').get().table_id,1);

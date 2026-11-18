@@ -4,6 +4,7 @@ const sq = {
   'Employees':'Punonjësit', 'Manage staff accounts and permissions.':'Menaxhoni llogaritë dhe lejet e stafit.',
   'Order history':'Historiku i porosive', 'Review orders and operational activity.':'Shqyrtoni porositë dhe aktivitetin operacional.',
   'Correct sent items':'Korrigjo artikujt e dërguar', 'Review unbilled open orders and correct sent items.':'Shqyrtoni porositë e hapura pa faturë dhe korrigjoni artikujt e dërguar.',
+  'Assign existing orders':'Cakto porositë ekzistuese', 'Assign unowned orders from before the upgrade.':'Caktoni porositë pa kamerier nga para përditësimit.',
   'Financial information':'Informacioni financiar', 'Review available payments and business days.':'Shqyrtoni pagesat e disponueshme dhe ditët e punës.',
   'Operational reports':'Raportet operacionale', 'Explore product, table and waiter activity.':'Shqyrtoni aktivitetin e produkteve, tavolinave dhe kamerierëve.',
   'Administration':'Administrimi', 'Unknown':'I panjohur', 'Using PC:':'Përdor kompjuterin:', 'Switch user':'Ndrysho përdoruesin',

@@ -1,4 +1,5 @@
 const { hasPermissions } = require('./permissions');
+const { ownsOrder } = require('./order-ownership');
 const CHANNEL = 'arra:order-history';
 // Explicit event and field allowlists keep prices, notes, request IDs, and any
 // future financial audit events out of this operational history endpoint.
@@ -42,7 +43,8 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
         WHERE b.order_id=? AND COALESCE(CASE WHEN c.id IS NOT NULL THEN 'A' END,p.account)<>? LIMIT 1`);
       const hasBill = db.prepare('SELECT 1 FROM bills WHERE order_id=?');
       const permitted = id => {
-        if (scope === 'waiter' || scope === 'combined') return true;
+        if (scope === 'waiter') return ownsOrder(db,session,id);
+        if (scope === 'combined') return true;
         const seen = new Set(), pending = [id];
         while (pending.length) {
           const current = pending.pop();
@@ -70,6 +72,7 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
       const allowed = { open:'order', add:'order_item', quantity_changed:'order_item', remove:'order_item', note_changed:'order_item', send:'preparation_round', move:'order', move_items:'order', correct_sent:'order_item', cancel_order:'order' };
       const events = [];
       for (const row of rows) {
+        if (scope === 'waiter' && !ownsOrder(db,session,row.order_id)) continue;
         if (allowed[row.action] !== row.entity_type) continue;
         const context = JSON.parse(row.context);
         const relatedItem = row.entity_type === 'order_item' && relevant.has(Number(row.entity_id));

@@ -1,4 +1,5 @@
 const { hasPermissions } = require('./permissions');
+const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService, assignPayment } = require('./shifts');
 const CHANNEL = 'arra:payment';
@@ -14,6 +15,15 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
     try {
       db.exec('BEGIN IMMEDIATE');
       try {
+        const order = db.prepare('SELECT order_id FROM bills WHERE id=?').get(request.billId);
+        if (!order || !ownsOrder(db, session, order.order_id)) {
+          // A payment committed before the upgrade may have lost its response. The
+          // original payer can reconcile only that exact payment; this does not
+          // assign an owner or grant access to the underlying order.
+          const legacy = order && db.prepare("SELECT p.id FROM legacy_unassigned_orders l JOIN orders o ON o.id=l.order_id JOIN bills b ON b.order_id=o.id JOIN payments p ON p.bill_id=b.id WHERE l.order_id=? AND o.status='completed' AND b.id=? AND p.actor_id=? AND p.method=? AND p.account=? AND NOT EXISTS(SELECT 1 FROM order_waiter_ownership w WHERE w.order_id=o.id)").get(order.order_id,request.billId,session.currentUserId(),request.method,request.account);
+          if (legacy) { db.exec('COMMIT'); return {ok:true,data:{id:legacy.id}}; }
+          db.exec('ROLLBACK'); return { ok:false, error:'Access denied' };
+        }
         const existing = db.prepare('SELECT id, method, account FROM payments WHERE bill_id=?').get(request.billId);
         if (existing) {
           if (existing.method !== request.method || existing.account !== request.account) throw Error('Bill already paid with a different selection');

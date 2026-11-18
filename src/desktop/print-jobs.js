@@ -1,4 +1,5 @@
 const { hasPermissions } = require('./permissions');
+const { ownsOrder, canRecoverLegacyPrint } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:print-jobs';
 
@@ -20,17 +21,17 @@ function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
       try {
         if (request.action === 'simulate') db.prepare('UPDATE simulated_printers SET result = ? WHERE destination = ?').run(request.result, request.destination);
         if (request.action === 'retry') {
-          const job = db.prepare(`SELECT j.id, r.order_id AS orderId, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) WHERE j.id=?`).get(request.jobId);
+          const job = db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) WHERE j.id=?`).get(request.jobId);
           const token = 'retry-' + request.requestId;
           const prior = db.prepare('SELECT job_id FROM print_attempts WHERE request_id=?').get(token);
-          if (!job || job.cancelled || (prior && prior.job_id !== job.id) || (!prior && job.result === 'success')) throw Error('Invalid retry');
+          if (!job || !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)) || job.cancelled || (prior && prior.job_id !== job.id) || (!prior && job.result === 'success')) throw Error('Invalid retry');
           if (!prior) {
             const result = db.prepare('SELECT result FROM simulated_printers WHERE destination=?').get(job.destination).result;
             const attemptId = db.prepare('INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) VALUES (?, ?, ?, ?, ?)').run(job.id, token, session.currentUserId(), Date.now(), result).lastInsertRowid;
             recordAudit(db, session.currentUserId(), 'print_retry', 'print_attempt', attemptId, job.orderId, { jobId: job.id, result, adapter: 'simulated' });
           }
         }
-        const jobs = operational ? db.prepare(`SELECT j.id, r.order_id AS orderId, r.table_id AS tableId, r.number AS round, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) ORDER BY j.id DESC`).all() : [];
+        const jobs = operational ? db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, r.table_id AS tableId, r.number AS round, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) ORDER BY j.id DESC`).all().filter(job=>ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)).map(({roundActor,...job})=>job) : [];
         const printers = db.prepare('SELECT destination, result FROM simulated_printers ORDER BY destination').all();
         db.exec('COMMIT');
         return { ok: true, data: { jobs, printers } };

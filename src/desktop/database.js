@@ -362,6 +362,18 @@ const migrations = [
   { version: 42, sql: `CREATE TABLE verified_waiter_pins (
     user_id INTEGER PRIMARY KEY REFERENCES local_users(id)
   ) STRICT;` },
+  { version: 43, sql: `CREATE TABLE order_waiter_ownership (
+    order_id INTEGER PRIMARY KEY REFERENCES orders(id),
+    waiter_id INTEGER NOT NULL REFERENCES local_users(id),
+    assigned_by INTEGER NOT NULL REFERENCES local_users(id),
+    assigned_at INTEGER NOT NULL,
+    source TEXT NOT NULL CHECK(source IN ('open','legacy'))
+  ) STRICT;
+  CREATE TABLE legacy_unassigned_orders (order_id INTEGER PRIMARY KEY REFERENCES orders(id)) STRICT;
+  INSERT INTO legacy_unassigned_orders SELECT o.id FROM orders o WHERE (o.status='open' AND o.retired_empty=0) OR EXISTS(SELECT 1 FROM bills b JOIN payments p ON p.bill_id=b.id WHERE b.order_id=o.id) OR EXISTS(SELECT 1 FROM preparation_rounds r WHERE r.order_id=o.id);
+  CREATE TRIGGER order_waiter_ownership_no_update BEFORE UPDATE ON order_waiter_ownership BEGIN SELECT RAISE(ABORT,'Order ownership is retained'); END;
+  CREATE TRIGGER order_waiter_ownership_no_delete BEFORE DELETE ON order_waiter_ownership BEGIN SELECT RAISE(ABORT,'Order ownership is retained'); END;
+  CREATE TRIGGER order_waiter_ownership_no_replace BEFORE INSERT ON order_waiter_ownership WHEN EXISTS(SELECT 1 FROM order_waiter_ownership WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT,'Order ownership is retained'); END;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

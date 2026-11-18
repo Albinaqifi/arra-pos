@@ -15,7 +15,7 @@ test('unconfigured second kitchen fails safely and retries the original job afte
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   let db = authorizedDatabase(openDatabase(dir));
   seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); UPDATE menu_products SET destination='kitchen2' WHERE id='qebapa'");
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership); UPDATE menu_products SET destination='kitchen2' WHERE id='qebapa'");
   const event = {}, session = { currentUserId: () => 1, authenticatedUserId: () => 1 }, calls = [];
   const adapter = async attempt => { calls.push(attempt); return 'accepted'; };
   let orders, jobs;

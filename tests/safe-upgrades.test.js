@@ -46,8 +46,8 @@ function check(db, version, before) {
 
 test('historical v33 data survives real upgrade and restart', t => {
   const {dir,before} = fixture(t);
-  let db = openDatabase(dir); check(db,42,before); db.close();
-  db = openDatabase(dir); check(db,42,before); db.close();
+  let db = openDatabase(dir); check(db,43,before); db.close();
+  db = openDatabase(dir); check(db,43,before); db.close();
 });
 
 test('verified pre-upgrade backup restores to an isolated older database', async t => {
@@ -57,11 +57,37 @@ test('verified pre-upgrade backup restores to an isolated older database', async
   const backup = path.join(parent,'backup.enc'), restored = path.join(parent,'restored');
   const secret = require('node:crypto').randomBytes(24).toString('hex');
   await createBackup(dir, backup, secret);
-  let db = openDatabase(dir); check(db,42,before); db.close();
+  let db = openDatabase(dir); check(db,43,before); db.close();
   fs.mkdirSync(restored);
   restoreBackup(backup, restored, secret);
   db = new DatabaseSync(path.join(restored,'arra.sqlite')); check(db,33,before); db.close();
-  db = openDatabase(restored); check(db,42,before); db.close();
+  db = openDatabase(restored); check(db,43,before); db.close();
+});
+
+test('v42 open-order transition is preserved through restart and backup restore', async t => {
+  const {dir} = fixture(t);
+  let db = openDatabase(dir);
+  db.exec(`DROP TABLE order_waiter_ownership; DROP TABLE legacy_unassigned_orders;
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(2,1,2,'completed');
+    INSERT INTO orders(id,table_id,opened_at,status,retired_empty) VALUES(3,1,3,'open',1);
+    PRAGMA user_version=42`);
+  const before = rows(db); db.close();
+  db = openDatabase(dir); check(db,43,before);
+  assert.deepEqual(db.prepare('SELECT order_id FROM legacy_unassigned_orders ORDER BY order_id').all().map(row => row.order_id), [1]);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM order_waiter_ownership').get().n, 0);
+  db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(1,1,1,10,'legacy')").run();
+  db.close();
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-ownership-backup-'));
+  t.after(() => fs.rmSync(parent, {recursive:true, force:true}));
+  const backup = path.join(parent,'backup.enc'), restored = path.join(parent,'restored');
+  const secret = require('node:crypto').randomBytes(24).toString('hex');
+  await createBackup(dir, backup, secret);
+  fs.mkdirSync(restored); restoreBackup(backup, restored, secret);
+  db = openDatabase(restored); check(db,43,before);
+  assert.deepEqual({...db.prepare('SELECT order_id,waiter_id,assigned_by,assigned_at,source FROM order_waiter_ownership').get()},
+    {order_id:1,waiter_id:1,assigned_by:1,assigned_at:10,source:'legacy'});
+  assert.deepEqual(db.prepare('SELECT order_id FROM legacy_unassigned_orders').all().map(row => row.order_id), [1]);
+  db.close();
 });
 
 test('SQLite full during migration is visible and rolls back; retry preserves history', t => {
@@ -71,7 +97,7 @@ test('SQLite full during migration is visible and rolls back; retry preserves hi
   db.exec(`PRAGMA max_page_count=${pages}`);
   assert.throws(() => migrate(db), /full/i);
   check(db,33,before); db.close();
-  db = openDatabase(dir); check(db,42,before); db.close();
+  db = openDatabase(dir); check(db,43,before); db.close();
 });
 
 test('process termination during migration recovers original and permits retry', t => {
@@ -80,5 +106,5 @@ test('process termination during migration recovers original and permits retry',
   const child = spawnSync(process.execPath, ['-e',program,file], { encoding:'utf8' });
   assert.equal(child.status,73,child.stderr);
   let db = new DatabaseSync(file); check(db,33,before); db.close();
-  db = openDatabase(dir); check(db,42,before); db.close();
+  db = openDatabase(dir); check(db,43,before); db.close();
 });

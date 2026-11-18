@@ -6,6 +6,7 @@ const { registerApplicationInfo } = require('./application-info');
 const { registerTables } = require('./tables');
 const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
+const { registerLegacyOrderAssignment } = require('./legacy-order-assignment');
 const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
 const { registerActivityReport } = require('./activity-report');
@@ -70,6 +71,7 @@ app.whenReady().then(() => {
   registerTableConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
+  registerLegacyOrderAssignment(require('electron').ipcMain, isAllowedSender, database, session);
   registerBills(require('electron').ipcMain, isAllowedSender, database, session);
   const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : null);

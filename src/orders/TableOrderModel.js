@@ -76,7 +76,7 @@ export class TableOrderModel extends FeatureState {
     try {
       const result = await this.bridge.openOrder(tableId);
       if (!this.isCurrent(opening)) return;
-      if (!result.ok) { this.notify(this.t('Could not open table. Try again.'), 'err'); return; }
+      if (!result.ok) { this.notify(this.t(result.code === 'table_unavailable' ? 'This table is unavailable for your account. Ask a Combined administrator for help.' : 'Could not open table. Try again.'), 'err'); return; }
       const old = this.state.orders[tableId];
       this._set({ orders: { ...this.state.orders, [tableId]: { id: result.data.id, openedAt: result.data.openedAt, openedBy: '', rounds: old?.rounds || 0, log: old?.log || [], untouched: result.data.untouched === true, itemsLoaded: old?.id === result.data.id && !!old.itemsLoaded } } });
       const target = this.captureTarget(tableId);

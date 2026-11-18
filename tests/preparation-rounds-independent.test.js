@@ -14,7 +14,7 @@ test('direct sends reject missing grants, invalid tokens and empty orders withou
   const db = authorizedDatabase(openDatabase(dir));
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open')");
+  db.exec("INSERT INTO orders (table_id, opened_at, status) VALUES (1, 1, 'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   let handler; const trusted = {};
   registerOrderItems({ handle: (_, fn) => { handler = fn; } }, event => event === trusted, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   const send = requestId => handler(trusted, { action: 'send', orderId: 1, requestId });

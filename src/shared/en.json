@@ -73,6 +73,8 @@
   "waiter.Switching user…": "Switching user…",
   "waiter.Could not switch user. Choose a name or sign out to retry.": "Could not switch user. Choose a name or sign out to retry.",
   "waiter.Could not open table. Try again.": "Could not open table. Try again.",
+  "waiter.This table is unavailable for your account. Ask a Combined administrator for help.": "This table is unavailable for your account. Ask a Combined administrator for help.",
+  "waiter.Table unavailable": "Table unavailable",
   "waiter.Could not load order items. Try again.": "Could not load order items. Try again.",
   "waiter.Please wait for the order to save.": "Please wait for the order to save.",
   "waiter.Could not save order items. Try again.": "Could not save order items. Try again.",

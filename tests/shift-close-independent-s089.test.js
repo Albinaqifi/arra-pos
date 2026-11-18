@@ -15,7 +15,7 @@ test('real scoped service and renderer reconcile a lost handover after the day c
     INSERT INTO financial_scopes VALUES(1,'combined'),(2,'waiter'),(3,'A'),(4,'B');
     INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change'),(3,'employees.view'),(4,'employees.view');
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'first'),(2,2,1,1,200,'second');`);
   let actor=1, loseClose=false; const handlers={};
   const session={currentUserId:()=>actor,authenticatedUserId:()=>actor};

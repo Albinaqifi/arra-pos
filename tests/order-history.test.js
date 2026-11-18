@@ -4,6 +4,7 @@ const { recordAudit } = require('../src/desktop/audit');
 // Reconstruct the stored rows from a move performed by an earlier version.
 function historicalMove(db, orderId, sourceId, destinationId, destinationOrderId, itemId) {
   db.prepare("INSERT INTO orders(id, table_id, opened_at, status) VALUES (?, ?, 1, 'open')").run(destinationOrderId, destinationId);
+  db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(?,1,1,1,'open')").run(destinationOrderId);
   db.prepare('UPDATE order_items SET order_id=? WHERE id=?').run(destinationOrderId, itemId);
   db.prepare("UPDATE orders SET status='completed' WHERE id=?").run(orderId);
   recordAudit(db, 1, 'move_items', 'order', orderId, orderId, { sourceId, destinationId, destinationOrderId, expectedDestinationOrderId: null, itemIds: [itemId], requestId: 'historic' });
@@ -13,7 +14,7 @@ const { registerOrderItems } = require('../src/desktop/order-items'), { register
 test('history restricts direct access and projects operational events without financial fields', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-history-'));
   const db=authorizedDatabase(openDatabase(dir)); t.after(()=>{ db.close(); fs.rmSync(dir,{recursive:true,force:true}); }); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open');");
+  db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');");
   let actor=1, auth=1; const session={currentUserId:()=>actor,authenticatedUserId:()=>auth}, event={};
   const handlers={}; const ipc={handle:(name,fn)=>handlers[name]=fn}; const trusted=e=>e===event;
   registerOrderItems(ipc,trusted,db,session); registerMoveOrder(ipc,trusted,db,session); registerOrderHistory(ipc,trusted,db,session);
@@ -42,7 +43,7 @@ test('history restricts direct access and projects operational events without fi
 });
 test('history reports original, corrected and remaining quantities after moves', t => {
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-history-quantity-')); const db=authorizedDatabase(openDatabase(dir)); t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true})}); seedTables(db); seedMenu(db);
- db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open');");
+ db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'orders.correct_sent'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');");
  const handlers={}, ipc={handle:(n,f)=>handlers[n]=f}, event={}, session={currentUserId:()=>1,authenticatedUserId:()=>1}; for (const register of [registerOrderItems,registerOrderHistory]) register(ipc,e=>e===event,db,session);
  const item=r=>handlers['arra:order-items'](event,r), history=id=>handlers['arra:order-history'](event,{orderId:id}); item({action:'add',orderId:1,productId:'qebapa'}); item({action:'increment',orderId:1,itemId:1}); item({action:'send',orderId:1,requestId:'send'}); assert.equal(item({action:'correct',orderId:1,itemId:1,quantity:1,reason:'Sample',requestId:'first'}).ok,true);
  assert.deepEqual({...history(1).data.items[0]}, {id:1,name:'Qebapa',quantity:2,status:'sent',correctedQuantity:1}); historicalMove(db, 1, 1, 2, 2, 1); assert.equal(history(1).data.items.length,0); assert.equal(history(2).data.items[0].correctedQuantity,1);

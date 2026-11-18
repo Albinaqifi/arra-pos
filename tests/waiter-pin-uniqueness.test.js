@@ -43,7 +43,7 @@ test('unique staff PIN provisioning, legacy transition and role conversion survi
   // Simulate an upgrade from v41 with two independently salted matching PINs.
   const salt = randomBytes(16);
   db.prepare('UPDATE local_users SET pin_salt=?, pin_hash=? WHERE id=?').run(salt, hashPassword(pin, salt), second);
-  db.exec('DROP TABLE verified_waiter_pins; PRAGMA user_version=41');
+  db.exec('DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE verified_waiter_pins; PRAGMA user_version=41');
   db.close(); db = openDatabase(dir); connect();
   assert.equal(db.prepare('SELECT count(*) AS n FROM verified_waiter_pins').get().n, 0);
   assert.equal(call({ action: 'account', id: first, username: 'first renamed', active: true }).ok, true);

@@ -1,8 +1,8 @@
 import * as Pages from './index.js';
 import { FeatureState } from '../shared/FeatureState.js';
 
-const pages = { operationalReports: Pages.OperationalReports, financialVisibility: Pages.FinancialVisibility, orderHistory: Pages.OrderHistory, adminSentCorrections: Pages.AdminSentCorrections, employeeConfig: Pages.EmployeeConfig, menuConfig: Pages.MenuConfig, tableConfig: Pages.TableConfig };
-const editors = new Set(['tableConfig', 'menuConfig', 'employeeConfig', 'adminSentCorrections']);
+const pages = { operationalReports: Pages.OperationalReports, financialVisibility: Pages.FinancialVisibility, orderHistory: Pages.OrderHistory, adminSentCorrections: Pages.AdminSentCorrections, legacyOrderAssignment: Pages.LegacyOrderAssignment, employeeConfig: Pages.EmployeeConfig, menuConfig: Pages.MenuConfig, tableConfig: Pages.TableConfig };
+const editors = new Set(['tableConfig', 'menuConfig', 'employeeConfig', 'adminSentCorrections', 'legacyOrderAssignment']);
 
 export class AdminWorkspace extends FeatureState {
   constructor({ signOut, refreshAccess }) {
