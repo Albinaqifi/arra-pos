@@ -31,11 +31,15 @@ export class AccountABills extends React.Component {
     finally{this.busy=false;if(this.active)this.setState({busy:false});}
   }
   render(){const s=this.state,t=(k,v)=>financeText(this.props.language,k,v),p=s.preview;
-    return h('section',{className:'history-panel'},h('p',null,t('Non-fiscal Account A paid bills. Printing does not close a day.')),
+    return h('section',{className:'history-panel account-a-bills'},h('p',{className:'history-muted'},t('Non-fiscal Account A paid bills. Printing does not close a day.')),
       s.error&&h('p',{role:'alert'},t(s.error)),s.notice&&h('p',{role:'status'},t(s.notice)),!s.data&&!s.error&&h('p',{role:'status'},t('Loading…')),
-      s.data&&h(React.Fragment,null,h('label',null,t('Business day'), ' ',h('select',{value:s.dayId,disabled:s.busy,onChange:e=>this.preview(e.target.value)},s.data.days.map(d=>h('option',{key:d.id,value:d.id},t('Business day #{id}',{id:d.id})+' · '+new Date(d.openedAt).toLocaleString()+(d.closedAt===null?' · '+t('Open'):''))))),
-        p&&h(React.Fragment,null,h('h3',null,t('Business day #{id}',{id:p.id})),p.records.length?h('ul',null,p.records.map(r=>h('li',{key:r.billId},t('Bill #{id}',{id:r.billId})+' · '+r.amount.toLocaleString()))):h('p',null,t('No paid Account A bills for this day.')),
-          h('p',null,t('Amount (minor units)')),h('p',null,t('Total')+': '+p.total.toLocaleString()),h('p',null,t('Cash')+': '+p.cash.toLocaleString()),h('p',null,t('Card')+': '+p.card.toLocaleString()),h('button',{disabled:s.busy,onClick:()=>this.print()},t('Print Account A bills')),h('button',{disabled:s.busy,onClick:()=>this.preview(s.dayId)},t('Refresh preview'))),
-        s.data.canConfigure&&h('details',null,h('summary',null,t('Account A bills printer settings')),h('form',{key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,t('Printer queue '),h('input',{name:'queue',required:true,maxLength:255,defaultValue:s.data.queue})),h('button',{type:'submit',disabled:s.busy},t('Save printer queue'))))));
+      s.data&&h(React.Fragment,null,h('div',{className:'report-form'},h('label',null,t('Business day'),h('select',{value:s.dayId,disabled:s.busy,onChange:e=>this.preview(e.target.value)},s.data.days.map(d=>h('option',{key:d.id,value:d.id},t('Business day #{id}',{id:d.id})+' · '+new Date(d.openedAt).toLocaleString()+(d.closedAt===null?' · '+t('Open'):'')))))),
+        !p&&!s.error&&s.dayId&&h('p',{role:'status'},t('Loading…')),
+        p&&h('div',{className:'finance-day'},h('h3',null,t('Business day #{id}',{id:p.id})),
+          h('p',{className:'history-muted'},t('Amount (minor units)')),
+          p.records.length?h('ul',{className:'history-items account-a-bill-list'},p.records.map(r=>h('li',{key:r.billId},h('span',null,h('strong',null,t('Bill #{id}',{id:r.billId}))),h('strong',null,r.amount.toLocaleString())))):h('p',{className:'floor-empty'},t('No paid Account A bills for this day.')),
+          h('div',{className:'finance-metrics'},[['Total',p.total],['Cash',p.cash],['Card',p.card]].map(([label,value])=>h('div',{key:label},h('span',null,t(label)),h('strong',null,value.toLocaleString())))),
+          h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.print()},t('Print Account A bills')),h('button',{disabled:s.busy,onClick:()=>this.preview(s.dayId)},t('Refresh preview')))),
+        s.data.canConfigure&&h('details',{className:'day-details'},h('summary',null,t('Account A bills printer settings')),h('form',{className:'report-form account-a-printer-form',key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,t('Printer queue '),h('input',{name:'queue',required:true,maxLength:255,defaultValue:s.data.queue})),h('button',{type:'submit',disabled:s.busy},t('Save printer queue'))))));
   }
 }
