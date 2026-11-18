@@ -14,7 +14,7 @@ function fixture(t) {
     INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change'),(4,'employees.view'),(5,'employees.view'),(6,'business_days.close');
     INSERT INTO transfer_managers VALUES(3);
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample'),(4,'sample');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'),(4,4,1,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'),(4,4,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,9000,'one'),(2,2,1,1,500,'two'),(3,3,1,1,300,'three'),(4,4,1,1,400,'four');`);
   function register() { handlers={}; const ipc={handle:(name,fn)=>handlers[name]=fn},session={currentUserId:()=>actor,authenticatedUserId:()=>actor}; for(const fn of [registerBusinessDays,registerPayments,registerTransferCorrection]) fn(ipc,()=>true,db,session); }
   register();
@@ -98,9 +98,9 @@ test('v40 upgrade preserves shifts and starts with no wallet counts',t=>{
   const f=fixture(t),day=f.day;
   assert.equal(f.pay(1).ok,true);
   const shift=day({action:'shiftList'}).data.shifts[0];
-  f.db().exec('DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE wallet_requests; DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40');
+  f.db().exec('DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE wallet_requests; DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40');
   f.restart();
-  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,42);
+  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,43);
   assert.equal(day({action:'shiftList'}).data.shifts[0].id,shift.id);
   assert.equal(day({action:'walletStatus'}).data.baseline,null);
   assert.deepEqual(f.db().prepare('PRAGMA foreign_key_check').all(),[]);

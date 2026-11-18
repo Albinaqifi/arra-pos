@@ -5,6 +5,7 @@ const ADMIN_AREAS = [
   { id: 'employeeConfig', label: 'Employees', description: 'Manage staff accounts and permissions.' },
   { id: 'orderHistory', label: 'Order history', description: 'Review orders and operational activity.' },
   { id: 'adminSentCorrections', label: 'Correct sent items', description: 'Review unbilled open orders and correct sent items.' },
+  { id: 'legacyOrderAssignment', label: 'Assign existing orders', description: 'Assign unowned orders from before the upgrade.' },
   { id: 'financialVisibility', label: 'Financial information', description: 'Review available payments and business days.' },
   { id: 'operationalReports', label: 'Operational reports', description: 'Explore product, table and waiter activity.' }
 ];

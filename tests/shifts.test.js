@@ -14,7 +14,7 @@ test('handover snapshots are scoped and immutable; payment replay and day close 
  INSERT INTO user_permissions VALUES(1,'business_days.close'),(1,'orders.view'),(1,'orders.change'),(2,'employees.view'),(3,'employees.view'),(4,'orders.view'),(4,'orders.change');
  INSERT INTO financial_scopes VALUES(1,'combined'),(2,'A'),(3,'B'),(4,'waiter');
  INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample');
- INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open');
+ INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'); INSERT INTO order_waiter_ownership SELECT id,4,4,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
  INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'one'),(2,2,1,1,200,'two'),(3,3,1,1,300,'three');`);
  const call=req=>days({},req), payment=req=>{const previous=actor; actor=4; try { return pay({},req); } finally { actor=previous; }};
  assert.equal(call({action:'shiftList'}).data.shifts.length,0);
@@ -55,7 +55,7 @@ test('upgrade marks an already used day unavailable and starts tracking on the n
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-shift-upgrade-')); let db=openDatabase(dir);t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'combined',x'00',x'00'); INSERT INTO user_permissions VALUES(1,'business_days.close'); INSERT INTO financial_scopes VALUES(1,'combined');
  INSERT INTO application_audit(actor_id,occurred_at,action,entity_type,entity_id,context) VALUES(1,unixepoch()*1000+1000,'add','order_item','1','{}');
- DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE payment_shifts; DROP TABLE shift_closes; DROP TABLE restaurant_shifts; DROP TABLE shift_coverage_unavailable; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=38;`);
+ DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE payment_shifts; DROP TABLE shift_closes; DROP TABLE restaurant_shifts; DROP TABLE shift_coverage_unavailable; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=38;`);
  db.close();db=openDatabase(dir);let handler;registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});const call=req=>handler({},req);
  assert.equal(call({action:'shiftList'}).data.coverage,'unavailable');db.exec('BEGIN IMMEDIATE');markService(db,Date.now());db.exec('COMMIT');assert.equal(call({action:'shiftList'}).data.shifts.length,0);
  const dayId=call({action:'list'}).data.days[0].id; assert.equal(call({action:'close',dayId}).ok,true);assert.equal(call({action:'shiftList'}).data.coverage,'available');

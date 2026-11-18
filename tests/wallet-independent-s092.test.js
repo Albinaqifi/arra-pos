@@ -17,7 +17,7 @@ function fixture(t) {
     INSERT INTO financial_scopes VALUES(1,'combined'),(2,'waiter'),(3,'A');
     INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change'),(3,'employees.view');
     INSERT INTO dining_tables(id,area) VALUES(1,'sample');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,900,'sample');`);
   function register() {
     handlers = {};

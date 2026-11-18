@@ -41,7 +41,7 @@ test('startup waits to upgrade after a competing transaction and leaves later lo
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   db.prepare('INSERT INTO app_metadata (key, value) VALUES (?, ?)').run('contention-sample', 'retained');
-  db.exec(`DROP TABLE wallet_cancellations; DROP TABLE wallet_prepared; DROP TABLE wallet_requests;
+  db.exec(`DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE wallet_cancellations; DROP TABLE wallet_prepared; DROP TABLE wallet_requests;
     DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40`);
   db.exec('BEGIN EXCLUSIVE');
   const opening = openWhileLocked(dir);
@@ -50,7 +50,7 @@ test('startup waits to upgrade after a competing transaction and leaves later lo
     await new Promise(resolve => setTimeout(resolve, 200));
     db.exec('COMMIT');
     const { elapsed, ...result } = await opening.result;
-    assert.deepEqual(result, { version: 42, timeout: 0, value: 'retained' });
+    assert.deepEqual(result, { version: 43, timeout: 0, value: 'retained' });
     assert.ok(elapsed >= 100, `opening returned after ${elapsed}ms without observing the lock`);
   } finally {
     if (db.isTransaction) db.exec('ROLLBACK');

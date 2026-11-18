@@ -1,6 +1,7 @@
 const cancellationPrinting = require('./test-printing');
 const { recordAudit } = require('./audit');
 const { hasPermissions } = require('./permissions');
+const { ownsOrder } = require('./order-ownership');
 const { markService } = require('./shifts');
 const { hashPassword } = require('./session');
 const { timingSafeEqual, randomBytes } = require('node:crypto');
@@ -33,6 +34,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
     const actor = session.currentUserId(), identity = generation(), now = Date.now();
     try {
       db.exec('BEGIN IMMEDIATE');
+      if (!ownsOrder(db, session, request.orderId)) { db.exec('ROLLBACK'); return { ok:false }; }
       const item = db.prepare("SELECT i.id FROM order_items i JOIN orders o ON o.id=i.order_id JOIN dining_tables t ON t.id=o.table_id LEFT JOIN dining_areas a ON a.id=t.area_id WHERE i.id=? AND i.order_id=? AND i.status='sent' AND o.status='open' AND o.retired_empty=0 AND t.active=1 AND COALESCE(a.active,1)=1 AND NOT EXISTS(SELECT 1 FROM bills b WHERE b.order_id=o.id) AND i.quantity > COALESCE((SELECT SUM(c.quantity) FROM sent_item_corrections c WHERE c.item_id=i.id),0)").get(request.itemId, request.orderId);
       if (!item) { db.exec('ROLLBACK'); return { ok:false }; }
       let owner;
@@ -78,10 +80,13 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
       let cancellationAttempt, correctionSentAt, approvingOwner, usedApproval;
       db.exec('BEGIN IMMEDIATE');
       try {
+        if (!ownsOrder(db, session, request.orderId)) { db.exec('ROLLBACK'); return { ok:false, rejected:true, error:'Order unavailable', ...(request.action === 'correct' ? {code:'unavailable'} : {}) }; }
         const priorCorrection = request.action === 'correct' ? db.prepare('SELECT * FROM sent_item_corrections WHERE request_id = ?').get(request.requestId) : null;
+        const priorSend = request.action === 'send' ? db.prepare('SELECT order_id FROM preparation_rounds WHERE request_id = ?').get(request.requestId) : null;
         if (priorCorrection && (priorCorrection.order_id !== request.orderId || priorCorrection.item_id !== request.itemId || priorCorrection.quantity !== request.quantity || priorCorrection.reason !== request.reason.trim() || priorCorrection.actor_id !== session.currentUserId())) throw Error('Invalid retry');
+        if (priorSend && priorSend.order_id !== request.orderId) throw Error('Invalid request');
         if (request.action === 'correct' && !priorCorrection && db.prepare('SELECT 1 FROM bills WHERE order_id=?').get(request.orderId)) throw Error('Order billed');
-        if (!priorCorrection && !db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
+        if (!priorCorrection && !priorSend && !db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
           WHERE o.id = ? AND o.status = 'open' AND o.retired_empty = 0 AND t.active = 1 AND COALESCE(a.active, 1) = 1`).get(request.orderId)) throw Error('Invalid order');
         if (request.action === 'correct') {
           if (!priorCorrection) {
@@ -106,9 +111,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
             recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason, source: 'waiter', ...(approvingOwner ? { approvingOwnerId: approvingOwner } : {}) });
           }
         } else if (request.action === 'send') {
-          const prior = db.prepare('SELECT order_id FROM preparation_rounds WHERE request_id = ?').get(request.requestId);
-          if (prior && prior.order_id !== request.orderId) throw Error('Invalid request');
-          if (!prior) {
+          if (!priorSend) {
             const pending = db.prepare("SELECT i.id, i.quantity, p.destination FROM order_items i JOIN menu_products p ON p.id = i.product_id WHERE i.order_id = ? AND i.status = 'pending' ORDER BY i.id").all(request.orderId);
             if (!pending.length) throw Error('Nothing pending');
             if (pending.length) {

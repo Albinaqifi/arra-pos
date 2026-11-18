@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('arra', Object.freeze({
+  async legacyOrderAssignment(request) {
+    try { return await ipcRenderer.invoke('arra:legacy-order-assignment', request); } catch (_) { return {ok:false,uncertain:request?.action === 'assign'}; }
+  },
   async language(request) {
     try { return await ipcRenderer.invoke('arra:language', request); } catch (_) { return { ok: false }; }
   },
@@ -197,6 +200,7 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
       if (response && response.ok === true && o && Number.isSafeInteger(o.id) && o.id > 0 &&
           o.tableId === tableId && (o.untouched === 0 || o.untouched === 1) && Number.isSafeInteger(o.openedAt) && o.openedAt > 0)
         return { ok: true, data: { id: o.id, tableId: o.tableId, openedAt: o.openedAt, untouched: o.untouched === 1 } };
+      if (response?.code === 'table_unavailable') return {ok:false,code:'table_unavailable'};
     } catch (_) {}
     return { ok: false, error: 'Could not open table. Try again.' };
   },
@@ -205,10 +209,10 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
       const response = await ipcRenderer.invoke('arra:tables', {});
       if (response && response.ok === true && Array.isArray(response.data) &&
           response.data.every(t => t && Number.isSafeInteger(t.id) && t.id > 0 &&
-            typeof t.area === 'string' && t.area.trim().length > 0 && (t.untouched === 0 || t.untouched === 1) &&
+            typeof t.area === 'string' && t.area.trim().length > 0 && (t.untouched === 0 || t.untouched === 1) && (t.occupied === 0 || t.occupied === 1) &&
             ((t.orderId === null && t.openedAt === null) ||
              (Number.isSafeInteger(t.orderId) && t.orderId > 0 && Number.isSafeInteger(t.openedAt) && t.openedAt > 0)))) {
-        return { ok: true, data: response.data.map(t => ({ id: t.id, area: t.area, orderId: t.orderId, openedAt: t.openedAt, untouched: t.untouched === 1 })) };
+        return { ok: true, data: response.data.map(t => ({ id: t.id, area: t.area, orderId: t.orderId, openedAt: t.openedAt, untouched: t.untouched === 1, occupied: t.occupied === 1 })) };
       }
     } catch (_) {
       // Do not expose internal IPC errors to the screen.

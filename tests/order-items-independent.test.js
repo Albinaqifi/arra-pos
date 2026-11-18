@@ -15,7 +15,7 @@ test('order item boundaries and failed total changes preserve both orders', t =>
   const db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders (id, table_id, opened_at, status) VALUES (1, 1, 1, 'open'), (2, 2, 1, 'open')");
+  db.exec("INSERT INTO orders (id, table_id, opened_at, status) VALUES (1, 1, 1, 'open'), (2, 2, 1, 'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   let invoke;
   registerOrderItems({ handle(_channel, handler) { invoke = handler; } }, () => true, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   const call = request => invoke({}, request);

@@ -73,6 +73,8 @@
   "waiter.Switching user…": "Duke ndërruar përdoruesin…",
   "waiter.Could not switch user. Choose a name or sign out to retry.": "Përdoruesi nuk u ndërrua. Zgjidhni një emër ose dilni për të provuar përsëri.",
   "waiter.Could not open table. Try again.": "Tavolina nuk u hap. Provoni përsëri.",
+  "waiter.This table is unavailable for your account. Ask a Combined administrator for help.": "Kjo tavolinë nuk është e disponueshme për llogarinë tuaj. Kërkoni ndihmë nga administratori Combined.",
+  "waiter.Table unavailable": "Tavolina nuk është e disponueshme",
   "waiter.Could not load order items. Try again.": "Artikujt e porosisë nuk u ngarkuan. Provoni përsëri.",
   "waiter.Please wait for the order to save.": "Prisni që porosia të ruhet.",
   "waiter.Could not save order items. Try again.": "Artikujt e porosisë nuk u ruajtën. Provoni përsëri.",

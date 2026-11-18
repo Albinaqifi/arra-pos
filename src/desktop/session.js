@@ -64,6 +64,9 @@ function createSession(db) {
     },
     selectWaiter(request) {
       generation++;
+      // A failed waiter switch clears the former selected waiter. Owner
+      // sessions do not use this entry path and retain their identity.
+      if (restaurantId !== null && db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(restaurantId)) activeId = null;
       const fail = () => ({ ok: false, error: 'Waiter selection failed' });
       if (!restaurantActive() || !request || typeof request !== 'object' || Array.isArray(request) ||
           Object.getPrototypeOf(request) !== Object.prototype || Reflect.ownKeys(request).length !== 2 ||

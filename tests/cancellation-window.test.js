@@ -5,7 +5,7 @@ const {registerMoveOrder} = require('../src/desktop/move-order'), {registerAdmin
 test('moving and restarting do not renew the deadline; administrator can correct afterward', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-move-')); let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   let now=1000000; const original=Date.now; Date.now=()=>now; t.after(()=>{Date.now=original;});
   let handlers={}; const register=()=>{handlers={};const ipc={handle:(name,fn)=>handlers[name]=fn}, session={currentUserId:()=>1,authenticatedUserId:()=>1};registerOrderItems(ipc,()=>true,db,session);registerMoveOrder(ipc,()=>true,db,session);registerAdminSentCorrection(ipc,()=>true,db,session);}; register();
   const call=(name,request)=>handlers[name]({},request), items=req=>call('arra:order-items',req);
@@ -26,7 +26,7 @@ test('moving and restarting do not renew the deadline; administrator can correct
 test('persisted round deadline enforces strict cutoff and permits exact replay after expiry and restart', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-')); let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
   t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
-  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   let now=1000000; const original=Date.now; Date.now=()=>now; t.after(()=>{Date.now=original;});
   let call; const register=()=>registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1}); register();
   const invoke=req=>call({},req), add=productId=>invoke({action:'add',orderId:1,productId}), send=requestId=>invoke({action:'send',orderId:1,requestId});
@@ -41,7 +41,7 @@ test('persisted round deadline enforces strict cutoff and permits exact replay a
 });
 test('missing or future round timestamp denies new corrections', t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-invalid-')); const db=authorizedDatabase(openDatabase(dir));t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});seedTables(db);seedMenu(db);
-  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent')");
+  db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent')");
   let call;registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});const req={action:'correct',orderId:1,itemId:1,quantity:1,reason:'Mistake',requestId:'new'};
   assert.equal(call({},req).code,'window_expired');
   db.prepare("INSERT INTO preparation_rounds(order_id,request_id,number,actor_id,sent_at,table_id) VALUES(1,'future',1,1,?,1)").run(Date.now()+60000);db.exec("INSERT INTO preparation_tickets(round_id,destination,adapter) VALUES(1,'kitchen','simulated'); INSERT INTO preparation_ticket_items(ticket_id,item_id,quantity) VALUES(1,1,1)");
@@ -49,7 +49,7 @@ test('missing or future round timestamp denies new corrections', t => {
 });
 test('deadline reached before commit rolls back correction, notice and audit', t => {
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-window-commit-'));const db=authorizedDatabase(openDatabase(dir));t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});seedTables(db);seedMenu(db);
- db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent'); INSERT INTO preparation_rounds(order_id,request_id,number,actor_id,sent_at,table_id) VALUES(1,'send',1,1,1000000,1); INSERT INTO preparation_tickets(round_id,destination,adapter) VALUES(1,'kitchen','simulated'); INSERT INTO preparation_ticket_items(ticket_id,item_id,quantity) VALUES(1,1,1)");
+ db.exec("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership); INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'qebapa','Sample',10,1,'sent'); INSERT INTO preparation_rounds(order_id,request_id,number,actor_id,sent_at,table_id) VALUES(1,'send',1,1,1000000,1); INSERT INTO preparation_tickets(round_id,destination,adapter) VALUES(1,'kitchen','simulated'); INSERT INTO preparation_ticket_items(ticket_id,item_id,quantity) VALUES(1,1,1)");
  let call;registerOrderItems({handle:(_,f)=>call=f},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});
  const original=Date.now;let reads=0;Date.now=()=>++reads<4?1119999:1120000;t.after(()=>{Date.now=original;});
  const result=call({}, {action:'correct',orderId:1,itemId:1,quantity:1,reason:'Mistake',requestId:'deadline'});

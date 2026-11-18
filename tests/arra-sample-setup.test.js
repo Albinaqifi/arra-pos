@@ -53,6 +53,7 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
    }
    session.selectWaiter({id:staff.find(x=>x.name==='Waiter').id,pin:values[4]});
    db.prepare("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')").run();
+   db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(1,?,?,1,'open')").run(session.currentUserId(),session.currentUserId());
    let handler; const trusted = {};
    registerOrderItems({handle(_channel,fn){handler=fn;}}, event=>event===trusted, db, session);
    const productId = grilled[0].id;

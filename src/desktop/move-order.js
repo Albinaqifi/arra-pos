@@ -1,5 +1,6 @@
 const { untouchedOrder } = require('./untouched-order');
 const { hasPermissions } = require('./permissions');
+const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService } = require('./shifts');
 const CHANNEL = 'arra:move-order';
@@ -16,6 +17,7 @@ function registerMoveOrder(ipcMain, isAllowedSender, db, session) {
     try {
       db.exec('BEGIN IMMEDIATE');
       try {
+        if (!ownsOrder(db, session, request.orderId)) { db.exec('ROLLBACK'); return { ok:false, error:'Access denied' }; }
         const prior = db.prepare("SELECT order_id, context FROM application_audit WHERE action = 'move' AND entity_type = 'order' AND json_extract(context, '$.requestId') = ?").get(request.requestId);
         if (prior) {
           const context = JSON.parse(prior.context);

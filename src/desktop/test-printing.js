@@ -1,6 +1,7 @@
 // Sample-only print jobs. An attempt is persisted before handing anything to
 // Windows; a missing result after interruption is deliberately uncertain.
 const { hasPermissions } = require('./permissions');
+const { ownsOrder, canRecoverLegacyPrint } = require('./order-ownership');
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const token = s => typeof s === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(s);
 const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill', 'bill-A', 'bill-B'].includes(s);
@@ -46,9 +47,9 @@ function createBillJob(db, billId) {
 }
 
 function canPrintBill(db, session, billId) {
-  const bill = db.prepare(`SELECT o.status, p.id AS paymentId, COALESCE(c.account,p.account) AS account FROM bills b JOIN orders o ON o.id=b.order_id LEFT JOIN payments p ON p.bill_id=b.id LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE b.id=?`).get(billId);
+  const bill = db.prepare(`SELECT o.id AS orderId, o.status, p.id AS paymentId, COALESCE(c.account,p.account) AS account FROM bills b JOIN orders o ON o.id=b.order_id LEFT JOIN payments p ON p.bill_id=b.id LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE b.id=?`).get(billId);
   if (!bill) return false;
-  if (!bill.paymentId && bill.status === 'open' && hasPermissions(db,session,'orders.view','orders.change')) return true;
+  if (!bill.paymentId && bill.status === 'open' && hasPermissions(db,session,'orders.view','orders.change') && ownsOrder(db,session,bill.orderId)) return true;
   const id=session.currentUserId();
   if (!id || session.authenticatedUserId() !== id || !hasPermissions(db,session,'employees.view')) return false;
   const scope=db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(id)?.scope;
@@ -115,19 +116,19 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
           attempt = reserveAttempt(db,job.id,requestId,session.currentUserId());
         }
         if (req.action === 'retry') {
-          const job = db.prepare(`SELECT j.bill_id AS billId, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
-          if (!job || (billOnly && !job.billId) || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational)) throw Error('Job unavailable');
+          const job = db.prepare(`SELECT j.bill_id AS billId, (SELECT pr.order_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS orderId, (SELECT pr.actor_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS roundActor, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
+          if (!job || (billOnly && !job.billId) || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational || !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)))) throw Error('Job unavailable');
           attempt = reserveAttempt(db,req.jobId,'retry-' + req.requestId,session.currentUserId());
         }
         let noticeAttempt;
         if (req.action === 'retryNotice') {
-          const job=db.prepare('SELECT id,(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) AS lastAttempt FROM cancellation_notice_jobs j WHERE id=?').get(req.jobId);
-          if (!(operational || correctionAdmin) || !job || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
+          const job=db.prepare('SELECT j.id,c.order_id AS orderId,c.actor_id AS correctionActor,(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) AS lastAttempt FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id WHERE j.id=?').get(req.jobId);
+          if (!(operational || correctionAdmin) || !job || (!correctionAdmin && !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.correctionActor))) || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
           noticeAttempt=reserveCancellationAttempt(db,req.jobId,'retry-'+req.requestId,session.currentUserId());
         }
-        const notices = !billOnly && (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().map(j=>({...j,...JSON.parse(j.snapshot)})) : [];
+        const notices = !billOnly && (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,c.order_id AS orderId,c.actor_id AS correctionActor,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().filter(j=>correctionAdmin || ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.correctionActor)).map(({correctionActor,...j})=>({...j,...JSON.parse(j.snapshot)})) : [];
         const queues = db.prepare("SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination UNION ALL SELECT 'bill-' || account AS destination,queue,NULL AS beep FROM bill_printer_queues ORDER BY destination").all().filter(q => !billOnly || ['bill-A','bill-B'].includes(q.destination));
-        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,COALESCE(a.queue,'') AS queue,a.started_at AS startedAt,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : !billOnly && operational);
+        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.order_id AS orderId,pr.actor_id AS roundActor,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,COALESCE(a.queue,'') AS queue,a.started_at AS startedAt,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : !billOnly && operational && (ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.roundActor))).map(({roundActor,...j})=>j);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
         dispatchCancellation(db,adapter,noticeAttempt);

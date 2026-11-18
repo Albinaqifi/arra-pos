@@ -18,6 +18,7 @@ function setup(t) {
   const db = authorizedDatabase(openDatabase(dir));
   seedTables(db);
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open'); INSERT INTO bills (id,order_id,actor_id,generated_at,total,fingerprint) VALUES (1,1,1,1,735,'snapshot');");
+  db.exec("INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders");
   let call;
   registerPayments({ handle(_channel, fn) { call = fn; } }, () => true, db, { currentUserId: () => 1, authenticatedUserId: () => 1 });
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
@@ -89,6 +90,7 @@ test('failed simulated preparation printing does not prevent payment or erase hi
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   seedTables(db); seedMenu(db);
   db.exec("INSERT INTO orders (id,table_id,opened_at,status) VALUES (1,1,1,'open')");
+  db.exec("INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders");
   const session = { currentUserId: () => 1, authenticatedUserId: () => 1 }, handlers = {};
   const ipc = { handle(channel, callback) { handlers[channel] = callback; } };
   for (const register of [registerOrderItems, registerPrintJobs, registerBills, registerPayments]) register(ipc, () => true, db, session);

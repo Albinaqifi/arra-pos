@@ -4,6 +4,22 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+test('inaccessible occupied tables show neutral denial in English and Albanian without item details', async () => {
+  const api = { getTables: async () => ({ ok: true, data: [{ id: 1, area: 'Inside', orderId: null, openedAt: null, occupied: true }] }), openOrder: async () => ({ ok: false, code: 'table_unavailable' }) };
+  class Component { setState(update) { Object.assign(this.state, typeof update === 'function' ? update(this.state) : update); } }
+  const context = { React: { Component, createElement() {} }, ReactDOM: { createRoot() { return { render() {} }; } }, document: { getElementById() {} }, window: { arra: api }, setInterval() {}, clearInterval() {}, setTimeout() {}, clearTimeout() {} };
+  vm.runInNewContext(require('./support/renderer-bundle')() + '\nthis.Demo = WaiterDemo;', context);
+  const app = new context.Demo(); app.componentDidMount(); await app.tableOrders.loadTables();
+  for (const [language, cardText, denied] of [['en', 'Table unavailable', 'This table is unavailable for your account. Ask a Combined administrator for help.'], ['sq', 'Tavolina nuk është e disponueshme', 'Kjo tavolinë nuk është e disponueshme për llogarinë tuaj. Kërkoni ndihmë nga administratori Combined.']]) {
+    app.settings.state.language = language;
+    const card = app.tableOrders.tableView({ language }).sections[0].tables[0];
+    assert.equal(card.taken, true); assert.equal(card.count, cardText); assert.equal(card.total, '—'); assert.equal(card.mins, '');
+    assert.ok(card.aria.includes(cardText)); assert.doesNotMatch(card.aria, /open to view|hapeni për të parë/i);
+    await app.tableOrders.openTable(1); assert.equal(app.shell.state.toast.msg, denied); assert.equal(app.tableOrders.state.screen, 'tables');
+    assert.doesNotMatch(app.shell.state.toast.msg, /older order|më të vjetër/i);
+  }
+});
+
 test('desktop opens and restores an order and reports an open failure', async () => {
   let saved = null, fail = false, failItems = false;
   const api = {

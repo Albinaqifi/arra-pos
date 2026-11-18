@@ -17,7 +17,7 @@ test('real payments and transfer reconcile across two handovers and a day bounda
     INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change'),(4,'employees.view'),(5,'employees.view');
     INSERT INTO transfer_managers VALUES(3);
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'one'),(2,2,1,1,200,'two'),(3,3,1,1,300,'three');`);
   function register() {
     handlers = {};
@@ -73,7 +73,7 @@ test('day close followed by a carried payment and stale handover keeps the new d
     INSERT INTO financial_scopes VALUES(1,'combined'),(2,'waiter');
     INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change');
     INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'one'),(2,2,1,1,200,'two');`);
   let actor=1,handlers={}; const session={currentUserId:()=>actor,authenticatedUserId:()=>actor};
   for(const register of [registerBusinessDays,registerPayments])register({handle:(name,fn)=>handlers[name]=fn},()=>true,db,session);
@@ -99,7 +99,7 @@ test('competing payment and close requests reconcile against their original targ
       INSERT INTO financial_scopes VALUES(1,'combined'),(2,'waiter');
       INSERT INTO user_permissions VALUES(1,'business_days.close'),(2,'orders.view'),(2,'orders.change');
       INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample');
-      INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+      INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'); INSERT INTO order_waiter_ownership SELECT id,2,2,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);
       INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,100,'one'),(2,2,1,1,200,'two');`);
     let handlers={},actor=1;const session={currentUserId:()=>actor,authenticatedUserId:()=>actor};
     for(const register of [registerBusinessDays,registerPayments])register({handle:(name,fn)=>handlers[name]=fn},()=>true,db,session);

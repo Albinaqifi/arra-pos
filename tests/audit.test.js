@@ -55,7 +55,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-audit-upgrade-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   let db = openDatabase(dir); seedTables(db); seedMenu(db);
-  db.exec(`DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
+  db.exec(`DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TRIGGER IF EXISTS billed_item_insert; DROP TRIGGER IF EXISTS billed_item_update; DROP TRIGGER IF EXISTS billed_item_delete; DROP TRIGGER IF EXISTS billed_correction; DROP TRIGGER IF EXISTS billed_order_move; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE IF EXISTS payments; DROP TABLE IF EXISTS bill_lines; DROP TABLE IF EXISTS bills; INSERT INTO local_users (id,username,salt,password_hash) VALUES (1,'sample',x'00',x'00');
     INSERT INTO user_permissions VALUES (1,'orders.view'),(1,'orders.change');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES (1,1,100,'open');
     INSERT INTO order_items (id,order_id,product_id,name,unit_price,quantity,status,note)
@@ -69,6 +69,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
   db.close(); db = openDatabase(dir);
   assert.equal(db.prepare('SELECT count(*) AS n FROM financial_scopes').get().n, 0);
   db.exec("INSERT INTO financial_scopes SELECT id, 'waiter' FROM local_users");
+  require('./support/assign-legacy-order').assignLegacyOrder(db, 1);
   let handler; const trusted = {};
   registerOrderItems({handle: (_, fn) => handler = fn}, e => e === trusted, db, {currentUserId: () => 1, authenticatedUserId: () => 1});
   db.exec("CREATE TRIGGER fail_audit BEFORE INSERT ON application_audit BEGIN SELECT RAISE(ABORT, 'failure'); END;");
@@ -77,7 +78,7 @@ test('removing pre-audit items retains modifier snapshots on both removal paths'
   db.exec('DROP TRIGGER fail_audit');
   assert.equal(handler(trusted, {action:'remove',orderId:1,itemId:7}).ok, true);
   assert.equal(handler(trusted, {action:'decrement',orderId:1,itemId:8}).ok, true);
-  const events = db.prepare('SELECT context FROM application_audit ORDER BY id').all().map(row => JSON.parse(row.context));
+  const events = db.prepare("SELECT context FROM application_audit WHERE action<>'assign_legacy_waiter' ORDER BY id").all().map(row => JSON.parse(row.context));
   assert.deepEqual(events[0].modifiers, [
     {groupName:'Size', optionName:'Large', adjustment:30},
     {groupName:'Extra', optionName:'Sauce', adjustment:10}

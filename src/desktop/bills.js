@@ -1,5 +1,6 @@
 const { createHash } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
+const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService } = require('./shifts');
 const CHANNEL = 'arra:bill';
@@ -37,6 +38,7 @@ function registerBills(ipcMain, isAllowedSender, db, session) {
     try {
       db.exec('BEGIN IMMEDIATE');
       try {
+        if (!ownsOrder(db, session, request.orderId)) { db.exec('ROLLBACK'); return { ok:false, error:'Access denied' }; }
         const existing = db.prepare('SELECT id, fingerprint FROM bills WHERE order_id=?').get(request.orderId);
         if (existing) {
           if (request.action === 'generate' && existing.fingerprint !== request.fingerprint) throw Error('Bill already generated');

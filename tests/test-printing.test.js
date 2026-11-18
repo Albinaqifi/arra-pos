@@ -12,7 +12,7 @@ const printing = require('../src/desktop/test-printing');
 test('sample test jobs route only the new round, persist attempts and preserve bills and payments', async t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-print-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO user_permissions VALUES(1,'employees.change')");
-  db.exec("UPDATE menu_products SET destination='bar' WHERE id='espresso'; INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open')");
+  db.exec("UPDATE menu_products SET destination='bar' WHERE id='espresso'; INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   const event={}, session={currentUserId:()=>1,authenticatedUserId:()=>1}; let orders, jobs, bills;
   const calls=[]; let resolvePrint;
   const adapter=attempt=>{ calls.push(attempt); return new Promise(resolve=>{resolvePrint=resolve;}); };
@@ -52,7 +52,7 @@ test('sample test jobs route only the new round, persist attempts and preserve b
 test('direct requests enforce access, acknowledgement and safe idempotent retries after failure', async t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-retry-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open')");
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership)");
   const event={},session={currentUserId:()=>1,authenticatedUserId:()=>1}; let orders,jobs,disabled;
   let calls=0; const adapter=async()=>{calls++; return 'failed';};
   registerOrderItems({handle:(_,fn)=>orders=fn},e=>e===event,db,session,{...printing,adapter});
@@ -104,7 +104,7 @@ test('paid bill printing follows effective financial scope and cannot mutate pay
 test('later rounds contain only newly sent items and preserve modifier snapshots', async t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-round-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   const db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO modifier_groups(id,product_id,name,required,active) VALUES('size','qebapa','Size',1,1); INSERT INTO modifier_options(id,group_id,name,adjustment,active) VALUES('large','size','Large',10,1)");
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership); INSERT INTO modifier_groups(id,product_id,name,required,active) VALUES('size','qebapa','Size',1,1); INSERT INTO modifier_options(id,group_id,name,adjustment,active) VALUES('large','size','Large',10,1)");
   let orders; const session={currentUserId:()=>1,authenticatedUserId:()=>1};
   const snapshots=[]; const adapter=async a=>{snapshots.push(a.snapshot);return 'accepted';};
   registerOrderItems({handle:(_,fn)=>orders=fn},()=>true,db,session,{...printing,adapter});

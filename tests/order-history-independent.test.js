@@ -17,7 +17,7 @@ test('history preserves simulated failed, uncertain and successful print attempt
   const db = authorizedDatabase(openDatabase(dir));
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
   seedTables(db); seedMenu(db);
-  db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')");
+  db.exec("INSERT INTO user_permissions VALUES(1,'employees.view'); INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open'); INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open')");
   const event = {}, handlers = {}, ipc = { handle: (name, fn) => { handlers[name] = fn; } };
   const session = { currentUserId: () => 1, authenticatedUserId: () => 1 };
   for (const register of [registerOrderItems, registerPrintJobs, registerOrderHistory]) register(ipc, e => e === event, db, session);
