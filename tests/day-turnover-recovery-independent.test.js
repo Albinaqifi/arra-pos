@@ -127,3 +127,19 @@ test('repeated retries for two failed days print the correct saved day without c
   assert.equal(db.prepare('SELECT count(*) n FROM business_days').get().n, 3);
   assert.equal(db.prepare('SELECT count(*) n FROM business_days WHERE closed_at IS NULL').get().n, 1);
 });
+test('retry status reconciles only the authenticated actor, day and scope',async t=>{
+ let finish;const {db,call,setActor,day}=fixture(t,job=>job.scope==='A'?new Promise(resolve=>{finish=resolve}):'accepted');const tick=()=>new Promise(resolve=>setImmediate(resolve));
+ db.exec("INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'other',x'01',x'01'); INSERT INTO user_permissions VALUES(2,'business_days.close'); INSERT INTO financial_scopes VALUES(2,'combined');");
+ assert.equal(call({action:'close',dayId:day}).ok,true);await tick();
+ assert.equal(call({action:'retry',dayId:day,scope:'A',requestId:'status-token',checked:true}).ok,true);await tick();
+ let status=call({action:'retryStatus',dayId:day,scope:'A',requestId:'status-token'});assert.equal(status.ok,true);assert.equal(status.data.found,true);assert.equal(status.data.result,'pending');
+ assert.equal(call({action:'retryStatus',dayId:day,requestId:'status-token'}).data.found,false);
+ assert.equal(call({action:'retryStatus',dayId:day+1,scope:'A',requestId:'status-token'}).data.found,false);
+ setActor(2);assert.equal(call({action:'retryStatus',dayId:day,scope:'A',requestId:'status-token'}).data.found,false);setActor(1);
+ finish('accepted');await tick();status=call({action:'retryStatus',dayId:day,scope:'A',requestId:'status-token'});assert.equal(status.data.result,'accepted');
+});
+test('an idempotent retry replay reports that no new print was sent',async t=>{
+ let sends=0;const {call,day}=fixture(t,()=>{sends++;return 'accepted'});const tick=()=>new Promise(resolve=>setImmediate(resolve));
+ assert.equal(call({action:'close',dayId:day}).ok,true);await tick();let req={action:'retry',dayId:day,requestId:'same-request',checked:true};
+ assert.equal(call(req).data.replayed,false);await tick();assert.equal(sends,2);const repeated=call(req);assert.equal(repeated.ok,true);assert.equal(repeated.data.replayed,true);await tick();assert.equal(sends,2);
+});

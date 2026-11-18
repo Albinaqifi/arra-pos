@@ -126,15 +126,23 @@ export class BusinessDays extends React.Component {
     if (this.state.busy || (!checked && !window.confirm(financeText(this.props.language, 'Have you checked the printer and paper? Retrying may print a duplicate.')))) return;
     const sequence=++this.sequence;
     const key=identityKey(this.state.data)+':'+id+':'+(scope || 'own');
-    const requestId=retryTokens.get(key) || crypto.randomUUID();
-    retryTokens.set(key,requestId);
+    let requestId=retryTokens.get(key);
     this.setState({busy:true,error:'',success:'',successDay:null});
     try {
+      if(requestId) {
+        const status=await window.arra.businessDays({action:'retryStatus',dayId:id,requestId,...(scope ? {scope} : {})});
+        if(sequence!==this.sequence) return;
+        if(!status.ok || typeof status.data?.found!=='boolean' || (status.data.found && !['pending','accepted','failed','uncertain'].includes(status.data.result))) { this.setState({busy:false,error:'Could not check the previous print attempt. Refresh and check the printer before trying again.'}); return; }
+        if(status.data.found && status.data.result==='pending') { this.setState({busy:false,error:'The report is still being sent. Please wait.'}); this.pollReports(); return; }
+        if(status.data.found) { retryTokens.delete(key); requestId=null; }
+      }
+      if(!requestId) requestId=crypto.randomUUID();
+      retryTokens.set(key,requestId);
       const r=await window.arra.businessDays({action:'retry',dayId:id,requestId,checked:true,...(scope ? {scope} : {})});
       if(sequence!==this.sequence) return;
       if (!r.ok) { this.setState({busy:false,error:'Print retry unavailable. Check the printer and refresh before trying again.'}); return; }
       retryTokens.delete(key);
-      this.setState({busy:false,success:'',lastRetry:{id,scope:scope || null}});
+      this.setState({busy:false,success:r.data?.replayed ? 'The previous print request was already received. Check the paper before printing again.' : '',lastRetry:{id,scope:scope || null}});
       await this.load(); this.pollReports();
     } catch (_) { if(sequence===this.sequence) this.setState({busy:false,error:'Print retry result unknown. Check the printer and refresh before trying again.'}); }
   }
