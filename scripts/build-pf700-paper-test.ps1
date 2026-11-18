@@ -1,4 +1,9 @@
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\build\sample-installer'), [switch]$CheckReplyOnly)
+[CmdletBinding(DefaultParameterSetName = 'Paper')]
+param(
+    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\build\sample-installer'),
+    [Parameter(ParameterSetName = 'Reply')][switch]$CheckReplyOnly,
+    [Parameter(ParameterSetName = 'Vat')][switch]$CheckVatRates
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $repo = Split-Path -Parent $PSScriptRoot
@@ -7,7 +12,10 @@ $sources = @(
     'scripts/pf700-paper-test/paper-exchange.ps1',
     'src/desktop/pf700-frame.js'
 )
-if ($CheckReplyOnly) {
+if ($CheckVatRates) {
+    $filename = 'Arra-PF700-Check-VAT.zip'
+    $sources += 'scripts/pf700-paper-test/PF700-Check-VAT.cmd', 'scripts/pf700-paper-test/check-vat.js'
+} elseif ($CheckReplyOnly) {
     $filename = 'Arra-PF700-Check-Reply.zip'
     $sources += 'scripts/pf700-paper-test/PF700-Check-Reply.cmd', 'scripts/pf700-paper-test/check-reply.js'
 } else {

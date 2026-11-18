@@ -15,8 +15,17 @@ function Read-Pf700PaperReply($Reader) {
 function Invoke-Pf700PaperExchange($Port, $Requests) {
     $printAttempted = $false
     try {
+        # The VAT check and receipt checks have distinct, fixed command sequences.
+        if ($Requests.Contains('vatRates')) {
+            if ($Requests.Count -ne 2 -or !$Requests.Contains('status')) {
+                throw [IO.InvalidDataException]::new()
+            }
+            $operations = @('status', 'vatRates')
+        } else {
+            $operations = @('status', 'document', 'print')
+        }
         $Port.Open()
-        foreach ($name in @('status', 'document', 'print')) {
+        foreach ($name in $operations) {
             if (!$Requests.Contains($name)) { return }
             # JS only releases the next operation after checking the previous reply.
             # EOF, including after a failed preflight or a closed launcher, stops here.

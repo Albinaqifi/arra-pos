@@ -5,6 +5,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { runSequence, runDiagnostic } = require('../scripts/pf700-paper-test/paper-test');
 const { runReplyCheck, runReplySequence } = require('../scripts/pf700-paper-test/check-reply');
+const { runVatCheck, runVatSequence } = require('../scripts/pf700-paper-test/check-vat');
 
 const baseline = Buffer.from('888080e1809a', 'hex');
 const closed = Buffer.from('0,0000,000000000');
@@ -21,6 +22,93 @@ function reply(step, { data, status = baseline, sequence = step.sequence, comman
   const bcc = sum.toString(16).padStart(4, '0').split('').map(digit => 0x30 + parseInt(digit, 16));
   return Buffer.from([1, ...body, ...bcc, 3]);
 }
+
+test('VAT check rehearses offline and accepts only its exact hardware option', async () => {
+  let calls = 0;
+  const live = () => { calls++; return 'sample result'; };
+  assert.match(await runVatCheck([], live), /Offline.*simulated/);
+  for (const args of [['--read'], ['--READ-VAT-RATES'], ['--read-vat-rates', 'COM3'], ['--check-reply'], ['--print-diagnostic-slip']]) {
+    await assert.rejects(runVatCheck(args, live), /Use no arguments/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(await runVatCheck(['--read-vat-rates'], live), 'sample result');
+  assert.equal(calls, 1);
+});
+
+test('VAT check sends only status X and one empty command 97 and labels rates in printer order', async () => {
+  const requests = [];
+  const result = await runVatSequence(0x20, step => {
+    requests.push(step.request.toString('hex'));
+    return reply(step, step.name === 'vatRates' ? { data: Buffer.from(' 18.0,05 , 010.00 ,0') } : {});
+  });
+  assert.deepEqual(requests, ['0125204a580530303e3c03', '012421610530303a3b03']);
+  assert.match(result, /A = 18\.0%, B = 05%, V = 010\.00%, G = 0%/);
+  assert.match(result, /Group V \(third group\) is configured at 10%\./);
+});
+
+test('VAT check compares literal percentages only in the third field', async () => {
+  for (const third of ['10', '10.0', '10.00', '0', '0.10', '1.00', '9.99', '10.01', '99.00']) {
+    const sent = [];
+    const result = await runVatSequence(0x7f, step => {
+      sent.push([step.sequence, step.command]);
+      return reply(step, step.name === 'vatRates' ? { data: Buffer.from(`10,5,${third},10`) } : {});
+    });
+    assert.deepEqual(sent, [[0x7f, 74], [0x20, 97]]);
+    if (Number(third) === 10) {
+      assert.match(result, /Group V \(third group\) is configured at 10%\./);
+    } else {
+      assert.ok(result.endsWith(`Group V (third group) is configured at ${third}%. The expected rate is 10%.`));
+    }
+  }
+});
+
+test('unrecognized VAT data cannot confirm any group and only exposes short numeric values or a masked layout', async () => {
+  for (const [data, evidence] of [
+    ['', '(empty)'], ['18,5,10', '##,#,##'], ['18,5,10,0,0', '##,#,##,#,#'],
+    ['18,DT,10,0', '18,??,10,0'], ['18,,10,0', '18,,10,0'], ['100,5,10,0', '100,5,10,0'],
+    ['99.01,5,10,0', '99.01,5,10,0'], ['1800,500,1000,0', '1800,500,1000,0'],
+    ['18,5,10.000,0', '18,5,10.000,0'], ['18,5,1e1,0', '18,5,#?#,0'],
+    ['18,5,10%,0', '18,5,##%,0'], ['18,5,1 0,0', '18,5,#_#,0'],
+    ['18,5,-10,0', '18,5,-##,0'], ['18,5,10.,0', '18,5,10.,0'],
+    ['ABC,5,10,12345678', '???,5,10,########'],
+    [Buffer.from([0x31, 0x38, 0x2c, 0x35, 0x2c, 0xb1, 0xb0, 0x2c, 0x30]), '18,5,??,0']
+  ]) {
+    const sent = [];
+    await assert.rejects(runVatSequence(0x20, step => {
+      sent.push(step.name);
+      return reply(step, step.name === 'vatRates' ? { data: Buffer.from(data) } : {});
+    }), error => {
+      assert.ok(error.message.includes('Group V is unconfirmed.'));
+      assert.ok(error.message.endsWith(' = ' + evidence), error.message);
+      return true;
+    });
+    assert.deepEqual(sent, ['status', 'vatRates']);
+  }
+});
+
+test('rejected, stale, corrupt, missing or error-bearing responses stop the VAT check without retry', async () => {
+  const unsafe = Buffer.from(baseline);
+  unsafe[0] |= 2;
+  for (const phase of ['status', 'vatRates']) {
+    for (const failure of [
+      () => { throw new Error('Timeout'); },
+      () => Buffer.from([0x15]),
+      () => Buffer.alloc(0),
+      (step, data) => reply(step, { data, sequence: step.sequence + 1 }),
+      (step, data) => reply(step, { data, command: 0x53 }),
+      (step, data) => reply(step, { data, status: unsafe }),
+      (step, data) => { const frame = reply(step, { data }); frame[frame.length - 3] ^= 1; return frame; }
+    ]) {
+      const sent = [];
+      await assert.rejects(runVatSequence(0x20, step => {
+        sent.push(step.command);
+        const data = step.name === 'vatRates' ? Buffer.from('18,5,10,0') : baseline;
+        return step.name === phase ? failure(step, data) : reply(step, { data });
+      }));
+      assert.deepEqual(sent, phase === 'status' ? [74] : [74, 97]);
+    }
+  }
+});
 
 test('reply check defaults to simulation and accepts only its explicit read option', async () => {
   let calls = 0;
@@ -262,6 +350,14 @@ Check-Fake ("status" + [Environment]::NewLine + "print") '74'
 $requests.Remove('print')
 Check-Fake ("status" + [Environment]::NewLine + "document" + [Environment]::NewLine + "print") '74,76'
 if ([Console]::ReadLine() -cne 'print') { throw 'Read-only plan waited for an extra operation.' }
+$requests = @{status = @(74); vatRates = @(97)}
+Check-Fake ("status" + [Environment]::NewLine + "vatRates" + [Environment]::NewLine + "print") '74,97'
+if ([Console]::ReadLine() -cne 'print') { throw 'VAT plan waited for an extra operation.' }
+Check-Fake ("status" + [Environment]::NewLine + "print") '74'
+$requests.Add('print', @(71))
+$port = [FakePort]::new()
+Invoke-Pf700PaperExchange $port $requests
+if ($port.Opened -ne 0 -or $port.Written.Count -ne 0) { throw 'Accepted mixed VAT/print plan.' }
 exit 0`;
   execFileSync(path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],

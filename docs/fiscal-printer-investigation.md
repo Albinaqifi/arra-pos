@@ -10,6 +10,8 @@ The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The ow
 
 The resulting diagnostic slip identifies the printer as **SYNERGY FP-700CRX**, with firmware **1.00MK** dated **23 October 2014**, and lists **RS232 at 9600 bps**. The slip does not identify the tax group assigned to coffee in the restaurant's menu.
 
+For a VAT-registered restaurant serving a plain espresso for consumption on the premises, Article 30-а(1) sets the VAT rate at 10%. Article 26 assigns 10% to fiscal group **В** (Cyrillic Ve). The printer's current settings still need an on-site reading. [VAT Act](https://ujp.gov.mk/files/attachment/0000/0986/______________________________________.____________267____30.12.2025.pdf#page=19) · [Fiscal equipment rulebook](https://www.ujp.gov.mk/files/attachment/0000/1323/___________________________14_03_2022____________60-22.pdf#page=13)
+
 In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
 
 The Windows sample package from version 1.0.2 includes `check-pf700.ps1` alongside `electron.exe`. Calling it without arguments runs the offline check. A later, operator-authorized hardware session requires the full `-ReadDeviceStatus` option. The equivalent source entry is `node src/desktop/pf700-status-cli.js`, with `--read-device-status` reserved for that session.
@@ -25,6 +27,14 @@ The tool checks the device status and whether a receipt is open, then requests t
 The original tool stopped before printing with `Invalid receipt-state reply`. The owner then captured the masked 17-byte command-76 reply `0,####,+#########`. The first field indicated a closed receipt at the time of the check. The sign on this printer occupies a separate byte before nine digits. Paper test v2 recognizes that format and the previous nine-byte amount field. Each attempt checks the current document state again.
 
 For this case, build `scripts/build-pf700-paper-test.ps1 -CheckReplyOnly`, extract `Arra-PF700-Check-Reply.zip` on the POS, and open `PF700-Check-Reply.cmd`. It uses the installed 1.0.3 runtime to request only status and receipt state. Share the single `Reply format:` line so the layout can be compared with the manual. The tool masks amounts and other field values in its output.
+
+### Read the programmed VAT rates
+
+Accent documents command 97 as a read of the four current tax rates in **А, Б, В, Г** order. The third value corresponds to **В** (Ve). The reply reports configured percentages. It has no separate field indicating which groups are enabled. [Accent PF550/PF700 protocol v1.40, command 97](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
+
+Build the add-on with `scripts/build-pf700-paper-test.ps1 -CheckVatRates`. On the Windows 10 POS with the offline Arra 1.0.3 runtime installed, extract `Arra-PF700-Check-VAT.zip` and open `PF700-Check-VAT.cmd` when the printer is idle. The checker reads status and then the rates on COM3. Read the line for **group V** on screen. An unexpected reply leaves the configured percentage unconfirmed.
+
+### Fiscal sales and daily reports
 
 The existing payment flow records payment and completes the order before an ordinary non-fiscal print attempt. S-084 records an internal summary for an already closed shared day. Neither registers a fiscal sale nor requests a fiscal daily report. The printer's fiscal period may differ from the shared business day, and a later B-to-A correction does not itself create a fiscal receipt. Do not assume these totals match or send an ordinary Windows print job as a fiscal command.
 
