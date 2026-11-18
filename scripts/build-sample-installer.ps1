@@ -1,4 +1,4 @@
-param([string]$OutputName = '')
+param([string]$OutputName = '', [switch]$OfflineTestOnly)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Build on Windows.' }
 $repo = Split-Path -Parent $PSScriptRoot
@@ -30,10 +30,12 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-arra.ps1') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\check-pf700.ps1') -Destination $payload
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath (Join-Path $source 'payload.zip') -CompressionLevel Optimal
-    Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\install.*') -Destination $source
+    if (!$OfflineTestOnly) { Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\install.*') -Destination $source }
     Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\test-arra.*') -Destination $source
     Set-Content -LiteralPath (Join-Path $source 'version.txt') -Value $version -Encoding ASCII
-    if (!$OutputName) { $OutputName = "Arra-POS-Sample-$version-Setup.zip" }
+    if (!$OutputName) {
+        $OutputName = if ($OfflineTestOnly) { "Arra-POS-$version-Offline-Test.zip" } else { "Arra-POS-Sample-$version-Setup.zip" }
+    }
     if ($OutputName -notmatch '^[a-zA-Z0-9._-]+\.zip$') { throw 'Invalid output name.' }
     $installer = Join-Path $output $OutputName
     if (Test-Path -LiteralPath $installer) { throw 'Installer output already exists; choose another name.' }

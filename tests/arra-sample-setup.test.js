@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const { openDatabase } = require('../src/desktop/database');
 const { createSession } = require('../src/desktop/session');
 const { registerOrderItems } = require('../src/desktop/order-items');
+const { registerTables } = require('../src/desktop/tables');
 
 test('Arra setup creates scoped identities, menu choices, and preserves existing data', {skip:process.platform !== 'win32'}, () => {
  const parent = fs.mkdtempSync(path.join(os.tmpdir(),'arra-menu-setup-'));
@@ -52,6 +53,15 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
     for (const group of groups) assert.equal(db.prepare('SELECT COUNT(*) AS n FROM modifier_options WHERE group_id=? AND adjustment=0').get(group.id).n,5);
    }
    session.selectWaiter({id:staff.find(x=>x.name==='Waiter').id,pin:values[4]});
+   let listTables;
+   registerTables({handle(_channel,fn){listTables=fn;}}, () => true, db, session);
+   const floor = listTables({}, {});
+   assert.equal(floor.ok, true);
+   assert.equal(floor.data.length, 16);
+   assert.ok(floor.data.every(table => table.occupied === 0 && table.orderId === null));
+   for (const table of ['orders','order_items','bills','payments','preparation_tickets','print_jobs','test_print_jobs','account_a_closes']) {
+    assert.equal(db.prepare('SELECT count(*) AS n FROM ' + table).get().n, 0, table);
+   }
    db.prepare("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')").run();
    db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(1,?,?,1,'open')").run(session.currentUserId(),session.currentUserId());
    let handler; const trusted = {};

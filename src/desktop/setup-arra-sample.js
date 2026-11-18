@@ -38,7 +38,7 @@ try {
  } catch (error) { db.exec('ROLLBACK'); throw error; }
  seedTables(db); seedArraMenu(db);
  fs.writeFileSync(path.join(directory,'ARRA-SETUP-COMPLETE'), 'Arra sample setup complete.\n', {flag:'wx'});
- console.log('Arra sample setup complete. Open Arra POS Sample from the Start menu.');
+ console.log('Arra setup complete. The menu is ready and all tables are available.');
 } catch (_) {
  console.error('Setup failed. Existing data was not overwritten. If a new incomplete directory was created, move it aside before retrying.'); process.exitCode = 1;
 } finally { if (Array.isArray(values)) values.fill(''); if (db) db.close(); }
