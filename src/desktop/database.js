@@ -359,6 +359,9 @@ const migrations = [
     CREATE TRIGGER wallet_requests_no_replace BEFORE INSERT ON wallet_requests WHEN EXISTS(SELECT 1 FROM wallet_requests WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
     CREATE TRIGGER wallet_prepared_no_replace BEFORE INSERT ON wallet_prepared WHEN EXISTS(SELECT 1 FROM wallet_prepared WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;
     CREATE TRIGGER wallet_cancellations_no_replace BEFORE INSERT ON wallet_cancellations WHEN EXISTS(SELECT 1 FROM wallet_cancellations WHERE request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Wallet history is retained'); END;` },
+  { version: 42, sql: `CREATE TABLE verified_waiter_pins (
+    user_id INTEGER PRIMARY KEY REFERENCES local_users(id)
+  ) STRICT;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

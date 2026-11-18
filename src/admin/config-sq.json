@@ -1,4 +1,8 @@
 {
+  "This PIN is already in use. Choose a different PIN.": "Ky PIN është tashmë në përdorim. Zgjidhni një PIN tjetër.",
+  "Combined must reset this staff PIN before activation.": "Combined duhet të rivendosë PIN-in e këtij punonjësi para aktivizimit.",
+  "Deactivate this account before changing it to staff. Then reset its PIN and reactivate it.": "Çaktivizoni këtë llogari para se ta ndryshoni në punonjës. Pastaj rivendosni PIN-in dhe riaktivizojeni.",
+  "Combined must reset this staff PIN to verify it is unique. Inactive staff need this before activation.": "Combined duhet të rivendosë PIN-in e këtij punonjësi për të verifikuar se është unik. Punonjësit joaktivë kanë nevojë për këtë para aktivizimit.",
   "Areas and tables unavailable.": "Zonat dhe tavolinat nuk janë të disponueshme.",
   "Could not load areas and tables.": "Zonat dhe tavolinat nuk mund të ngarkohen.",
   "Enter an area name of 1 to 100 characters.": "Shkruani emrin e zonës me 1 deri në 100 karaktere.",

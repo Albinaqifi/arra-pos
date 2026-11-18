@@ -751,7 +751,9 @@ The [plan and design brief](optional-shifts-plan.md) applies to S-088–S-091. S
 
 ### S-093 — Protect waiter tables with individual PINs
 
-**Status:** Proposed. Check the scope against the one-session story rule and split into dependent slices if necessary. This is a planning ticket, not authorization to start implementation.
+**Status:** In progress, split into dependent slices after the scope check. The full goal and acceptance below remain outstanding until all slices are delivered and verified.
+
+**Delivery slices** — (1) Combined-authorized waiter PIN provisioning, reset and collision-safe transition, preserving the current entry flow; (2) trusted order ownership and legacy open-order transition across all relevant service operations, preserving administration and financial scopes; (3) PIN-only table entry, restricted Manager entry and safe handoff/recovery integration, with end-to-end offline and rendered verification. Each slice must be independently safe to deploy. Slice 2 depends on slice 1; slice 3 depends on slice 2. Existing orders must not be assigned from incomplete history. Slice 1 alone does not provide table protection.
 
 **Goal** — After the shared restaurant account signs in, show the table grid directly. A waiter taps a table, enters their individual PIN and continues the existing table workflow. There is no waiter account-selection or separate waiter login screen. Only the waiter who opened an order can access its open table; another waiter's PIN is denied. Add a **Manager** button next to the logo at the top right that prompts for the existing transfer manager's PIN and opens the current restricted transfer flow. Preserve the separate administrator sign-in path.
 
