@@ -1,6 +1,6 @@
 # Development backlog
 
-### S-085 — Print Account A bills and total without closing
+### S-086 — Print Account A bills and total without closing
 
 **Goal:** Add a separate option in Financial information to print a list of Account A paid bills, each bill's value and the sum, without closing a day or sending a fiscal report. The owner can choose a local printer independently of the fiscal printer.
 
