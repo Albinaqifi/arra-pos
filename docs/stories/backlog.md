@@ -6,13 +6,13 @@
 
 **Acceptance:**
 
-- Offer an Account A print option with a business-day selector including the current day and previous days. Show the selected day and preview each paid bill, its value and the total before printing; show a useful empty state. The printout contains the same bill values and sum and is clearly identified as non-fiscal.
+- Offer an Account A print option with a business-day selector including the current day and previous days. Show the selected day and preview each paid bill, its value and the total before printing, followed by cash and card totals; show a useful empty state. The printout contains the same bill values, sum and cash/card breakdown beneath the sum, and is clearly identified as non-fiscal.
 - Use effective Account A: include card and Account A cash, count a B-to-A corrected payment once, and exclude unpaid bills and Account B payments. Enforce the existing financial scope in trusted code for direct requests, preventing access to unauthorized records.
 - Let an authorized administrator configure a persistent local Windows printer queue for this output independently of fiscal, Account A closing and bill-printer settings. It may select the same physical printer. Preserve existing settings and data.
 - Printing must not close any shared or fiscal day, create a fiscal report, send fiscal commands, change payments or create a second payment. Give a useful failed or uncertain outcome and require a paper check before retrying an uncertain print; queue acceptance is not proof of paper.
 - Work offline, in English and Albanian, with keyboard access. Preserve renderer ownership and existing financial access, identity cleanup and request lifetimes.
 
-**Checks/review:** Verify selected open and closed days, empty days, cash, card and corrected payments; totals against recorded bills; scoped direct requests; separate printer settings, failure and uncertain retry; no day-close, fiscal or payment mutation; upgrade and restart. Record automated, offline desktop and physical-printer results separately.
+**Checks/review:** Verify selected open and closed days, empty days, cash, card and corrected payments; the overall sum and cash/card breakdown against recorded bills; scoped direct requests; separate printer settings, failure and uncertain retry; no day-close, fiscal or payment mutation; upgrade and restart. Record automated, offline desktop and physical-printer results separately.
 
 ### S-084 — Close Account A after the shared business day
 
