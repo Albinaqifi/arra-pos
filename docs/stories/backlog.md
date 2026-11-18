@@ -48,7 +48,7 @@
 
 **Owner direction:** Days closed before this feature exists are test data and do not need separate Account A closing. This separate workflow is Combined-only and must not change Owner A's existing financial information or day-close access. The Account A closing printer can be the same physical printer used for A bills and must have a configurable setting. This story does not authorize fiscal output.
 
-**Owner clarification, 2026-11-18:** The intended end result is an actual fiscal daily report for Account A using the pictured Synergy PF700; this supersedes the earlier exclusion of fiscal output. Prepare integration for this device; the existing S-084 report is an internal, non-fiscal summary and does not satisfy that fiscal goal. Fiscal receipt registration, the device's fiscal-day boundary, corrections and uncertain-result recovery must be designed and verified before enabling real fiscal output. The physical printer is not currently available for testing.
+**Owner clarification, 2026-11-18:** The intended end result is an actual fiscal daily report for Account A using the pictured Synergy PF700; this supersedes the earlier exclusion of fiscal output. Prepare integration for this device; the existing S-084 report is an internal, non-fiscal summary and does not satisfy that fiscal goal. Fiscal receipt registration, the device's fiscal-day boundary, corrections and uncertain-result recovery must be designed and verified before enabling real fiscal output. The printer is now connected to COM3 on the Windows 10 POS. The owner requested offline preparation only for this step.
 
 **Acceptance:**
 

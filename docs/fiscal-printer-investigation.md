@@ -2,7 +2,17 @@
 
 ## S-084 update: Synergy PF700, 2026-11-18
 
-The owner identified the fiscal printer in a photograph as a Synergy PF700 and clarified that S-084's intended end result is an actual Account A fiscal daily report. The device is not available for testing. Accent's [download page](https://www.accent.mk/%D0%BF%D0%BE%D0%B4%D0%B4%D1%80%D1%88%D0%BA%D0%B0/?lang=en) lists PF550/PF700 control codes, example input files and Windows communication tools; its [device page](https://synergy.com.mk/?page_id=47) lists network, USB and serial connections. These listings do not establish the connection, firmware or protocol configuration of this particular device.
+The owner identified the fiscal printer in a photograph as a Synergy PF700 and clarified that S-084's intended end result is an actual Account A fiscal daily report. The printer is on the POS PC, and the owner requested preparation without contacting it. Accent's [download page](https://www.accent.mk/%D0%BF%D0%BE%D0%B4%D0%B4%D1%80%D1%88%D0%BA%D0%B0/?lang=en) lists PF550/PF700 control codes, example input files and Windows communication tools. Its [device page](https://synergy.com.mk/?page_id=47) lists network, USB and serial connections.
+
+### POS connection prepared for S-084
+
+The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. Static inspection of the old Fiscal32 program found that it reads the `Speed2` setting and defaults to **9600 baud**. The supplied configuration contains `Speed=5` and has no `Speed2` override. Its effective format with that executable is **8 data bits, no parity, one stop bit**. The old laptop's COM6 is specific to that computer. The printer's actual settings and flow control still need a hardware check.
+
+In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
+
+The Windows sample package from version 1.0.2 includes `check-pf700.ps1` alongside `electron.exe`. Calling it without arguments runs the offline check. A later, operator-authorized hardware session requires the full `-ReadDeviceStatus` option. The equivalent source entry is `node src/desktop/pf700-status-cli.js`, with `--read-device-status` reserved for that session.
+
+Before a hardware check, confirm COM3 still belongs to the intended adapter, the port is free, and the previous POS has reconciled any sale or daily close with an unknown outcome. The printer remembers only the last command response. An intervening diagnostic could replace the response needed to resolve an earlier sale or close. The diagnostic requests immediate status once (command 74, option X), with a bounded wait. It initially selects no hardware handshake and leaves DTR and RTS off. A valid reply shows a compatible exchange. Device identity, paper output, fiscal receipts, device-day closure and reconciliation each require separate evidence.
 
 The existing payment flow records payment and completes the order before an ordinary non-fiscal print attempt. S-084 records an internal summary for an already closed shared day. Neither registers a fiscal sale nor requests a fiscal daily report. The printer's fiscal period may differ from the shared business day, and a later B-to-A correction does not itself create a fiscal receipt. Do not assume these totals match or send an ordinary Windows print job as a fiscal command.
 

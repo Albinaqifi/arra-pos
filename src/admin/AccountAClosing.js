@@ -1,5 +1,9 @@
 import { financeText } from './finance-i18n.js';
+import { Pf700Connection } from './Pf700Connection.js';
+import { desktopBridge } from '../shared/desktop-bridge.js';
 const h=React.createElement;
+const loadPf700Profile = () => desktopBridge.businessDays({ action: 'accountAPf700Profile' });
+const simulatePf700Status = () => desktopBridge.businessDays({ action: 'accountAPf700Simulate' });
 // Keep an unresolved retry identity even if the financial screen is left and reopened.
 const retryTokens=new Map();
 const date=value=>new Date(value).toLocaleString();
@@ -60,6 +64,7 @@ export class AccountAClosing extends React.Component {
       s.loading && h('p',{role:'status'},t('Loading…')),s.error && h('p',{role:'alert'},t(s.error)),s.notice && h('p',{role:'status'},t(s.notice)),
       !s.loading && h('button',{disabled:s.busy,onClick:()=>this.load()},t('Refresh')),
       s.data && !s.loading && h(React.Fragment,null,
+        h(Pf700Connection,{language:this.props.language,loadProfile:loadPf700Profile,simulateStatus:simulatePf700Status}),
         !s.data.days.length && h('p',null,t('No eligible closed days yet.')),
         s.data.days.map(day=>h('div',{className:'finance-day',key:day.id},
           h('h3',null,t('Business day #{id}',{id:day.id})),h('p',null,t('Opened {opened} · Closed {closed}',{opened:date(day.openedAt),closed:date(day.closedAt)})),
@@ -67,6 +72,6 @@ export class AccountAClosing extends React.Component {
           h('div',{className:'finance-metrics'},h('div',null,h('span',null,t('Payments')),h('strong',null,day.count)),h('div',null,h('span',null,t('Total')),h('strong',null,day.total)),h('div',null,h('span',null,t('Cash')),h('strong',null,day.cash)),h('div',null,h('span',null,t('Card')),h('strong',null,day.card))),h('p',{className:'history-muted'},t('Amounts in minor units · non-fiscal')),
           day.status==='complete' ? h(React.Fragment,null,h('p',null,t('Account A closed {date} by actor #{actor}',{date:date(day.accountClosedAt),actor:day.closedBy})),h('p',{role:day.printResult==='failed'?'alert':'status'},printStatus(day)),h('p',null,t('{count} attempt(s) · status: {status}',{count:day.printAttempts,status:t(day.printResult || 'Unavailable')})),h('button',{disabled:s.busy,onClick:()=>this.retry(day.id)},t('Retry report after checking printer'))) :
           s.confirmId===day.id ? h('div',{className:'finance-confirm',role:'group','aria-label':t('Confirm Account A close')},h('p',null,t('Close Account A for this day and attempt to print its non-fiscal report?')),h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.close(day.id)},s.busy?t('Closing…'):t('Confirm close')),h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:null})},t('Cancel')))) : h('button',{disabled:s.busy,onClick:()=>this.setState({confirmId:day.id,notice:''})},t('Review and close Account A')))),
-        h('details',{className:'day-details'},h('summary',null,t('Account A closing printer settings')),h('p',null,t('Choose a local Windows queue. This can be the same printer as Account A bills.')),h('form',{key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,t('Printer queue '),h('input',{name:'queue',defaultValue:s.data.queue,required:true,maxLength:255})),h('button',{type:'submit',disabled:s.busy},t('Save printer queue'))))));
+        h('details',{className:'day-details'},h('summary',null,t('Non-fiscal Account A report printer')),h('p',null,t('Choose a local Windows queue. This can be the same printer as Account A bills.')),h('form',{key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,t('Printer queue '),h('input',{name:'queue',defaultValue:s.data.queue,required:true,maxLength:255})),h('button',{type:'submit',disabled:s.busy},t('Save printer queue'))))));
   }
 }

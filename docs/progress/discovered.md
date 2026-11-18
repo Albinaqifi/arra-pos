@@ -11,3 +11,4 @@ Record issues found outside the current story in one short line: date, story, is
 - 2026-11-17, S-081: `audit-independent.test.js` failed a sample PIN substring assertion in the full suite but passed in isolation; timestamp digits may coincidentally match and obscure the audit check (cause unconfirmed).
 - 2026-11-18, S-085: Browser demo table availability can remain taken after the final item is corrected; active-order filtering works, but demo availability needs separate investigation.
 - 2026-11-18, S-090: Clean base e64d17b reproduces three sales-report renderer assertion failures and VM module-resolution failures in s083 payment printing and second-kitchen tests, obscuring full-suite verification.
+- 2026-11-18, S-084: Two payment-renderer cases cannot find expected bill controls on clean base `325161c`, obscuring the full-suite result.
