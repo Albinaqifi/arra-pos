@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
+const path = require('node:path');
 const rendererBundle = require('./support/renderer-bundle');
 
 function appFor(bridge) {
@@ -30,6 +31,54 @@ async function desktop(items = []) {
   await app.loadDesktopData(); await app.tableOrders.openTable(1);
   return { app, requests, replaceOrder: id => { orderId = id; } };
 }
+
+test('pending rows show newest first with stable identities and actions after reload', async () => {
+  const older = { ...item(1), name: 'Older dish' };
+  const sent = { ...item(2, 'sent'), name: 'Sent dish', round: 1, sentAt: 1, sentBy: 'sample' };
+  const newer = { ...item(3), name: 'Newer dish' };
+  const { app, requests } = await desktop([older, sent, newer]);
+  const otherTable = { ...app.tableOrders.state.items[0], id: 4, tableId: 2, name: 'Other table' };
+  app.tableOrders._set({ items: app.tableOrders.state.items.concat(otherTable) });
+  const snapshot = app.tableOrders.state.items;
+  let rows = app.pending.rowsView();
+  assert.deepEqual(Array.from(rows.pending, row => row.id), [3, 1]);
+  assert.deepEqual(Array.from(rows.pending, row => row.name), ['Newer dish', 'Older dish']);
+  assert.equal(rows.pendingCount, '2 items');
+  assert.equal(app.tableOrders.state.items, snapshot);
+  assert.deepEqual(Array.from(snapshot, value => value.id), [1, 2, 3, 4]);
+  assert.deepEqual(Array.from(app.tableOrders.orderView({ language: 'en', now: 1, onCorrect() {} }).rounds[0].items, value => value.name), ['Sent dish']);
+
+  // Fragment keys must follow items when a new row appears above them.
+  const context = { React: { Fragment: 'fragment', createElement: (type, props, ...children) => ({ type, props, children }) } };
+  vm.runInNewContext(rendererBundle.moduleSource(path.join(__dirname, '../src/pending/PendingList.js'), 'PendingListModule'), context);
+  const keys = [];
+  function collect(node) {
+    if (Array.isArray(node)) return node.forEach(collect);
+    if (!node || typeof node !== 'object') return;
+    if (node.props?.key != null) keys.push(node.props.key);
+    if (node.children) collect(node.children);
+  }
+  collect(context.PendingListModule.renderPendingList(rows));
+  assert.deepEqual(keys, [3, 1]);
+
+  const changing = rows.pending[0].inc();
+  assert.equal(requests[0].action, 'increment'); assert.equal(requests[0].id, 10); assert.equal(requests[0].value, 3);
+  requests[0].resolve({ ok: true, data: { items: [older, sent, { ...newer, quantity: 2 }] } });
+  await changing;
+  rows = app.pending.rowsView();
+  assert.deepEqual(Array.from(rows.pending, row => row.id), [3, 1]);
+  assert.equal(rows.pending[0].qty, '2');
+  await app.tableOrders.openTable(1);
+  rows = app.pending.rowsView();
+  assert.deepEqual(Array.from(rows.pending, row => row.id), [3, 1]);
+  rows.pending[1].editNote(); assert.equal(app.pending.state.dialog.itemId, 1); app.pending.dismiss();
+  const removing = rows.pending[1].remove();
+  assert.equal(requests[1].action, 'remove'); assert.equal(requests[1].value, 1);
+  requests[1].resolve({ ok: true, data: { items: [sent, { ...newer, quantity: 2 }] } });
+  await removing;
+  assert.deepEqual(Array.from(app.pending.rowsView().pending, row => row.id), [3]);
+  app.componentWillUnmount();
+});
 
 test('demo modifier opening, cancellation and invalid submission do not create an order', async () => {
   const app = appFor();
