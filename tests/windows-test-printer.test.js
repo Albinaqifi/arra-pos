@@ -2,6 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { textForJob, rasterBands, renderRaster } = require('../src/desktop/windows-test-printer');
 
+test('account close report identifies minor units and prints in its saved language', () => {
+  const snapshot={dayId:1,openedAt:1,closedAt:2,accountClosedAt:3,closedBy:1,count:1,cash:123,card:0,total:123,records:[{billId:1,tableId:2,paidAt:2,method:'cash',amount:123}]};
+  const en=textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'en'}});
+  const sq=textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'sq'}});
+  assert.match(en,/minor units/); assert.match(en,/Cash: 123/); assert.doesNotMatch(en,/123 den/);
+  assert.match(sq,/MBYLLJA JO FISKALE/); assert.match(sq,/njësi më të vogla monetare/); assert.match(sq,/Para në dorë: 123/);
+  assert.throws(()=>textForJob({destination:'account-a-close',snapshot:{...snapshot,language:'other'}}));
+});
+
 test('Windows GDI renders Unicode and wraps long text without printing', {skip:process.platform !== 'win32'}, async () => {
   const sample = await renderRaster('CANCELLATION\nËmbëlsirë me një emër shumë të gjatë për një rresht të vetëm\nÇaj');
   assert.deepEqual([...sample.subarray(0,6)], [29,118,48,0,48,0]);

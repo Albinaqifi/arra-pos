@@ -290,6 +290,20 @@ const migrations = [
   { version: 36, sql: `CREATE TABLE IF NOT EXISTS bill_printer_queues (account TEXT PRIMARY KEY CHECK(account IN ('A','B')), queue TEXT NOT NULL CHECK(length(trim(queue)) BETWEEN 1 AND 255)) STRICT;
     INSERT OR IGNORE INTO bill_printer_queues SELECT 'A',queue FROM test_printer_queues WHERE destination='bill';
     INSERT OR IGNORE INTO bill_printer_queues SELECT 'B',queue FROM test_printer_queues WHERE destination='bill';` },
+  { version: 37, sql: `CREATE TABLE IF NOT EXISTS account_a_settings (id INTEGER PRIMARY KEY CHECK(id=1), boundary INTEGER NOT NULL, queue TEXT NOT NULL) STRICT;
+    INSERT OR IGNORE INTO account_a_settings SELECT 1,COALESCE((SELECT MAX(id) FROM business_days WHERE closed_at IS NOT NULL),0),queue FROM bill_printer_queues WHERE account='A';
+    CREATE TABLE IF NOT EXISTS account_a_closes (id INTEGER PRIMARY KEY, day_id INTEGER NOT NULL UNIQUE REFERENCES business_days(id), actor_id INTEGER NOT NULL REFERENCES local_users(id), closed_at INTEGER NOT NULL, snapshot TEXT NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS account_a_attempts (id INTEGER PRIMARY KEY, close_id INTEGER NOT NULL REFERENCES account_a_closes(id), request_id TEXT NOT NULL UNIQUE, actor_id INTEGER NOT NULL REFERENCES local_users(id), queue TEXT NOT NULL, started_at INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS account_a_results (attempt_id INTEGER PRIMARY KEY REFERENCES account_a_attempts(id), result TEXT NOT NULL CHECK(result IN ('failed','accepted')), occurred_at INTEGER NOT NULL) STRICT;
+    CREATE TRIGGER IF NOT EXISTS account_a_closes_no_update BEFORE UPDATE ON account_a_closes BEGIN SELECT RAISE(ABORT,'Closes are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_closes_no_delete BEFORE DELETE ON account_a_closes BEGIN SELECT RAISE(ABORT,'Closes are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_closes_no_replace BEFORE INSERT ON account_a_closes WHEN EXISTS(SELECT 1 FROM account_a_closes WHERE id=NEW.id OR day_id=NEW.day_id) BEGIN SELECT RAISE(ABORT,'Closes are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_attempts_no_update BEFORE UPDATE ON account_a_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_attempts_no_delete BEFORE DELETE ON account_a_attempts BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_attempts_no_replace BEFORE INSERT ON account_a_attempts WHEN EXISTS(SELECT 1 FROM account_a_attempts WHERE id=NEW.id OR request_id=NEW.request_id) BEGIN SELECT RAISE(ABORT,'Attempts are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_results_no_update BEFORE UPDATE ON account_a_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_results_no_delete BEFORE DELETE ON account_a_results BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;
+    CREATE TRIGGER IF NOT EXISTS account_a_results_no_replace BEFORE INSERT ON account_a_results WHEN EXISTS(SELECT 1 FROM account_a_results WHERE attempt_id=NEW.attempt_id) BEGIN SELECT RAISE(ABORT,'Results are immutable'); END;` },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

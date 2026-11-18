@@ -35,6 +35,7 @@ function dispatch(db, adapter, attempt) {
 }
 function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = () => 'failed') {
   ipcMain.handle(CHANNEL, (event, req) => {
+    if (req && typeof req.action === 'string' && req.action.startsWith('accountA')) return require('./account-a-close').handleAccountA(event, req, isAllowedSender, db, session, adapter);
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype ||
       !((req.action === 'list' && Reflect.ownKeys(req).length === 1) ||
         (req.action === 'close' && Reflect.ownKeys(req).length === 2 && Number.isSafeInteger(req.dayId) && req.dayId > 0) ||
