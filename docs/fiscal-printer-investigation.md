@@ -1,5 +1,17 @@
 # S-033 — Fiscal and printer investigation
 
+## S-084 update: Synergy PF700, 2026-11-18
+
+The owner identified the fiscal printer in a photograph as a Synergy PF700 and clarified that S-084's intended end result is an actual Account A fiscal daily report. The device is not available for testing. Accent's [download page](https://www.accent.mk/%D0%BF%D0%BE%D0%B4%D0%B4%D1%80%D1%88%D0%BA%D0%B0/?lang=en) lists PF550/PF700 control codes, example input files and Windows communication tools; its [device page](https://synergy.com.mk/?page_id=47) lists network, USB and serial connections. These listings do not establish the connection, firmware or protocol configuration of this particular device.
+
+The existing payment flow records payment and completes the order before an ordinary non-fiscal print attempt. S-084 records an internal summary for an already closed shared day. Neither registers a fiscal sale nor requests a fiscal daily report. The printer's fiscal period may differ from the shared business day, and a later B-to-A correction does not itself create a fiscal receipt. Do not assume these totals match or send an ordinary Windows print job as a fiscal command.
+
+The integration needs durable per-sale fiscal intent and immutable line/tax/payment data, device identity and documented responses, plus a distinct fiscal-day report operation. It must explicitly represent unknown results across restart, prevent automatic duplicate sale or close commands, and reconcile device evidence before any retry. The existing card-terminal payment must not be charged again after a printer problem. Preserve the internal close and historical payments and do not treat a fiscal report as evidence of physical paper without verification.
+
+Accent's linked [English control-code document](https://www.accent.mk/downloads/Control_codes_PF550_v136_EN.doc) was retrieved, but the legacy Word format has not yet been reliably parsed and its applicability to this device's firmware has not been confirmed. Its readable excerpts describe fiscal receipt commands, device status and daily reports. They are not sufficient evidence to implement or test command framing, error recovery or report semantics. No device commands have been implemented.
+
+Before enabling actual fiscal output, verify the manufacturer's applicable protocol and firmware, configured transport, tax mapping and cash/card commands, fiscal receipt and daily-close sequencing, device status and recovery behavior, and perform controlled tests against the actual device. Test multiple pending days, a device with external transactions, B-to-A corrections, printer/power/network failure and restart; keep mismatches unresolved rather than asserting reconciliation. The device's documented fiscal-day timing determines how this relates to the shared day.
+
 Research recorded 2026-11-09. This is a preliminary source review, not legal advice, a compliance determination, or approval for live sales. The restaurant's provider, devices and tax circumstances are not identified; no provider was contacted and no model-specific documentation or hardware was supplied. Q-06 and Q-07 remain open.
 
 ## What the sources say
