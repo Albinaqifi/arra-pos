@@ -1,0 +1,47 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {openDatabase}=require('../src/desktop/database');
+const {registerBusinessDays}=require('../src/desktop/business-days');
+test('Account A bills preview and printing enforce scope, totals, persistence and no financial mutation',async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-a-bills-'));let db=openDatabase(dir),handler,actor=1,jobs=[],outcome='accepted';
+  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'combined',x'00',x'00'),(2,'owner-a',x'00',x'00'),(3,'owner-b',x'00',x'00');
+    INSERT INTO financial_scopes VALUES(1,'combined'),(2,'A'),(3,'B'); INSERT INTO user_permissions VALUES(1,'employees.view'),(1,'business_days.close'),(2,'employees.view'),(3,'employees.view');
+    INSERT INTO dining_tables(id,area) VALUES(1,'sample'),(2,'sample'),(3,'sample'),(4,'sample'),(5,'sample');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open'),(3,3,1,'open'),(4,4,1,'open'),(5,5,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,10,'a'),(2,2,1,1,20,'b'),(3,3,1,1,30,'c'),(4,4,1,1,40,'d'),(5,5,1,1,50,'e');
+    INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','A'),(2,2,1,2,20,'card','A'),(3,3,1,2,30,'cash','B'),(4,4,1,2,40,'cash','B');
+    INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(3,1,3,'sample');`);
+  const setup=()=>registerBusinessDays({handle:(_,fn)=>handler=fn},e=>e.allowed,db,{currentUserId:()=>actor,authenticatedUserId:()=>actor},job=>{jobs.push(job);if(outcome==='throw')throw Error('unknown');return outcome;});
+  setup();const call=req=>handler({allowed:true},req);const day=call({action:'list'}).data.days[0].id;
+  let list=await call({action:'accountABillsList'});assert.equal(list.ok,true); const original= db.prepare('SELECT queue FROM day_print_settings WHERE id=1').get().queue;
+  assert.equal((await call({action:'accountABillsConfigure',queue:'Sample queue'})).ok,true);assert.equal(db.prepare('SELECT queue FROM day_print_settings WHERE id=1').get().queue,original);
+  let p=(await call({action:'accountABillsPreview',dayId:day})).data;assert.deepEqual([p.records.map(x=>x.billId),p.total,p.cash,p.card],[[1,2,3],60,40,20]);
+  const req={action:'accountABillsPrint',dayId:day,digest:p.digest,language:'sq',checked:true};
+  assert.equal((await call({...req,checked:false})).ok,false);assert.equal((await call(req)).ok,true);assert.equal(jobs.at(-1).queue,'Sample queue');assert.equal(jobs.at(-1).snapshot.total,60);
+  outcome='failed';assert.equal((await call(req)).failed,true);outcome='throw';assert.equal((await call(req)).uncertain,true);
+  actor=2;assert.equal((await call({action:'accountABillsPreview',dayId:day})).ok,true);assert.equal((await call({action:'accountABillsConfigure',queue:'x'})).ok,false);
+  actor=3;assert.equal((await call({action:'accountABillsPreview',dayId:day})).ok,false);assert.equal((await call(req)).ok,false);actor=1;
+  assert.equal((await handler({allowed:false},req)).ok,false);
+  const before=db.prepare('SELECT count(*) n FROM payments').get().n;assert.equal(call({action:'close',dayId:day}).ok,true);
+  assert.equal((await call(req)).stale,true);p=(await call({action:'accountABillsPreview',dayId:day})).data;assert.equal(p.total,60);
+  let next=(await call({action:'accountABillsList'})).data.days[0].id;assert.equal((await call({action:'accountABillsPreview',dayId:next})).data.total,0);
+  assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,before);assert.equal(db.prepare('SELECT count(*) n FROM account_a_closes').get().n,0);
+  await new Promise(resolve=>setImmediate(resolve));db.close();db=openDatabase(dir);setup();list=await call({action:'accountABillsList'});assert.equal(list.data.queue,'Sample queue');assert.equal((await call({action:'accountABillsPreview',dayId:day})).data.total,60);
+});
+test('version 37 upgrade creates independent bill report queue and preserves existing queues',t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-a-bills-upgrade-'));let db=openDatabase(dir);
+  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
+  db.exec(`UPDATE bill_printer_queues SET queue='bill A' WHERE account='A'; UPDATE day_print_settings SET queue='day'; UPDATE account_a_settings SET queue='closing'; DROP TABLE account_a_bill_print_settings; PRAGMA user_version=37`);db.close();db=openDatabase(dir);
+  assert.equal(db.prepare('SELECT queue FROM account_a_bill_print_settings').get().queue,'bill A');
+  db.exec("UPDATE account_a_bill_print_settings SET queue='report'");db.close();db=openDatabase(dir);
+  assert.equal(db.prepare('SELECT queue FROM account_a_bill_print_settings').get().queue,'report');assert.equal(db.prepare("SELECT queue FROM bill_printer_queues WHERE account='A'").get().queue,'bill A');assert.equal(db.prepare('SELECT queue FROM day_print_settings').get().queue,'day');assert.equal(db.prepare('SELECT queue FROM account_a_settings').get().queue,'closing');
+});
+test('Account A bill print renders the selected bill values and breakdown in both languages',()=>{
+  const {textForJob}=require('../src/desktop/windows-test-printer');
+  const snapshot={id:7,records:[{billId:1,amount:10},{billId:2,amount:20}],total:30,cash:10,card:20};
+  const en=textForJob({destination:'account-a-bills',snapshot:{...snapshot,language:'en'}});
+  for(const text of ['NON-FISCAL','Business day #7','Bill #1  10','Bill #2  20','TOTAL: 30','Cash: 10','Card: 20'])assert.ok(en.includes(text));
+  assert.ok(en.indexOf('TOTAL: 30')<en.indexOf('Cash: 10'));
+  const sq=textForJob({destination:'account-a-bills',snapshot:{...snapshot,language:'sq'}});
+  for(const text of ['JO FISKALE','Fatura #1  10','TOTALI: 30','Para në dorë: 10','Kartë: 20'])assert.ok(sq.includes(text));
+});
