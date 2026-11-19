@@ -101,7 +101,7 @@ test('v40 upgrade preserves shifts and starts with no wallet counts',t=>{
   const shift=day({action:'shiftList'}).data.shifts[0];
   f.db().exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE wallet_requests; DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40');
   f.restart();
-  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,45);
+  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,46);
   assert.equal(day({action:'shiftList'}).data.shifts[0].id,shift.id);
   assert.equal(day({action:'walletStatus'}).data.baseline,null);
   assert.deepEqual(f.db().prepare('PRAGMA foreign_key_check').all(),[]);

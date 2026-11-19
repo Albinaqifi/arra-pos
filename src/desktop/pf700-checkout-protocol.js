@@ -239,4 +239,4 @@ async function registerSimulatedPf700Sale(snapshot) {
   return result.status === 'accepted' ? { status: 'accepted', reference: 'SIM-' + billId } : result;
 }
 
-module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt };
+module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt, simulatedResponse };

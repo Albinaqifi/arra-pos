@@ -38,12 +38,13 @@ async function probeIdentity(pipe, sequence, expectedSerial) {
 // The child owns one exclusive SerialPort. Each private stdin line releases
 // exactly one request. No subsequent request is written until its full reply
 // has been independently checked by the protocol executor.
-function windowsPipe(startProcess) {
+function windowsPipe(startProcess, operation = 'Checkout') {
   if (process.platform !== 'win32') throw Error('Windows required');
   const powershell = path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const child = startProcess(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-    '-File', path.join(__dirname, 'pf700-checkout-exchange.ps1')], {
-    windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], timeout: 180000
+    '-File', path.join(__dirname, 'pf700-checkout-exchange.ps1'),
+    ...(operation === 'Checkout' ? [] : ['-Operation', operation])], {
+    windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'], timeout: operation === 'Checkout' ? 180000 : 300000
   });
   let stopped = false, pending = null;
   const closed = new Promise(resolve => child.once('close', resolve));
@@ -74,7 +75,8 @@ function windowsPipe(startProcess) {
     exchange(request) {
       if (stopped || pending) throw Error('PF700 exchange unavailable');
       return new Promise((resolve, reject) => {
-        pending = { data: '', resolve, reject, timer: setTimeout(fail, 25000) };
+        const timeout = operation === 'DailyReport' && request[3] === 69 ? 125000 : 25000;
+        pending = { data: '', resolve, reject, timer: setTimeout(fail, timeout) };
         child.stdin.write(request.toString('hex') + '\n', error => { if (error) fail(); });
       });
     },
@@ -144,4 +146,4 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
   });
 }
 
-module.exports = { createWindowsPf700Checkout, checkWindowsPf700Identity };
+module.exports = { createWindowsPf700Checkout, checkWindowsPf700Identity, windowsPipe, probeIdentity, validSerial };

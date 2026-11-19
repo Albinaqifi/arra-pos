@@ -2,7 +2,7 @@
 
 ## S-084 update: Synergy PF700, 2026-11-18
 
-For the current status of the physical printer, the 1.0.6 rehearsal on the restaurant PC, and what to carry into the final Windows installer, see the [PF700 release handoff](progress/handoffs/S-084.md#pf700-release-handoff).
+For the latest physical checkout evidence, the 1.0.7 daily report and the remaining Windows release work, see the [PF700 release handoff](progress/handoffs/S-084.md#pf700-release-handoff).
 
 The owner identified the fiscal printer in a photograph as a Synergy PF700 and clarified that S-084's intended end result is an actual Account A fiscal daily report. The printer is on the POS PC, and the owner requested preparation without contacting it. Accent's [download page](https://www.accent.mk/%D0%BF%D0%BE%D0%B4%D0%B4%D1%80%D1%88%D0%BA%D0%B0/?lang=en) lists PF550/PF700 control codes, example input files and Windows communication tools. Its [device page](https://synergy.com.mk/?page_id=47) lists network, USB and serial connections.
 
@@ -28,7 +28,7 @@ The 1.0.5 supervised Cash A trial is complete. An espresso priced at 70 MKD reac
 
 The operator matched the open receipt to the saved bill, tendered its full balance in cash and closed it once. The recovery checked the amount paid, closed state and next document number. Arra acknowledged the receipt and recorded the original payment. The operator subsequently confirmed that paper feeds correctly. The existing trial has been used. Keep its database under `%APPDATA%\Arra POS PF700 Commissioning` and its device marker intact.
 
-Physical card checkout, changes that would turn a past B sale into a fiscal A sale, and the official fiscal daily report each require additional work. The current Account A close continues to create Arra's internal summary. [Accent PF550/PF700 protocol v1.40](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
+Physical card checkout and retroactively registering an earlier B sale still require work. From 1.0.7 the fiscal profile supports a separately confirmed Z report under **Close Account A**. The ordinary bill-list printer continues to print an internal summary. [1.0.7 daily report](progress/handoffs/S-084.md#107-daily-report) · [Accent PF550/PF700 protocol v1.40](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
 
 In the desktop app, a Combined user with day-close permission can open **Financial information → Close Account A → PF700 fiscal printer connection**. **Run offline simulation** exercises the status request and a fixed sample reply in memory. The serial profile is separate from the Windows queue used to print the internal Account A closing report.
 
@@ -56,7 +56,7 @@ Build the add-on with `scripts/build-pf700-paper-test.ps1 -CheckVatRates`. On th
 
 The original payment flow completed orders locally before attempting an ordinary print job. Version 1.0.4 adds the fiscal checkout modes described above. The Account A close summarizes an already closed shared day. The printer can have a different fiscal-day boundary, and a later B-to-A bookkeeping correction does not itself create a fiscal receipt.
 
-Checkout now records the bill and VAT snapshot before submitting a sale. It stores verified device evidence separately from the payment, so a local payment can be completed after a restart without sending another sale. Unknown outcomes require comparison with the device journal. The official fiscal-day reporting operation and its recovery remain outstanding.
+Checkout records the bill and VAT snapshot before submitting a sale. It stores verified device evidence separately from the payment, so a local payment can be completed after a restart. The daily report uses a separate journal for the close attempt, the printer's fiscal record and any read-only recovery.
 
 The original investigation used Accent's English v1.36 document for framing and status. The checkout integration uses the manufacturer's PF550/PF700 v1.40 document. The printer retains its response to the most recent command. Arra therefore preserves uncertainty across a restart and requires evidence for the original bill. [English v1.36 control codes](https://www.accent.mk/downloads/Control_codes_PF550_v136_EN.doc) · [PF550/PF700 v1.40](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
 

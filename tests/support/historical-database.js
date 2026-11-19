@@ -18,8 +18,13 @@ function historicalDatabase(version) {
 }
 
 // Older test fixtures assemble prior schemas by removing later migrations.
-// Remove v45 and v44 objects before rebuilding their referenced tables.
+// Remove later fiscal objects before rebuilding their referenced tables.
 const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS fiscal_daily_checkout_guard;
+  DROP VIEW IF EXISTS fiscal_daily_current;
+  DROP TABLE IF EXISTS fiscal_daily_nonissuances;
+  DROP TABLE IF EXISTS fiscal_daily_confirmations;
+  DROP TABLE IF EXISTS fiscal_daily_reports;
   DROP TRIGGER IF EXISTS fiscal_checkout_day_guard;
   DROP TRIGGER IF EXISTS fiscal_checkout_shift_guard;
   DROP TRIGGER IF EXISTS fiscal_checkout_payment_guard;

@@ -62,6 +62,7 @@ if (!(Test-Path -LiteralPath (Join-Path $data 'arra.sqlite') -PathType Leaf) -or
     throw 'Prepare the dedicated PF700 data profile first using -PrepareData.'
 }
 Write-Host 'Supervised PF700 checkout on COM3. Confirming Cash A in Arra can register one real sale, one unit of one item.'
+Write-Host 'In Financial information, a Combined user can also confirm a real PF700 fiscal day close.'
 if ((Read-Host 'Type LIVE to prepare this session') -cne 'LIVE') { return }
 $serial = (Read-Host 'Printer serial number from the device').Trim()
 $operator = (Read-Host 'Printer operator number (1 to 8)').Trim()

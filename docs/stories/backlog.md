@@ -52,6 +52,8 @@
 
 **Checkout milestone, 2026-11-19.** Connect Account A checkout to the PF700 and test it offline. The owner confirmed 10% for dine-in food and nonalcoholic drinks and 18% for alcohol. Prepare the Windows package for a later on-site check. The owner reserved all printer operations for that visit.
 
+**Daily report milestone, 2026-11-19.** Connect the Combined administrator's Close Account A action to the PF700 daily Z report. The printer produces this report from its registered sales. Arra uses saved payments and receipt acknowledgements to reconcile the selected day. Exercise the feature offline only and leave the physical fiscal day open.
+
 **Acceptance:**
 
 - In Combined's Financial information, provide an Account A closing option for a shared business day closed after the feature is installed. When multiple days await Account A closing, let the owner select and close each pending day. Clearly identify the day, opening and closing times, and whether its Account A close is pending or complete. The main day close continues to start the next shared day; the separate A close does not close or interrupt that new day. Account B closing is outside this story.
