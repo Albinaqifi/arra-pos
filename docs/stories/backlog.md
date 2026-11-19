@@ -297,6 +297,51 @@ Status: proposed backlog, 2026-11-03. Each story is intended for one development
 
 **Checks/review:** Build and inspect the installer, exercise installation and startup and representative sample workflows offline where feasible, check existing data survives reinstall and failure, and record actual evidence and gaps. Review the packaged runtime, data paths and preservation.
 
+## PF700 restaurant go-live
+
+These five stories build on the 1.0.7 Account A integration. Each can be developed or rehearsed offline with sample orders and simulated equipment. Record physical results when the restaurant POS and its printers are available. The actual daily Z report and its on-site verification belong to [S-084](#s-084--close-account-a-after-the-shared-business-day). [Fiscal release handoff](../progress/handoffs/S-084.md#pf700-release-handoff)
+
+### S-095 — Take routine Cash A payments on the PF700
+
+A waiter can take cash for a whole table, give the customer a fiscal receipt and serve the next table. This delivers the Cash A part of S-035 using the checkout introduced in S-084.
+
+- Register successive bills through normal waiter checkout, including several products, quantities greater than one and modifiers. Use the prices saved on the bill, each item's VAT group and its applicable Macedonian-product mark. Show the waiter any missing fiscal setup before opening a receipt.
+- Record one PF700 document and one local payment per bill. Repeated clicks and restarting after acknowledgement must return the original result. If the printer is unavailable before registration, leave the bill unpaid. Preserve the completed one-sale trial and its receipt when enabling routine service.
+- Rehearse two successive bills offline, including two coffees and a beer on one bill. Verify quantities, cash total and the 10% and 18% VAT groups. At the POS, verify two successive Cash A checkouts, including a mixed bill with quantity greater than one. Each must finish from the waiter screen with one paper receipt and one recorded payment. Use S-096 for interrupted results.
+
+### S-096 — Recover an interrupted fiscal checkout in Arra
+
+A waiter reopening a bill after a lost reply can find out whether to finish the original payment or call for help. Build this S-035 recovery path around the existing receipt journal and the original Cash A espresso incident.
+
+- Start with a read-only check against the enrolled printer and the saved bill, document, items, total and tender evidence. Show whether the receipt is open and unpaid, already tendered, already closed, or still uncertain. Keep mismatched or insufficient evidence unresolved across restarts.
+- For a verified match, show the operator the remaining action. An open, unpaid receipt can be finished once with its original tender. An already tendered receipt needs no second tender. A confirmed closed receipt can finish its local payment without another printer write. Offer a fresh checkout only when the evidence proves the original sale never started.
+- Simulate interruptions before receipt opening, after item registration, after tender, after the printer closes and before Arra saves the payment. Repeat recovery from two sessions and after restart. Verify one receipt and one payment. Preserve the original waiter and record who completed recovery. An unresolved bill cannot be paid again or bypassed by changing account or tender.
+
+### S-097 — Register Card A after terminal approval
+
+A waiter takes payment on the separate card terminal and registers the approved amount as card on the PF700. This completes the Card A part of S-035 and uses S-096 when the printer outcome is uncertain.
+
+- Once the waiter confirms approval on the terminal, record the bill's full amount as card on Account A with the original VAT groups. Enforce Card A in the payment service, including direct requests. A declined or cancelled terminal payment leaves the bill payable. Arra never initiates a charge on the terminal.
+- If the terminal approves but fiscal checkout stops, show that the card payment was already taken and retain the original bill and amount. Resume fiscal registration or local recording from verified evidence, so retrying never asks for a second card charge or creates another receipt or payment.
+- Simulate approval, decline, a lost PF700 reply and restart. At the POS, match an approved terminal amount to the PF700's card tender and one Card A payment in Arra. The bill must contribute once to the Card A total used by Close Account A.
+
+### S-098 — Print bar and kitchen tickets during fiscal checkout
+
+Preparation staff receive tickets while the same POS is set up for PF700 checkout. Extend S-034's existing printer routing and the cancellation and second-kitchen support in S-074 and S-075.
+
+- From a table, send a mixed round and deliver only the relevant items to each configured preparation queue. A later round sends only its new items. Route a cancellation to its original destination. Sending a round creates no fiscal receipt.
+- Take an Account A payment for that order. Only the PF700 issues its fiscal receipt. Payment and fiscal recovery must never resend preparation tickets. Preserve separate paper-status and retry controls for each preparation destination.
+- Test offline with separate simulated queues and a simulated PF700, including one unavailable queue and an uncertain ticket. Verify the other destination can succeed and ticket recovery creates no new sale. At the restaurant, check the actual bar and kitchen slips alongside a fiscal receipt from the same order.
+
+### S-099 — Install and upgrade the live Windows POS
+
+The owner can install a versioned release on the restaurant PC and apply the next update with the restaurant's records intact. This is the installer deliverable under S-036. Use S-032's protected backup and restore and S-051's migration checks.
+
+- A clean offline install starts with the approved restaurant menu, free tables, and empty order, bill and payment histories. Set up accounts and local printer settings on the PC. Keep training data and credentials out of the live installation.
+- Upgrade a realistic earlier profile without reseeding it. Verify open tables, bills, payments, users, VAT settings, printer configuration, original fiscal documents, daily reports and pending recovery attempts survive. Preserve the enrolled printer and spent trial allowance. Carry forward the original real receipt exactly once when moving the commissioning profile.
+- Rehearse a failed update and restore from a protected backup in an isolated profile. Check that an unresolved payment or daily report still requires reconciliation, that reopening Arra cannot replay an old sale or Z, and that an unavailable PF700 cannot silently settle an Account A bill locally.
+- Deliver the final ZIP with plain install, upgrade and recovery steps. Record the version and target-PC result under S-036, alongside its pilot checks and S-032's protected off-PC copy and separate-machine restore evidence.
+
 ## Milestone 6 — Designed administration experience
 
 **Outcome:** Replace the plain, browser-default presentation of the existing administration features with a coherent, finished desktop experience. These are implementation stories, not mockups: connect the designed screens to the existing local services and preserve their current behavior. Use the waiter interface as a visual starting point while making administration easy to scan and operate on the shared PC. Native semantic HTML controls are fine, but their appearance and layout must be intentionally designed rather than left as browser defaults.
