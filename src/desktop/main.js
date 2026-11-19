@@ -90,7 +90,8 @@ app.whenReady().then(() => {
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
-  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, localPrinter || (() => 'failed'));
+  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session,
+    localPrinter || (() => 'failed'), fiscalCheckout?.dailyReport);
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
   registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: localPrinter });
   registerActivityReport(require('electron').ipcMain, isAllowedSender, database, session);

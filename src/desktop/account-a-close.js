@@ -1,6 +1,7 @@
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
 const { PF700_PROFILE, rehearseStatus } = require('./pf700-status');
+const daily = require('./fiscal-daily-report');
 const flights = new WeakMap();
 function active(db) { if (!flights.has(db)) flights.set(db, new Set()); return flights.get(db); }
 function summarize(snapshot) {
@@ -12,6 +13,17 @@ function summarize(snapshot) {
     if (!Number.isSafeInteger(cash) || !Number.isSafeInteger(card) || !Number.isSafeInteger(cash + card)) throw Error('Invalid total');
   }
   return {...snapshot, records:records.map(r => ({...r,account:'A'})), count:records.length, cash, card, total:cash + card};
+}
+function fiscalSnapshot(source, stored) {
+  const shared = summarize(JSON.parse(source));
+  if (!stored) return shared;
+  // The original account summary and shared close must describe the same
+  // payments before a later Z can be attached to an existing internal close.
+  if (!['dayId','openedAt','closedAt','count','cash','card','total'].every(key=>shared[key]===stored[key]) ||
+      !Array.isArray(stored.records) || shared.records.length !== stored.records.length) return null;
+  const samePayments = shared.records.every((row,i)=>['paymentId','billId','method','amount','account']
+    .every(key=>row[key]===stored.records[i]?.[key]));
+  return samePayments ? stored : null;
 }
 function attempt(db, close, actor, requestId) {
   const prior = db.prepare('SELECT close_id AS closeId FROM account_a_attempts WHERE request_id=?').get(requestId);
@@ -27,18 +39,33 @@ function dispatch(db,adapter,job) {
   active(db).add(job.attemptId);
   Promise.resolve().then(()=>adapter(job)).then(result=>db.prepare('INSERT INTO account_a_results VALUES(?,?,?)').run(job.attemptId,result === 'accepted' ? 'accepted' : 'failed',Date.now())).catch(()=>{}).finally(()=>active(db).delete(job.attemptId));
 }
-function handleAccountA(event, req, allowed, db, session, adapter) {
+function handleAccountA(event, req, allowed, db, session, adapter, dailyAdapter) {
   if (!allowed(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype) return {ok:false};
   const keys = Reflect.ownKeys(req).length;
   const readOnly = keys === 1 && Object.hasOwn(req, 'action') &&
     ['accountAList', 'accountAPf700Profile', 'accountAPf700Simulate'].includes(req.action);
-  const valid = readOnly || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||
+  const fiscalRequest = Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['device','simulation'].includes(req.mode) &&
+    ((req.action === 'accountAFiscalClose' && req.confirmed === true &&
+      (keys === 4 || (keys === 5 && Number.isSafeInteger(req.retryAfter) && req.retryAfter > 0))) ||
+     (req.action === 'accountAFiscalReconcile' && keys === 3));
+  const valid = readOnly || fiscalRequest || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||
     (req.action === 'accountARetry' && keys === 4 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
     (req.action === 'accountAConfigure' && keys === 2 && typeof req.queue === 'string' && req.queue === req.queue.trim() && req.queue.length > 0 && req.queue.length <= 255 && !/[\x00-\x1f\x7f]/.test(req.queue));
   if (!valid) return {ok:false};
   try {
     const actor = session.currentUserId();
     if (!actor || actor !== session.authenticatedUserId() || db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope !== 'combined' || !hasPermissions(db,session,'business_days.close')) return {ok:false,denied:true};
+    if (fiscalRequest) {
+      const day=db.prepare(`SELECT j.snapshot AS source,c.id AS closeId,c.snapshot FROM business_days d JOIN day_print_jobs j ON j.day_id=d.id
+        LEFT JOIN account_a_closes c ON c.day_id=d.id
+        JOIN account_a_settings s ON s.id=1 WHERE d.id=? AND d.id>s.boundary AND d.closed_at IS NOT NULL`).get(req.dayId);
+      if (!day) return {ok:false};
+      const generation=session.identityGeneration?.();
+      const authorized=()=>allowed(event) && actor===session.currentUserId() && actor===session.authenticatedUserId()
+        && generation===session.identityGeneration?.() && db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope==='combined'
+        && hasPermissions(db,session,'business_days.close');
+      return daily.handle(db,req,actor,authorized,dailyAdapter,fiscalSnapshot(day.source,day.snapshot && JSON.parse(day.snapshot)),day.closeId);
+    }
     if (req.action === 'accountAPf700Profile') {
       return { ok: true, data: { profile: PF700_PROFILE, hardwareVerified: false } };
     }
@@ -52,8 +79,11 @@ function handleAccountA(event, req, allowed, db, session, adapter) {
         (SELECT COUNT(*) FROM account_a_attempts WHERE close_id=c.id) AS printAttempts,
         (SELECT COALESCE(r.result,'uncertain') FROM account_a_attempts a LEFT JOIN account_a_results r ON r.attempt_id=a.id WHERE a.close_id=c.id ORDER BY a.id DESC LIMIT 1) AS printResult
         FROM business_days d JOIN day_print_jobs j ON j.day_id=d.id LEFT JOIN account_a_closes c ON c.day_id=d.id WHERE d.closed_at IS NOT NULL AND d.id>? ORDER BY d.id DESC`).all(settings.boundary).map(d=>{
-          const report=d.snapshot ? JSON.parse(d.snapshot) : summarize(JSON.parse(d.source));
-          return {id:d.id,openedAt:d.openedAt,closedAt:d.closedAt,status:d.closeId ? 'complete':'pending',count:report.count,total:report.total,cash:report.cash,card:report.card,closedBy:d.closedBy,accountClosedAt:d.accountClosedAt,printAttempts:d.printAttempts,printResult:d.printResult};
+          const stored=d.snapshot && JSON.parse(d.snapshot);
+          const matching=fiscalSnapshot(d.source,stored);
+          const report=stored || matching;
+          const fiscal=daily.describe(db,d.id,matching,!!d.closeId,dailyAdapter);
+          return {id:d.id,openedAt:d.openedAt,closedAt:d.closedAt,status:d.closeId ? 'complete':'pending',count:report.count,total:report.total,cash:report.cash,card:report.card,closedBy:d.closedBy,accountClosedAt:d.accountClosedAt,printAttempts:d.printAttempts,printResult:d.printResult,...(fiscal ? {fiscal} : {})};
         });
       return {ok:true,data:{queue:settings.queue,days}};
     }
@@ -61,6 +91,7 @@ function handleAccountA(event, req, allowed, db, session, adapter) {
     try {
       let close=db.prepare('SELECT id,snapshot FROM account_a_closes WHERE day_id=?').get(req.dayId);
       if (req.action === 'accountAClose') {
+        if (daily.saved(db,req.dayId) || (!close && (dailyAdapter || daily.requiresDevice(db,req.dayId)))) throw Error('Fiscal report required');
         if (close) { db.exec('COMMIT'); return {ok:true}; }
         const day=db.prepare(`SELECT j.snapshot FROM business_days d JOIN day_print_jobs j ON j.day_id=d.id JOIN account_a_settings s ON s.id=1 WHERE d.id=? AND d.id>s.boundary AND d.closed_at IS NOT NULL`).get(req.dayId);
         if (!day) throw Error('Day unavailable');
@@ -71,7 +102,9 @@ function handleAccountA(event, req, allowed, db, session, adapter) {
         recordAudit(db,actor,'close','account_a_day',req.dayId,null,{});
         db.exec('COMMIT'); dispatch(db,adapter,job); return {ok:true};
       }
-      if (!close) throw Error('Close unavailable');
+      // Only an existing Windows-queue job can be retried. A fiscal-only
+      // close never acquired one; a prior internal close retains its job.
+      if (!close || !db.prepare('SELECT 1 FROM account_a_attempts WHERE close_id=?').get(close.id)) throw Error('No internal print job');
       const job=attempt(db,close,actor,'retry-'+req.requestId);
       db.exec('COMMIT'); dispatch(db,adapter,job); return {ok:true};
     } catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }

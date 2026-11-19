@@ -1,16 +1,18 @@
 # Windows PowerShell 5.1. The checkout process owns the private stdin/stdout
 # pipes. Running this helper with no valid identity probe opens no port.
-function Read-Pf700CheckoutReply($Port) {
+param([ValidateSet('Checkout', 'DailyReport', 'ReadDailyReport')][string]$Operation = 'Checkout')
+
+function Read-Pf700CheckoutReply($Port, $Deadline = 20000, $BusyLimit = 48) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $frame = [Collections.Generic.List[byte]]::new()
     $busy = 0
     $expected = 0
-    while ($clock.ElapsedMilliseconds -lt 20000) {
+    while ($clock.ElapsedMilliseconds -lt $Deadline) {
         try { $next = $Port.ReadByte() }
         catch [TimeoutException] { continue }
         if ($next -lt 0) { throw 'Incomplete frame' }
         if ($frame.Count -eq 0) {
-            if ($next -eq 0x16 -and $busy -lt 48) { $busy++; continue }
+            if ($next -eq 0x16 -and $busy -lt $BusyLimit) { $busy++; continue }
             if ($next -eq 0x15) { return ,([byte[]]@(0x15)) }
             if ($next -ne 1) { throw 'Unexpected reply' }
         } elseif ($frame.Count -eq 1) {
@@ -23,16 +25,30 @@ function Read-Pf700CheckoutReply($Port) {
     throw 'Reply deadline exceeded'
 }
 
-function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter) {
+function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation = 'Checkout') {
     $opened = $false
+    $reportSent = $false
     try {
         while ($null -ne ($line = $InputReader.ReadLine())) {
             if ($line -cnotmatch '\A(?:[0-9a-f]{2}){10,101}\z') { throw 'Invalid request' }
             [byte[]]$request = @(for ($i = 0; $i -lt $line.Length; $i += 2) {
                 [Convert]::ToByte($line.Substring($i, 2), 16)
             })
-            if ($request[0] -ne 1 -or $request[1] -ne $request.Length + 26 -or $request[-1] -ne 3 -or
-                $request[3] -notin @(90,74,76,97,113,48,49,51,103,53,56)) { throw 'Invalid checkout frame' }
+            if ($request[0] -ne 1 -or $request[1] -ne $request.Length + 26 -or $request[-1] -ne 3) {
+                throw 'Invalid frame'
+            }
+            if ($Operation -eq 'Checkout') {
+                if ($request[3] -notin @(90,74,76,97,113,48,49,51,103,53,56)) { throw 'Invalid checkout command' }
+            } else {
+                $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
+                $queries = @{ 90 = '0'; 74 = 'X'; 76 = 'T'; 62 = ''; 64 = ''; 65 = ''; 67 = ''; 110 = ''; 113 = '' }
+                $command = [int]$request[3]
+                if ($command -eq 69 -and $Operation -eq 'DailyReport' -and !$reportSent -and $payload -ceq '0') {
+                    $reportSent = $true
+                } elseif (!$queries.ContainsKey($command) -or $queries[$command] -cne $payload) {
+                    throw 'Invalid daily report command'
+                }
+            }
             if (!$opened) {
                 if ($request[3] -ne 90 -or $request.Length -ne 11 -or $request[4] -ne 0x30) { throw 'Identity probe required' }
                 $Port.Open()
@@ -40,7 +56,12 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter) {
             }
             if ($Port.BytesToRead -ne 0) { throw 'Unexpected pending input' }
             $Port.Write($request, 0, $request.Length)
-            [byte[]]$reply = Read-Pf700CheckoutReply $Port
+            if ($request[3] -eq 69) {
+                # The printer may report busy every 60 ms while printing the Z report.
+                [byte[]]$reply = Read-Pf700CheckoutReply $Port 120000 2100
+            } else {
+                [byte[]]$reply = Read-Pf700CheckoutReply $Port
+            }
             if ($Port.BytesToRead -ne 0) { throw 'Unexpected trailing input' }
             $OutputWriter.WriteLine([BitConverter]::ToString($reply).Replace('-', ''))
             $OutputWriter.Flush()
@@ -62,5 +83,5 @@ if ($MyInvocation.InvocationName -ne '.') {
     $port.RtsEnable = $false
     $port.WriteTimeout = 1000
     $port.ReadTimeout = 300
-    Invoke-Pf700CheckoutPort $port ([Console]::In) ([Console]::Out)
+    Invoke-Pf700CheckoutPort $port ([Console]::In) ([Console]::Out) $Operation
 }

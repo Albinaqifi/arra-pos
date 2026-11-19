@@ -376,6 +376,7 @@ const migrations = [
   CREATE TRIGGER order_waiter_ownership_no_replace BEFORE INSERT ON order_waiter_ownership WHEN EXISTS(SELECT 1 FROM order_waiter_ownership WHERE order_id=NEW.order_id) BEGIN SELECT RAISE(ABORT,'Order ownership is retained'); END;` },
   { version: 44, run: require('./fiscal-tax-v44').migrateFiscalTax },
   { version: 45, run: require('./fiscal-checkout-schema').createFiscalCheckoutSchema },
+  { version: 46, run: require('./fiscal-daily-schema').createFiscalDailySchema },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

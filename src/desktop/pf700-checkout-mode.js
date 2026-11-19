@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { offlineCheckoutRequested, createOfflineFiscalCheckout } = require('./fiscal-checkout');
+const { offlineCheckoutRequested } = require('./fiscal-checkout');
+const { createTrainingPf700 } = require('./training-pf700');
+const { createWindowsPf700DailyReport } = require('./pf700-daily-report');
 const { isCommissionedDirectory, deviceTrial } = require('./pf700-commissioning');
 const { createWindowsPf700Checkout } = require('./pf700-windows-checkout');
 
@@ -35,7 +37,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
     if (fs.existsSync(path.join(directory, 'arra.sqlite')) && isCommissionedDirectory(directory)) {
       throw Error('Use the dedicated training database for offline checkout.');
     }
-    return createOfflineFiscalCheckout();
+    return createTrainingPf700(directory);
   }
   if (switches[0] !== supervised || process.platform !== 'win32' ||
       args.some(arg => arg.startsWith('--sample-data-directory')) ||
@@ -56,6 +58,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
   });
   return Object.freeze({
     ...adapter,
+    dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
     canRegister(receipt) {
       return trial.available() && receipt.method === 'cash' && receipt.account === 'A' &&
         receipt.lines.length === 1 && receipt.lines[0].quantity === 1;
