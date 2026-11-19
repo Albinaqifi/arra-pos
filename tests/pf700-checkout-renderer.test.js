@@ -16,7 +16,7 @@ function dialog(api, props = {}) {
 }
 
 const line = { itemId: 3, name: 'Coffee', unitPrice: 70, quantity: 1, modifiers: [], taxRate: 10, taxGroup: 'В' };
-const bill = { id: 1, lines: [line], total: 70, fiscalMode: 'device', fiscalDomesticProduct: true };
+const bill = { id: 1, lines: [line], total: 70, fiscalMode: 'device', fiscalDomesticProduct: true, physicalCashControls: true };
 const fiscal = { mode: 'device', status: 'accepted', reference: '0001235', method: 'cash', receipt: { lines: [line], domesticProduct: true } };
 
 test('training card requires an explicit simulated approval and a decline leaves the bill payable', async () => {
@@ -136,7 +136,7 @@ test('live confirmation names the sale and saved origin; uncertainty refreshes e
     baseline: { deviceId: 'SYNTHETIC01', previousDocumentNumber: '0001234', expectedDocumentNumber: '0001235' } };
   const view = dialog({
     bill: async () => ({ ok: true, data: ++reads === 1 ? bill : { ...bill, fiscal: unknown } }),
-    payment: async () => { writes++; return { ok: false, fiscalStatus: 'uncertain' }; }
+    payment: async request => { if (request.preparePhysicalCash) return {ok:true,data:{intentId:15}}; writes++; return { ok: false, fiscalStatus: 'uncertain' }; }
   });
   await view.review();
   view.selectMethod('cash');
@@ -205,14 +205,15 @@ test('uncertain receipt guidance remains visible when saved-bill reload fails or
 
 
 test('lost device Cash A bridge response warns and retains the locked original selection', async () => {
-  const selections = [];
+  const selections = []; let preparations = 0;
   const view = dialog({
     bill: async () => ({ ok: true, data: bill }),
-    payment: async selection => { selections.push(selection); throw Error('Lost response'); }
+    payment: async selection => { if (selection.preparePhysicalCash) { preparations++; return {ok:true,data:{intentId:15}}; } selections.push(selection); throw Error('Lost response'); }
   });
   await view.review();
   view.selectMethod('cash', 'A');
   await view.pay();
+  assert.equal(preparations, 1);
   const output = JSON.stringify(view.render());
   assert.match(output, /Ask for help; do not take another payment or run printer checks/);
   assert.doesNotMatch(output, /Register cash sale|Retry the same selection/);

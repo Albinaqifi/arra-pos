@@ -26,6 +26,14 @@ function openMemory(file) {
       attempt TEXT NOT NULL UNIQUE CHECK(length(attempt)=64 AND attempt NOT GLOB '*[^a-f0-9]*'),
       snapshot TEXT NOT NULL CHECK(json_valid(snapshot))
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS cash_recovery_evidence (
+      bill INTEGER PRIMARY KEY,
+      attempt TEXT NOT NULL UNIQUE CHECK(length(attempt)=64 AND attempt NOT GLOB '*[^a-f0-9]*'),
+      snapshot TEXT NOT NULL CHECK(json_valid(snapshot)),
+      state TEXT NOT NULL CHECK(state IN ('not_started','open_unpaid','tendered','closed')),
+      tenders INTEGER NOT NULL CHECK(tenders IN (0,1)),
+      CHECK((state IN ('not_started','open_unpaid') AND tenders=0) OR (state IN ('tendered','closed') AND tenders=1))
+    ) STRICT;
     CREATE TRIGGER IF NOT EXISTS card_sale_evidence_no_update BEFORE UPDATE ON card_sale_evidence
       BEGIN SELECT RAISE(ABORT,'Simulated receipt evidence is retained'); END;
     CREATE TRIGGER IF NOT EXISTS card_sale_evidence_no_delete BEFORE DELETE ON card_sale_evidence
@@ -39,6 +47,73 @@ function openMemory(file) {
     db.close();
     throw error;
   }
+}
+
+function validCashSnapshot(snapshot, attempt) {
+  return snapshot?.method === 'cash' && snapshot.account === 'A' &&
+    typeof attempt === 'string' && /^[a-f0-9]{64}$/.test(attempt) &&
+    require('./pf700-checkout-protocol').canEncodePf700Receipt(snapshot);
+}
+
+function verifyCash(db, snapshot, attempt) {
+  if (!validCashSnapshot(snapshot, attempt)) return null;
+  const row = db.prepare('SELECT * FROM cash_recovery_evidence WHERE bill=?').get(snapshot.billId);
+  if (!row || row.attempt !== attempt || row.snapshot !== JSON.stringify(snapshot)) return null;
+  const doc = db.prepare('SELECT * FROM documents WHERE bill=?').get(snapshot.billId);
+  if (row.state !== 'closed') return !doc && row.tenders === (row.state === 'tendered' ? 1 : 0) ? row : null;
+  const taxA = snapshot.lines.reduce((sum, line) => sum + (line.taxGroup === 'А' ? line.unitPrice * line.quantity : 0), 0);
+  return doc && row.tenders === 1 && doc.cash === snapshot.total && doc.card === 0 &&
+    doc.taxA === taxA && doc.taxV === snapshot.total - taxA ? row : null;
+}
+
+// The explicit record is the only proof that the simulated receipt never
+// opened. A missing file, missing row, old record or mismatch proves nothing.
+function inspectCash(file, snapshot, attempt) {
+  if (!fs.existsSync(file) || !validCashSnapshot(snapshot, attempt)) return null;
+  const db = new DatabaseSync(file, {readOnly:true});
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='cash_recovery_evidence'").get()) return null;
+    return verifyCash(db, snapshot, attempt)?.state || null;
+  } finally { db.close(); }
+}
+
+function recordCashInterruption(file, snapshot, attempt, interruption) {
+  const states = {before_open:'not_started',after_items:'open_unpaid',after_tender:'tendered',after_close:'closed',after_ack:'closed'};
+  if (!Object.hasOwn(states, interruption) || !validCashSnapshot(snapshot, attempt)) throw Error('Invalid training interruption');
+  const db = openMemory(file);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    if (db.prepare('SELECT 1 FROM documents WHERE bill=?').get(snapshot.billId) ||
+        db.prepare('SELECT 1 FROM cash_recovery_evidence WHERE bill=? OR attempt=?').get(snapshot.billId,attempt)) throw Error('Training attempt already exists');
+    const state = states[interruption];
+    db.prepare('INSERT INTO cash_recovery_evidence VALUES(?,?,?,?,?)')
+      .run(snapshot.billId,attempt,JSON.stringify(snapshot),state,['tendered','closed'].includes(state) ? 1 : 0);
+    if (state === 'closed') insertCashDocument(db, snapshot);
+    db.exec('COMMIT');
+  } finally { db.close(); }
+}
+
+function insertCashDocument(db, snapshot) {
+  const taxA = snapshot.lines.reduce((sum,line) => sum + (line.taxGroup === 'А' ? line.unitPrice * line.quantity : 0),0);
+  db.prepare('INSERT INTO documents (bill,cash,card,taxA,taxV) VALUES(?,?,?,?,?)')
+    .run(snapshot.billId,snapshot.total,0,taxA,snapshot.total-taxA);
+}
+
+function finishCash(file, snapshot, attempt) {
+  if (!fs.existsSync(file)) return false;
+  const db = openMemory(file);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const row = verifyCash(db,snapshot,attempt);
+    if (!row) { db.exec('ROLLBACK'); return false; }
+    if (row.state !== 'closed') {
+      insertCashDocument(db,snapshot);
+      db.prepare("UPDATE cash_recovery_evidence SET state='closed',tenders=1 WHERE bill=? AND attempt=?")
+        .run(snapshot.billId,attempt);
+    }
+    db.exec('COMMIT');
+    return true;
+  } finally { db.close(); }
 }
 
 function recordSale(file, snapshot, attempt) {
@@ -138,8 +213,17 @@ function createTrainingPf700(directory, now = () => new Date()) {
     openPipe: operation => openTrainingPipe(file, operation, now) });
   return Object.freeze({
     mode: 'simulation', requireOrigins: true,
+    simulationRecoveryControls: true,
+    inspectCash(snapshot, attempt) { return inspectCash(file, snapshot, attempt); },
+    finishCash(snapshot, attempt) { return finishCash(file, snapshot, attempt); },
     matchRecordedSale(snapshot, attempt) { return matchRecordedSale(file, snapshot, attempt); },
     async registerSale(snapshot, context = {}) {
+      if (snapshot?.method === 'cash' && context.simulateInterrupt) {
+        recordCashInterruption(file,snapshot,context.simulationAttempt,context.simulateInterrupt);
+        return context.simulateInterrupt === 'after_ack'
+          ? {status:'accepted',reference:'SIM-'+snapshot.billId}
+          : {status:'uncertain'};
+      }
       if (snapshot?.method === 'card' &&
           (typeof context.simulationAttempt !== 'string' || !/^[a-f0-9]{64}$/.test(context.simulationAttempt))) {
         throw Error('Missing simulated checkout attempt');

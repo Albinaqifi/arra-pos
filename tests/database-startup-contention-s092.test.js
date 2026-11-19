@@ -51,7 +51,7 @@ test('startup waits to upgrade after a competing transaction and leaves later lo
     await new Promise(resolve => setTimeout(resolve, 200));
     db.exec('COMMIT');
     const { elapsed, ...result } = await opening.result;
-    assert.deepEqual(result, { version: 48, timeout: 0, value: 'retained' });
+    assert.deepEqual(result, { version: 50, timeout: 0, value: 'retained' });
     assert.ok(elapsed >= 100, `opening returned after ${elapsed}ms without observing the lock`);
   } finally {
     if (db.isTransaction) db.exec('ROLLBACK');

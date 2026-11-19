@@ -20,6 +20,33 @@ function historicalDatabase(version) {
 // Older test fixtures assemble prior schemas by removing later migrations.
 // Remove later fiscal objects before rebuilding their referenced tables.
 const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS pf700_cash_card_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_sample_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_payment_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_sale_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_order_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_shift_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_day_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_account_a_guard;
+  DROP TRIGGER IF EXISTS pf700_cash_daily_guard;
+  DROP TABLE IF EXISTS pf700_command_seals;
+  DROP TABLE IF EXISTS pf700_command_acks;
+  DROP TABLE IF EXISTS pf700_command_intents;
+  DROP TABLE IF EXISTS pf700_cash_dispatches;
+  DROP VIEW IF EXISTS pf700_cash_open_intents;
+  DROP TABLE IF EXISTS pf700_cash_intent_results;
+  DROP TABLE IF EXISTS pf700_cash_intents;
+  DROP TRIGGER IF EXISTS simulated_cash_card_intent_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_order_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_shift_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_day_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_account_a_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_daily_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_intent_sale_guard;
+  DROP TRIGGER IF EXISTS simulated_cash_intent_payment_guard;
+  DROP VIEW IF EXISTS simulated_cash_open_intents;
+  DROP TABLE IF EXISTS simulated_cash_intents;
+  DROP TABLE IF EXISTS simulated_cash_attempts;
   DROP TRIGGER IF EXISTS simulated_card_daily_guard;
   DROP TRIGGER IF EXISTS simulated_card_account_a_guard;
   DROP TRIGGER IF EXISTS simulated_card_day_guard;

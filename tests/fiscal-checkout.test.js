@@ -65,6 +65,16 @@ function setup(t, adapter = createOfflineFiscalCheckout()) {
         }
         if (intent) req={...req,intentId:intent.id};
       }
+      // Exercise the same durable preparation boundary as the real waiter UI.
+      // Direct requests remain available separately for validation tests.
+      if (adapter?.mode === 'device' && req.method === 'cash' && req.account === 'A' &&
+          Reflect.ownKeys(req).length === 3 && !db.prepare('SELECT 1 FROM payments WHERE bill_id=?').get(req.billId) &&
+          !db.prepare(`SELECT 1 FROM fiscal_checkout_attempts a JOIN fiscal_checkout_verified_results r ON r.attempt_id=a.id
+            WHERE a.bill_id=? AND r.status='accepted'`).get(req.billId)) {
+        const prepared=call('arra:payment',{...req,preparePhysicalCash:true});
+        if (!prepared.ok) return prepared;
+        req={...req,physicalIntentId:prepared.data.intentId};
+      }
       return call('arra:payment', req);
     },
     direct: req => call('arra:payment', req),
@@ -77,6 +87,21 @@ function setup(t, adapter = createOfflineFiscalCheckout()) {
 const count = (db, table) => db.prepare('SELECT count(*) AS n FROM ' + table).get().n;
 const payment = (billId, method = 'cash', account = 'A') => ({billId, method, account,
   ...(method === 'card' && account === 'A' ? {terminalApproved:true,intentId:1} : {})});
+
+test('a direct physical Cash A request cannot bypass durable preparation', async t => {
+  let calls=0;
+  const f=setup(t,{mode:'device',deviceId:'sample-PF700',domesticProduct:false,registerSale:()=>{calls++;return {status:'failed'};}});
+  const req=payment(f.generate());
+  assert.equal(f.direct(req).fiscalStatus,'selection');
+  assert.equal(count(f.db,'pf700_cash_intents'),0);
+  assert.equal(count(f.db,'fiscal_checkout_attempts'),0);
+  assert.equal(calls,0);
+  const prepared=f.direct({...req,preparePhysicalCash:true});
+  assert.equal(prepared.ok,true);
+  assert.equal((await f.direct({...req,physicalIntentId:prepared.data.intentId})).fiscalStatus,'failed');
+  assert.equal(count(f.db,'fiscal_checkout_attempts'),1);
+  assert.equal(calls,1);
+});
 
 test('prepared terminal intent survives a lost approval request and forbids alternate tender or decline', async t => {
   const f=setup(t), id=f.generate();
@@ -483,10 +508,11 @@ test('one supervised receipt consumes the device allowance across connections an
   try {
     let pay;
     registerPayments({handle:(_,fn)=>{pay=fn;}},()=>true,parallel,f.session,null,makeAdapter());
-    assert.equal(pay({},second).fiscalStatus,'blocked');
+    assert.equal(pay({},{...second,preparePhysicalCash:true}).fiscalStatus,'blocked');
     finish({status:'accepted',reference:'0000123',evidence:{documentNumber:'0000123',fiscalReceiptCount:1,reversalCount:0}});
     assert.equal((await submitted).fiscalStatus,'submitted');
-    assert.equal(pay({},second).fiscalStatus,'scope');
+    assert.equal(pay({},{...second,preparePhysicalCash:true}).fiscalStatus,'scope');
+    assert.equal(parallel.prepare('SELECT COUNT(*) AS n FROM pf700_cash_open_intents WHERE bill_id=?').get(second.billId).n,0);
     assert.equal(count(parallel,'payments'),0);
   } finally { parallel.close(); }
   f.restart(makeAdapter());
@@ -601,6 +627,7 @@ test('device attempt holds its original financial period until settled and pre-o
   f.db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=2");
   finish(false);
   assert.equal((await first).fiscalStatus,'failed');
+  assert.deepEqual(f.direct({...req,releasePhysicalCash:true}),{ok:true});
   assert.equal(closeShift().ok,true);
   const shift = shifts();
 

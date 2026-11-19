@@ -97,7 +97,7 @@ test('Windows adapter pins the serial and runs the full checkout over one privat
   config.beforeOpen = () => assert.deepEqual(mock.log.calls, [90,74,76,97,113]);
   const device = createWindowsPf700Checkout(config, mock.start);
   assert.equal(device.deviceId, serial);
-  assert.deepEqual(Object.keys(device).sort(), ['deviceId','domesticProduct','mode','registerSale']);
+  assert.deepEqual(Object.keys(device).sort(), ['acquireCashObservation','deviceId','domesticProduct','mode','registerSale']);
   assert.equal((await device.registerSale(snapshot)).status, 'failed');
   assert.equal((await device.registerSale({ ...snapshot, domesticProduct: false }, journal)).status, 'failed');
   const oversized = { ...snapshot, total: 10_000_000, lines: [{ ...snapshot.lines[0], unitPrice: 10_000_000 }] };
@@ -329,7 +329,14 @@ function commissionedCheckout(t, port) {
       assert.equal(generated.data.total, 70);
       return generated.data.id;
     },
-    pay: billId => handlers['arra:payment'](event, { billId, method: 'cash', account: 'A' }),
+    pay: billId => {
+      const request = { billId, method: 'cash', account: 'A' };
+      if (db.prepare('SELECT 1 FROM payments WHERE bill_id=?').get(billId) ||
+          db.prepare(`SELECT 1 FROM fiscal_checkout_attempts a JOIN fiscal_checkout_verified_results r ON r.attempt_id=a.id
+            WHERE a.bill_id=? AND r.status='accepted'`).get(billId)) return handlers['arra:payment'](event,request);
+      const prepared = handlers['arra:payment'](event, {...request,preparePhysicalCash:true});
+      return prepared.ok ? handlers['arra:payment'](event,{...request,physicalIntentId:prepared.data.intentId}) : prepared;
+    },
     restart() { db.close(); db = openDatabase(directory); register(); }
   };
 }

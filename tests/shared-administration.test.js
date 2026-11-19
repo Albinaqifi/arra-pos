@@ -98,7 +98,7 @@ test('upgrade grants shared administration only to existing owners', t=>{
   db.exec(removeFiscalSchemaSql + "DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DELETE FROM user_permissions WHERE user_id IN (2,3,4) AND permission IN ('tables.change','menu.change','employees.view','employees.change'); DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=27");
   db.close(); db=openDatabase(dir);
   for(const id of [2,3,4]) for(const permission of ['tables.change','menu.change','employees.view','employees.change']) assert.ok(db.prepare('SELECT 1 FROM user_permissions WHERE user_id=? AND permission=?').get(id,permission));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,48);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,50);
   assert.equal(db.prepare("SELECT count(*) n FROM user_permissions WHERE user_id IN (2,3) AND permission='business_days.close'").get().n,0);
 });
 
