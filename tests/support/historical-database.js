@@ -20,6 +20,9 @@ function historicalDatabase(version) {
 // Older test fixtures assemble prior schemas by removing later migrations.
 // Remove later fiscal objects before rebuilding their referenced tables.
 const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS order_item_snapshot_fiscal_origin;
+  DROP TABLE IF EXISTS order_item_fiscal_origin;
+  DROP TABLE IF EXISTS menu_product_fiscal_origin;
   DROP TRIGGER IF EXISTS fiscal_daily_checkout_guard;
   DROP VIEW IF EXISTS fiscal_daily_current;
   DROP TABLE IF EXISTS fiscal_daily_nonissuances;

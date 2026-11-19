@@ -390,5 +390,7 @@
   "waiter.Table {id} has new items still pending. Reopen the table with your PIN and send again.": "Tavolina {id} ka artikuj te rinj te paderguar. Rihapeni me PIN-in tuaj dhe dergoni perseri.",
   "waiter.A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.": "Nje printim kerkon vemendje ose ka rezultat te pasigurt. Rihapni tavolinen tuaj per ta kontrolluar dhe provoni perseri nese duhet.",
   "waiter.Print status unavailable. Reopen your table and check print jobs.": "Statusi i printimit nuk eshte i disponueshem. Rihapni tavolinen tuaj dhe kontrolloni printimet.",
-  "waiter.Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar.": "Raundi {round} u ruajt, por fleta per {destinations} nuk u printua. Rihapni tavolinen per te provuar perseri nga shiriti i kuq."
+  "waiter.Round {round} is saved, but the {destinations} ticket did not print. Reopen the table to retry using the red bar.": "Raundi {round} u ruajt, por fleta per {destinations} nuk u printua. Rihapni tavolinen per te provuar perseri nga shiriti i kuq.",
+  "waiter.A bill item has no saved Macedonian-product mark. Ask Combined to classify it in Menu management.": "Nje artikull nuk ka shenjen e ruajtur te produktit maqedonas. Kerkoni qe Combined ta klasifikoje te Menaxhimi i menuse.",
+  "waiter.A bill item is missing its saved VAT group or Macedonian-product mark. Ask Combined to check Menu management.": "Nje artikulli i mungon grupi i ruajtur i TVSH-se ose shenja e produktit maqedonas. Kerkoni qe Combined te kontrolloje menune."
 }

@@ -6,6 +6,7 @@ const fiscalMessages = {
   uncertain: 'The receipt outcome is unknown. Check the original transaction before taking another payment.',
   failed: 'The receipt did not start. You can retry the same payment method.',
   unmapped: 'A bill item has no saved VAT group. Check its menu and order details.',
+  origin: 'A bill item has no saved Macedonian-product mark. Ask Combined to classify it in Menu management.',
   unavailable: 'The PF700 cannot register the items or amounts on this bill.',
   blocked: 'Another PF700 receipt needs attention before this checkout.',
   scope: 'This supervised trial permits one cash receipt for one unit of one item.',
@@ -76,7 +77,9 @@ export class DesktopBill extends React.Component {
       return;
     }
     const wrongProfile = fiscal?.status === 'failed' && (fiscal.mode !== data.fiscalMode ||
-      (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== data.fiscalDomesticProduct));
+      (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== data.fiscalDomesticProduct &&
+        !(data.fiscalRequiresOrigins && fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
+          !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct'))));
     const status = wrongProfile ? 'profile' : rejection || fiscal?.status;
     this.setState({
       data, loading: false, error: fiscalMessages[status] || '',
@@ -185,6 +188,9 @@ export class DesktopBill extends React.Component {
     const device = (fiscal?.mode || d?.fiscalMode) === 'device';
     const submitted = this.state.fiscalStatus === 'submitted';
     const domestic = fiscal?.receipt?.domesticProduct ?? d?.fiscalDomesticProduct;
+    const legacyTrial = fiscal?.status === 'failed' && fiscal.mode === 'device' &&
+      fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
+      typeof fiscal.receipt.domesticProduct === 'boolean' && !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct');
     const liveSelection = d?.fiscalMode === 'device' && !receipt && !submitted && !this.state.fiscalHold && this.state.account === 'A';
     const locked = this.state.busy || this.state.uncertain || this.state.fiscalHold || this.state.fiscalTenderFixed || !!receipt;
     return h('div', { className: 'bill-overlay' },
@@ -201,7 +207,7 @@ export class DesktopBill extends React.Component {
           !receipt && d?.fiscalMode === 'simulation' && this.state.account === 'A' &&
             h('p', { className: 'bill-status' }, t('Offline PF700 checkout. This payment uses a simulated printer.')),
           liveSelection && h('p', { className: 'bill-warning' }, t('Supervised PF700 checkout. Confirming Cash A will register a real sale.')),
-          device && (liveSelection || fiscal) && typeof domestic === 'boolean' &&
+          device && (!d?.fiscalRequiresOrigins || (fiscal && !fiscal.receipt.lines.some(l => typeof l.domesticProduct === 'boolean'))) && (liveSelection || fiscal) && typeof domestic === 'boolean' &&
             h('p', { className: 'bill-status' }, t(domestic ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')),
           !receipt && submitted && fiscal?.reference && h('p', { className: 'bill-status' }, t('Acknowledged document {number}', {number:fiscal.reference})),
           device && this.state.fiscalStatus === 'uncertain' && fiscal?.baseline && h('p', { className: 'bill-warning' },
@@ -209,8 +215,10 @@ export class DesktopBill extends React.Component {
               number:fiscal.baseline.expectedDocumentNumber, device:fiscal.baseline.deviceId
             })),
           this.state.uncertain && h('p', { className: 'bill-warning' }, t("The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.")),
+          !receipt && !legacyTrial && d?.fiscalRequiresOrigins && this.state.account === 'A' && d.lines.some(l => !l.taxGroup || typeof l.domesticProduct !== 'boolean') &&
+            h('p', { role: 'alert', className: 'bill-warning' }, t('A bill item is missing its saved VAT group or Macedonian-product mark. Ask Combined to check Menu management.')),
           d && h('section', { className: 'bill-summary' },
-            h('ul', { className: 'bill-lines' }, (receipt ? receipt.receipt.lines : d.lines).map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.taxGroup && Number.isInteger(l.taxRate) && h('small', null, ' · ', t('VAT {rate}% ({group})', {rate:l.taxRate, group:l.taxGroup})), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
+            h('ul', { className: 'bill-lines' }, (receipt ? receipt.receipt.lines : d.lines).map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.taxGroup && Number.isInteger(l.taxRate) && h('small', null, ' · ', t('VAT {rate}% ({group})', {rate:l.taxRate, group:l.taxGroup})), typeof l.domesticProduct === 'boolean' && h('small', null, ' · ', t(l.domesticProduct ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
             h('div', { className: 'bill-total' }, h('strong', null, t('Total: {total}', {total:money(d.total)})))),
           d?.id && !receipt && h('div', { className: 'bill-payment' },
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),

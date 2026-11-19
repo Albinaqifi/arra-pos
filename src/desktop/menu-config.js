@@ -1,4 +1,4 @@
-const { auditConfiguration } = require('./audit');
+const { auditConfiguration, recordAudit } = require('./audit');
 const { randomUUID } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
 const CHANNEL = 'arra:menu-config';
@@ -17,6 +17,10 @@ function validProduct(req) {
     if (![null, 'А', 'В'].includes(req.taxGroup)) return false;
     fields.push('taxGroup');
   }
+  if (Object.hasOwn(req, 'domesticProduct')) {
+    if (![null, true, false].includes(req.domesticProduct)) return false;
+    fields.push('domesticProduct');
+  }
   return keys(req, fields) && (req.id === null || id(req.id)) && id(req.categoryId) &&
     name(req.name) && number(req.price) && typeof req.active === 'boolean' && number(req.sortOrder);
 }
@@ -25,11 +29,39 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
     if (!hasPermissions(db, session, 'menu.change')) return { ok: false, error: 'Access denied' };
     try {
+      const actor = session.currentUserId();
+      const combined = actor === session.authenticatedUserId() &&
+        db.prepare("SELECT 1 FROM financial_scopes WHERE user_id=? AND scope='combined'").get(actor);
+      if (req.action === 'classifyOrigin' && keys(req, ['action','itemId','domesticProduct']) &&
+          Number.isSafeInteger(req.itemId) && req.itemId > 0 && typeof req.domesticProduct === 'boolean') {
+        if (!combined) return {ok:false,error:'Access denied'};
+        db.exec('BEGIN IMMEDIATE');
+        try {
+          const row = db.prepare(`SELECT i.id,i.order_id AS orderId,o.domestic FROM order_items i
+            JOIN orders ord ON ord.id=i.order_id LEFT JOIN order_item_fiscal_origin o ON o.item_id=i.id
+            WHERE i.id=? AND ord.status='open' AND ord.retired_empty=0
+            AND NOT EXISTS(SELECT 1 FROM bills b JOIN fiscal_checkout_sales s ON s.bill_id=b.id WHERE b.order_id=ord.id)`).get(req.itemId);
+          if (!row || (row.domestic !== null && row.domestic !== Number(req.domesticProduct))) {
+            db.exec('ROLLBACK'); return {ok:false,error:'Item unavailable'};
+          }
+          if (row.domestic === null) {
+            db.prepare('INSERT INTO order_item_fiscal_origin(item_id,domestic) VALUES(?,?)').run(row.id,Number(req.domesticProduct));
+            recordAudit(db,actor,'classify_origin','order_item',row.id,row.orderId,{domesticProduct:req.domesticProduct});
+          }
+          db.exec('COMMIT'); return {ok:true};
+        } catch (error) { if (db.isTransaction) db.exec('ROLLBACK'); throw error; }
+      }
       const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         categories: db.prepare('SELECT id, name, active, parent_id AS parentId, sort_order AS sortOrder FROM menu_categories ORDER BY sort_order, rowid').all(),
-        products: db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, p.price, p.active, p.sort_order AS sortOrder, p.destination, t.tax_group AS taxGroup
-          FROM menu_products p LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id ORDER BY p.sort_order, p.rowid`).all(),
+        products: db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, p.price, p.active, p.sort_order AS sortOrder, p.destination, t.tax_group AS taxGroup, o.domestic AS domesticProduct
+          FROM menu_products p LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id LEFT JOIN menu_product_fiscal_origin o ON o.product_id=p.id ORDER BY p.sort_order, p.rowid`).all().map(p => ({...p, domesticProduct: p.domesticProduct === null ? null : !!p.domesticProduct})),
+        unclassifiedOrigins: combined ? db.prepare(`SELECT i.id,i.order_id AS orderId,ord.table_id AS tableId,i.name,i.quantity
+          FROM order_items i JOIN orders ord ON ord.id=i.order_id
+          LEFT JOIN order_item_fiscal_origin o ON o.item_id=i.id
+          WHERE ord.status='open' AND ord.retired_empty=0 AND o.item_id IS NULL
+          AND NOT EXISTS(SELECT 1 FROM bills b JOIN fiscal_checkout_sales s ON s.bill_id=b.id WHERE b.order_id=ord.id)
+          ORDER BY i.order_id,i.id`).all() : [],
         groups: db.prepare('SELECT id, product_id AS productId, name, required, active FROM modifier_groups ORDER BY rowid').all(),
         options: db.prepare('SELECT id, group_id AS groupId, name, adjustment, active FROM modifier_options ORDER BY rowid').all()
       } };
@@ -50,6 +82,9 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
         if (req.taxGroup === null) db.prepare('DELETE FROM menu_product_fiscal_tax WHERE product_id=?').run(productId);
         else if (Object.hasOwn(req, 'taxGroup')) db.prepare(`INSERT INTO menu_product_fiscal_tax(product_id,tax_group) VALUES(?,?)
           ON CONFLICT(product_id) DO UPDATE SET tax_group=excluded.tax_group`).run(productId, req.taxGroup);
+        if (req.domesticProduct === null) db.prepare('DELETE FROM menu_product_fiscal_origin WHERE product_id=?').run(productId);
+        else if (Object.hasOwn(req, 'domesticProduct')) db.prepare(`INSERT INTO menu_product_fiscal_origin(product_id,domestic) VALUES(?,?)
+          ON CONFLICT(product_id) DO UPDATE SET domestic=excluded.domestic`).run(productId, Number(req.domesticProduct));
         return { ok: true };
       }
       if (req.action === 'group' && keys(req, ['action','id','productId','name','required','active']) && (req.id === null || id(req.id)) && id(req.productId) && name(req.name) && typeof req.required === 'boolean' && typeof req.active === 'boolean') {

@@ -377,6 +377,7 @@ const migrations = [
   { version: 44, run: require('./fiscal-tax-v44').migrateFiscalTax },
   { version: 45, run: require('./fiscal-checkout-schema').createFiscalCheckoutSchema },
   { version: 46, run: require('./fiscal-daily-schema').createFiscalDailySchema },
+  { version: 47, run: require('./fiscal-origin-v47').migrateFiscalOrigin },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

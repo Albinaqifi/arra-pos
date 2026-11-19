@@ -1,0 +1,31 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+test('routine launcher stages a new version and retains the commissioning profile and trial marker', {skip:process.platform !== 'win32'}, t => {
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'arra routine launcher '));
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const local=path.join(root,'local'), roaming=path.join(root,'roaming'); fs.mkdirSync(local); fs.mkdirSync(roaming);
+  const old=path.join(local,'Arra POS Offline Test','1.0.7'); fs.mkdirSync(old,{recursive:true}); fs.writeFileSync(path.join(old,'keep'),'old program');
+  const profile=path.join(roaming,'Arra POS PF700 Commissioning'); fs.mkdirSync(profile); fs.writeFileSync(path.join(profile,'arra.sqlite'),'existing profile');
+  const marker=path.join(local,'Arra POS','PF700 commissioning'); fs.mkdirSync(marker,{recursive:true}); fs.writeFileSync(path.join(marker,'used'),'spent marker');
+  const payload=path.join(root,'payload'), app=path.join(payload,'resources','app'); fs.mkdirSync(app,{recursive:true});
+  const scripts=path.join(__dirname,'../scripts/sample-installer');
+  for (const file of ['test-arra.ps1','start-routine-pf700.ps1']) fs.copyFileSync(path.join(scripts,file),path.join(root,file));
+  fs.writeFileSync(path.join(root,'version.txt'),'1.0.8'); fs.writeFileSync(path.join(app,'package.json'),'{"version":"1.0.8"}');
+  fs.writeFileSync(path.join(payload,'electron.exe'),'inert'); fs.writeFileSync(path.join(payload,'setup-arra.ps1'),"throw 'unexpected setup'");
+  fs.writeFileSync(path.join(payload,'start-supervised-pf700.ps1'),"param([switch]$StartRoutine)\nif (!$StartRoutine) { throw 'wrong mode' }\n[IO.File]::WriteAllText($env:TEST_ROUTINE_CAPTURE, $env:APPDATA)\n");
+  const env={...process.env,LOCALAPPDATA:local,APPDATA:roaming,TEST_ROUTINE_CAPTURE:path.join(root,'capture')};
+  const ps=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
+  const run=command=>spawnSync(ps,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-Command',command],{cwd:root,env,encoding:'utf8',windowsHide:true,timeout:30000});
+  const zip=run("Compress-Archive -Path '.\\payload\\*' -DestinationPath '.\\payload.zip'"); assert.equal(zip.status,0,zip.stderr);
+  const start=run("& '.\\start-routine-pf700.ps1'; exit $LASTEXITCODE"); assert.equal(start.status,0,start.stdout+start.stderr);
+  assert.equal(fs.readFileSync(env.TEST_ROUTINE_CAPTURE,'utf8'),roaming);
+  assert.equal(fs.readFileSync(path.join(profile,'arra.sqlite'),'utf8'),'existing profile');
+  assert.equal(fs.readFileSync(path.join(marker,'used'),'utf8'),'spent marker');
+  assert.equal(fs.readFileSync(path.join(old,'keep'),'utf8'),'old program');
+  assert.ok(fs.existsSync(path.join(local,'Arra POS Offline Test','1.0.8','start-supervised-pf700.ps1')));
+});

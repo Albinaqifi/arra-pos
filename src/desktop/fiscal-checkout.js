@@ -3,6 +3,7 @@
 const active = new WeakMap();
 const errors = Object.freeze({
   unmapped: 'A bill item has no verified fiscal tax group.',
+  origin: 'A bill item has no saved Macedonian-product mark.',
   unavailable: 'The bill cannot be registered on the fiscal printer.',
   selection: 'This bill already has a different fiscal payment selection.',
   pending: 'Fiscal checkout is in progress.',
@@ -59,18 +60,21 @@ function readFiscalCheckout(db, billId) {
 }
 
 function buildReceipt(db, billId, method, total, adapter) {
-  const rows = db.prepare(`SELECT l.item_id AS itemId,l.name,l.unit_price AS unitPrice,l.quantity,l.modifiers,t.tax_group AS taxGroup
-    FROM bill_lines l LEFT JOIN order_item_fiscal_tax t ON t.item_id=l.item_id WHERE l.bill_id=? ORDER BY l.id`).all(billId);
+  const rows = db.prepare(`SELECT l.item_id AS itemId,l.name,l.unit_price AS unitPrice,l.quantity,l.modifiers,t.tax_group AS taxGroup,o.domestic AS domesticProduct
+    FROM bill_lines l LEFT JOIN order_item_fiscal_tax t ON t.item_id=l.item_id LEFT JOIN order_item_fiscal_origin o ON o.item_id=l.item_id WHERE l.bill_id=? ORDER BY l.id`).all(billId);
   let sum = 0;
   const lines = [];
   for (const row of rows) {
     if (!['А','В'].includes(row.taxGroup)) return failure('unmapped');
+    if (adapter.requireOrigins && row.domesticProduct === null) return failure('origin');
     const amount = row.quantity * row.unitPrice;
     if (!Number.isSafeInteger(row.quantity) || row.quantity < 1 || !Number.isSafeInteger(row.unitPrice) || row.unitPrice < 0 ||
         !Number.isSafeInteger(amount) || !Number.isSafeInteger(sum + amount)) return failure('unavailable');
     sum += amount;
     // The billed unit price already includes each selected adjustment.
-    lines.push({ ...row, modifiers: JSON.parse(row.modifiers), taxRate: row.taxGroup === 'А' ? 18 : 10 });
+    const {domesticProduct, ...line} = row;
+    lines.push({ ...line, modifiers: JSON.parse(row.modifiers), taxRate: row.taxGroup === 'А' ? 18 : 10,
+      ...(adapter.requireOrigins ? {domesticProduct: !!domesticProduct} : {}) });
   }
   if (!lines.length || sum !== total) return failure('unavailable');
   return { billId, account: 'A', method, currency: 'MKD', total, lines,
@@ -84,14 +88,14 @@ function reserveSale(db, request, total, actor, prior, adapter) {
   // The only physical mode in this release is the single-sale commissioning
   // trial. Its allowance is spent when the receipt is acknowledged, even if
   // the POS payment still needs to be finalized in a later session.
-  if (adapter.mode === 'device' && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
+  if (adapter.mode === 'device' && !adapter.requireOrigins && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
       WHERE source=? AND status='accepted' LIMIT 1`).get('device-' + adapter.deviceId)) return failure('scope');
   const receipt = prior?.receipt || buildReceipt(db, request.billId, request.method, total, adapter);
   if (receipt.ok === false) return receipt;
   if (!require('./pf700-checkout-protocol').canEncodePf700Receipt(receipt)) return failure('unavailable');
   // Trial restrictions are local, synchronous predicates. Reject a tender,
   // quantity or additional sale before freezing the operator's selection.
-  if (adapter.canRegister && adapter.canRegister(receipt) !== true) return failure('scope');
+  if (adapter.canRegister && adapter.canRegister(receipt, prior) !== true) return failure('scope');
   const now = Date.now();
   if (!prior) db.prepare(`INSERT INTO fiscal_checkout_sales(bill_id,actor_id,mode,device_id,method,receipt,created_at)
     VALUES(?,?,?,?,?,?,?)`).run(request.billId, actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);

@@ -34,10 +34,11 @@ function prepare(snapshot, domesticProduct, maxTotal) {
     ['cash', 'card'].includes(snapshot.method) && Number.isSafeInteger(snapshot.total) &&
     snapshot.total > 0 && snapshot.total <= maxTotal && Array.isArray(snapshot.lines) &&
     snapshot.lines.length > 0 && snapshot.lines.length <= 512 && typeof domesticProduct === 'boolean' &&
-    (!domesticProduct || snapshot.lines.length === 1));
+    (snapshot.lines.every(line => typeof line.domesticProduct === 'boolean') ||
+      (!snapshot.lines.some(line => Object.hasOwn(line, 'domesticProduct')) && (!domesticProduct || snapshot.lines.length === 1))));
   const sums = [0, 0, 0, 0];
   const items = snapshot.lines.map(line => {
-    const data = saleData(line, domesticProduct);
+    const data = saleData(line, typeof line.domesticProduct === 'boolean' ? line.domesticProduct : domesticProduct);
     sums[GROUPS.get(line.taxGroup).index] += line.unitPrice * line.quantity;
     return data;
   });

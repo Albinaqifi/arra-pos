@@ -9,7 +9,7 @@ const configurationTables = {
   area: ['dining_areas', 'id, name, active'],
   table: ['dining_tables', 'id, area_id, capacity, active'],
   category: ['menu_categories', 'id, name, active, parent_id, sort_order'],
-  product: ['menu_products LEFT JOIN menu_product_fiscal_tax ON product_id=id', 'id, category_id, name, price, active, sort_order, destination, tax_group'],
+  product: ['menu_products p LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id LEFT JOIN menu_product_fiscal_origin o ON o.product_id=p.id', 'p.id, p.category_id, p.name, p.price, p.active, p.sort_order, p.destination, t.tax_group, o.domestic'],
   group: ['modifier_groups', 'id, product_id, name, required, active'],
   option: ['modifier_options', 'id, group_id, name, adjustment, active'],
 };

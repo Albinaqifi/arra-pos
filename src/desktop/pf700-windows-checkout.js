@@ -104,18 +104,20 @@ async function checkWindowsPf700Identity(expectedSerial, startProcess = spawn) {
 }
 
 function createWindowsPf700Checkout(profile, startProcess = spawn) {
-  const { expectedSerial, operatorNumber, operatorPassword, tillNumber, domesticProduct, mayProbe, beforeOpen } = profile;
+  const { expectedSerial, operatorNumber, operatorPassword, tillNumber, domesticProduct, mayProbe, beforeOpen, allowLegacyOrigin = false } = profile;
   if (!validSerial(expectedSerial) ||
       !['string','number'].includes(typeof operatorNumber) || !/^[1-8]$/.test(String(operatorNumber)) ||
       typeof operatorPassword !== 'string' || !/^[0-9]{4,6}$/.test(operatorPassword) ||
       !['string','number'].includes(typeof tillNumber) || !/^[0-9]{1,5}$/.test(String(tillNumber)) || typeof domesticProduct !== 'boolean' ||
-      (mayProbe !== undefined && typeof mayProbe !== 'function') ||
+      typeof allowLegacyOrigin !== 'boolean' || (mayProbe !== undefined && typeof mayProbe !== 'function') ||
       (beforeOpen !== undefined && typeof beforeOpen !== 'function')) throw Error('Invalid PF700 checkout profile');
   let busy = false;
   return Object.freeze({
     mode: 'device', deviceId: expectedSerial, domesticProduct,
     async registerSale(snapshot, context) {
-      if (busy || typeof context?.beforeOpen !== 'function' || snapshot?.domesticProduct !== domesticProduct ||
+      if (busy || typeof context?.beforeOpen !== 'function' || (snapshot?.domesticProduct !== domesticProduct && !(allowLegacyOrigin &&
+          typeof snapshot?.domesticProduct === 'boolean' && snapshot.lines?.length === 1 &&
+          snapshot.lines[0].quantity === 1 && !Object.hasOwn(snapshot.lines[0], 'domesticProduct'))) ||
           !canEncodePf700Receipt(snapshot)) return { status: 'failed' };
       busy = true;
       let pipe, opening = false;

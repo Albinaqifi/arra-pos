@@ -31,11 +31,15 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\check-pf700.ps1') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\start-supervised-pf700.ps1') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\PF700-Check-Identity.cmd') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\PF700-Routine.cmd') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\start-routine-pf700.ps1') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\check-pf700-identity.ps1') -Destination $payload
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath (Join-Path $source 'payload.zip') -CompressionLevel Optimal
     if (!$OfflineTestOnly) { Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\install.*') -Destination $source }
     Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\test-arra.*') -Destination $source
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\PF700-Check-Identity.cmd') -Destination $source
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\PF700-Routine.cmd') -Destination $source
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\start-routine-pf700.ps1') -Destination $source
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\check-pf700-identity.ps1') -Destination $source
     Set-Content -LiteralPath (Join-Path $source 'version.txt') -Value $version -Encoding ASCII
     if (!$OutputName) {

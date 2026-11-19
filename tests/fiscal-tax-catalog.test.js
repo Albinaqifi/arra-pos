@@ -103,3 +103,63 @@ test('v43 upgrade classifies only original unedited seed identities and preserve
   assert.throws(() => f.db.exec("INSERT INTO order_item_fiscal_tax VALUES(1,'А')"), /frozen/);
   assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(), []);
 });
+
+test('origin classification is authorized, audited and frozen on order entry', t => {
+  const f=fixture(t); const db=f.db; seedArraMenu(db);
+  db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open')");
+  const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
+  const session={currentUserId:()=>1,authenticatedUserId:()=>1};
+  registerMenuConfig(ipc,e=>e===event,db,session); registerOrderItems(ipc,e=>e===event,db,session);
+  const menu=req=>handlers['arra:menu-config'](event,req);
+  const product={action:'product',id:'arra-product-11-0',categoryId:'arra-category-11',name:'Espresso',price:70,active:true,sortOrder:0,destination:'bar'};
+  assert.equal(menu({...product,domesticProduct:true}).error,'Access denied');
+  db.exec("INSERT INTO user_permissions VALUES(1,'menu.change')");
+  for (const value of [0,1,'yes','false']) assert.equal(menu({...product,domesticProduct:value}).ok,false);
+  assert.equal(menu({...product,domesticProduct:true}).ok,true);
+  assert.equal(menu({action:'list'}).data.products.find(p=>p.id===product.id).domesticProduct,true);
+  assert.equal(handlers['arra:order-items'](event,{action:'add',orderId:1,productId:product.id,optionIds:[]}).ok,true);
+  assert.equal(menu({...product,domesticProduct:false}).ok,true);
+  assert.equal(handlers['arra:order-items'](event,{action:'add',orderId:1,productId:product.id,optionIds:[]}).ok,true);
+  const audit=JSON.parse(db.prepare("SELECT context FROM application_audit WHERE entity_type='product' ORDER BY id DESC LIMIT 1").get().context);
+  assert.equal(audit.before.domestic,1); assert.equal(audit.after.domestic,0);
+  assert.deepEqual(db.prepare('SELECT domestic FROM order_item_fiscal_origin ORDER BY item_id').all().map(r=>r.domestic),[1,0]);
+  for(const sql of ['UPDATE order_item_fiscal_origin SET domestic=0','DELETE FROM order_item_fiscal_origin','INSERT OR REPLACE INTO order_item_fiscal_origin VALUES(1,0)']) assert.throws(()=>db.exec(sql),/frozen/);
+});
+
+test('v46 upgrade leaves existing bill origins unknown and preserves its lines', t => {
+  const f=fixture(t,historicalDatabase(46).openDatabase); seedArraMenu(f.db);
+  f.db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO bill_lines(bill_id,item_id,name,unit_price,quantity,modifiers) VALUES(1,1,'Espresso',70,1,'[]')");
+  f.reopen();
+  assert.equal(f.db.prepare('SELECT count(*) n FROM menu_product_fiscal_origin').get().n,0);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM order_item_fiscal_origin').get().n,0);
+  assert.equal(f.db.prepare('SELECT total FROM bills WHERE id=1').get().total,70);
+  const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
+  let actor=1; const session={currentUserId:()=>actor,authenticatedUserId:()=>actor};
+  f.db.exec("INSERT INTO user_permissions VALUES(1,'menu.change'); INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'manager',x'00',x'00'); INSERT INTO financial_scopes VALUES(2,'combined'); INSERT INTO user_permissions VALUES(2,'menu.change')");
+  registerMenuConfig(ipc,e=>e===event,f.db,session);
+  const menu=req=>handlers['arra:menu-config'](event,req);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:true}).error,'Access denied');
+  assert.deepEqual(menu({action:'list'}).data.unclassifiedOrigins,[]);
+  actor=2;
+  assert.equal(menu({action:'list'}).data.unclassifiedOrigins[0].id,1);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:'yes'}).ok,false);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:true}).ok,true);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:true}).ok,true);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:false}).ok,false);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM application_audit WHERE action='classify_origin'").get().n,1);
+  assert.equal(f.db.prepare('SELECT domestic FROM order_item_fiscal_origin WHERE item_id=1').get().domestic,1);
+  assert.deepEqual(f.db.prepare('PRAGMA foreign_key_check').all(),[]);
+});
+
+test('an existing fiscal attempt freezes even missing origin and hides the classification action', t => {
+  const f=fixture(t); const db=f.db; seedArraMenu(db);
+  db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1; INSERT INTO user_permissions VALUES(1,'menu.change'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO fiscal_checkout_sales VALUES(1,1,'simulation',NULL,'cash','{}',1); INSERT INTO fiscal_checkout_attempts VALUES(1,1,1)");
+  const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
+  const session={currentUserId:()=>1,authenticatedUserId:()=>1};
+  registerMenuConfig(ipc,e=>e===event,db,session);
+  const menu=req=>handlers['arra:menu-config'](event,req);
+  assert.deepEqual(menu({action:'list'}).data.unclassifiedOrigins,[]);
+  assert.equal(menu({action:'classifyOrigin',itemId:1,domesticProduct:true}).ok,false);
+  assert.throws(()=>db.exec('INSERT INTO order_item_fiscal_origin VALUES(1,1)'),/frozen/);
+  assert.equal(db.prepare('SELECT receipt FROM fiscal_checkout_sales').get().receipt,'{}');
+});

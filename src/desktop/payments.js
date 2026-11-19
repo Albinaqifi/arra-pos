@@ -60,7 +60,9 @@ function preparePayment(db, session, request, actor, printing, adapter) {
     if (request.method !== fiscal.method || request.account !== 'A') return { response: failure('selection') };
     if (fiscal.status === 'pending' || fiscal.status === 'uncertain') return { response: failure(fiscal.status) };
     if (fiscal.status === 'failed' && (!adapter || fiscal.mode !== adapter.mode || fiscal.deviceId !== adapter.deviceId ||
-        (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== adapter.domesticProduct))) {
+        (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== adapter.domesticProduct &&
+          !(adapter.requireOrigins && fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
+            !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct'))))) {
       return { response: failure('profile') };
     }
   }

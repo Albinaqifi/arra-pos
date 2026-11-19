@@ -468,5 +468,16 @@
   "PIN saved.": "PIN-i u ruajt.",
   "Could not set owner approval PIN.": "PIN-i i miratimit nuk mund te vendosej.",
   "PIN saved. Sign in again.": "PIN-i u ruajt. Hyni perseri.",
-  "PIN result unknown. Sign in again and check before retrying.": "Rezultati i ruajtjes se PIN-it nuk dihet. Hyni perseri dhe kontrolloni para se te provoni serish."
+  "PIN result unknown. Sign in again and check before retrying.": "Rezultati i ruajtjes se PIN-it nuk dihet. Hyni perseri dhe kontrolloni para se te provoni serish.",
+  "Macedonian-product mark": "Shenja e produktit maqedonas",
+  "Required": "E nevojshme",
+  "Not required": "Nuk nevojitet",
+  "Classify open order items": "Klasifiko artikujt e porosive te hapura",
+  "These items were entered without a saved Macedonian-product mark. Confirm the correct mark for each item before Cash A checkout.": "Keta artikuj jane futur pa shenjen e ruajtur te produktit maqedonas. Konfirmoni shenjen e duhur per secilin artikull para pageses me para ne dore ne A.",
+  "Order": "Porosia",
+  "Mark required": "Shenja nevojitet",
+  "Mark not required": "Shenja nuk nevojitet",
+  "Item mark saved.": "Shenja e artikullit u ruajt.",
+  "Could not classify this item. Refresh and check the order.": "Artikulli nuk u klasifikua. Rifreskoni dhe kontrolloni porosine.",
+  "The result is unknown. Check the refreshed list before trying again.": "Rezultati nuk dihet. Kontrolloni listen e rifreskuar para se te provoni perseri."
 }

@@ -1,4 +1,4 @@
-param([switch]$CheckIdentityOnly)
+param([switch]$CheckIdentityOnly, [switch]$StartRoutine)
 $ErrorActionPreference = 'Stop'
 try {
     $version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'version.txt') -Raw).Trim()
@@ -34,6 +34,10 @@ try {
     if ($installed.version -cne $version) { throw 'The installed test application has a different version.' }
     if ($CheckIdentityOnly) {
         & (Join-Path $program 'start-supervised-pf700.ps1') -CheckIdentityOnly
+        exit $LASTEXITCODE
+    }
+    if ($StartRoutine) {
+        & (Join-Path $program 'start-supervised-pf700.ps1') -StartRoutine
         exit $LASTEXITCODE
     }
     if (!(Test-Path -LiteralPath $data)) {
