@@ -7,8 +7,76 @@ const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { openDatabase } = require('../src/desktop/database');
 const { createSession } = require('../src/desktop/session');
+const { registerMenu } = require('../src/desktop/menu');
 const { registerOrderItems } = require('../src/desktop/order-items');
 const { registerTables } = require('../src/desktop/tables');
+
+function checkDrinks(menu) {
+ const drinks = menu.categories.find(category => category.name === 'Drinks');
+ const sections = menu.categories.filter(category => category.parentId === drinks.id);
+ assert.deepEqual(sections.map(section => section.name), ['Pije Freskuese', 'Kafe & Çaj', 'Alcoholic Drinks']);
+ const softDrinks = menu.products.filter(product => product.categoryId === sections[0].id);
+ assert.equal(softDrinks.length, 19);
+ assert.deepEqual(softDrinks.filter(product => /^(lëng|leng) /i.test(product.name)).map(p => [p.name, p.price]), [
+  ['Lëng Mollë', 120], ['Lëng Portokall', 120], ['Lëng Pjeshkë', 120], ['Lëng Fruta Mali', 120],
+  ['Leng I shtrydhur', 180]
+ ]);
+ const alcohol = menu.products.filter(product => product.categoryId === sections[2].id);
+ const originalSections = [
+  [12, [['Heineken', 180], ['Peja', 180]]],
+  [13, [['Muskat Temjanika e bardhë 0.20 l', 420], ['Muskat Temjanika e bardhë 0.70 l', 1850],
+   ['Alexandria Cuvée e bardhë 0.20 l', 360], ['Alexandria Cuvée e bardhë 0.70 l', 1400],
+   ['Cabernet Sauvignon e kuqe 0.20 l', 420], ['Cabernet Sauvignon e kuqe 0.70 l', 1850],
+   ['Alexandria Cuvée Rosé 0.20 l', 360], ['Alexandria Cuvée Rosé 0.70 l', 1400]]],
+  [14, [['Raki Rrushi Bovin', 110], ['Raki Ftoi Akov', 200]]],
+  [15, [['Chivas Regal', 320], ["Jack Daniel's", 300], ['Hennessy', 330], ['Jägermeister', 200]]]
+ ];
+ const expected = originalSections.flatMap(([section, products]) => products.map(([name, price], index) =>
+  [`arra-product-${section}-${index}`, name, price]));
+ assert.deepEqual(alcohol.map(p => [p.id, p.name, p.price]), expected);
+}
+
+function checkGrill(menu, add) {
+ const category = menu.categories.find(c => c.name === 'Në Zgarë & Klasike');
+ const grill = menu.products.filter(p => p.categoryId === category.id);
+ const steaks = ['Ribeye Black Angus', 'Tomahawk Viçi', 'Biftek Viçi'];
+ assert.deepEqual(grill.map(p => p.name), [
+  'Mish në Furrë', ...steaks, 'Fileto Viçi', 'Porcion Mishrash Mikse', 'Fileto Salmoni', 'Cordon Bleu'
+ ]);
+ const doneness = ['Doneness', ['Rare', 'Medium rare', 'Medium', 'Medium well', 'Well done']];
+ const sides = ['Shoqëruesit', ['Zarzavate', 'Patate të pjekura', 'Patatina të ëmbla', 'Bagetë me hudhër', 'Pa shoqërues']];
+ const sauces = ['Sosërat', ['Pepe verde', 'Sos me kërpudha', 'Krem gorgonzola', 'Sos chimichurri', 'Pa sos']];
+ for (const product of grill) {
+  const groups = menu.groups.filter(g => g.productId === product.id);
+  if (product.name === 'Fileto Salmoni') {
+   assert.deepEqual(groups, []);
+   assert.equal(add(product.id, [menu.options[0].id]).ok, false);
+   const result = add(product.id, []);
+   assert.equal(result.ok, true);
+   assert.deepEqual(result.data.items.at(-1).modifiers, []);
+   continue;
+  }
+  const expected = steaks.includes(product.name) ? [doneness, sides, sauces] : [sides, sauces];
+  assert.deepEqual(groups.map(g => g.name), expected.map(([name]) => name), product.name);
+  const choices = groups.map((group, index) => {
+   assert.equal(group.required, 1, group.name);
+   const options = menu.options.filter(o => o.groupId === group.id);
+   assert.deepEqual(options.map(o => o.name), expected[index][1], product.name);
+   assert.ok(options.every(o => o.adjustment === 0));
+   return options;
+  });
+  const selection = choices.map(options => options.at(-1).id);
+  assert.equal(add(product.id, []).ok, false);
+  for (const missing of selection) {
+   assert.equal(add(product.id, selection.filter(id => id !== missing)).ok, false, product.name);
+  }
+  assert.equal(add(product.id, [...selection, choices[0][0].id]).ok, false);
+  const result = add(product.id, selection);
+  assert.equal(result.ok, true, product.name);
+  assert.deepEqual(result.data.items.at(-1).modifiers.map(m => [m.groupName, m.optionName]),
+   expected.map(([name, options]) => [name, options.at(-1)]));
+ }
+}
 
 test('Arra setup creates scoped identities, menu choices, and preserves existing data', {skip:process.platform !== 'win32'}, () => {
  const parent = fs.mkdtempSync(path.join(os.tmpdir(),'arra-menu-setup-'));
@@ -33,7 +101,7 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
    for (const table of ['orders','bills','payments','fiscal_checkout_sales','account_a_closes']) {
     assert.equal(prepared.prepare('SELECT count(*) AS n FROM ' + table).get().n,0,table);
    }
-   assert.equal(prepared.prepare('SELECT count(*) AS n FROM menu_product_fiscal_tax').get().n,105);
+   assert.equal(prepared.prepare('SELECT count(*) AS n FROM menu_product_fiscal_tax').get().n,103);
   } finally { prepared.close(); }
   assert.notEqual(run(custom,customDirectory,'--new-pf700-commissioning-profile').status,0);
   assert.equal(require('../src/desktop/pf700-commissioning').isCommissionedDirectory(customDirectory),false);
@@ -57,14 +125,6 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
    assert.deepEqual(db.prepare('SELECT name FROM menu_categories WHERE parent_id IS NULL ORDER BY sort_order').all().map(x=>x.name),['Food','Drinks']);
    const subcategories = db.prepare('SELECT c.name, p.name AS parent FROM menu_categories c JOIN menu_categories p ON p.id=c.parent_id ORDER BY p.sort_order,c.sort_order').all();
    assert.deepEqual(subcategories.filter(x=>x.parent==='Food').map(x=>x.name),['Sallata','Antipasta','Pasta','Pizza','Në Zgarë & Klasike','Nga Kuzhina Shqiptare','Supa','Për Fëmijë','Ëmbëlsira','Shtesa']);
-   assert.deepEqual(subcategories.filter(x=>x.parent==='Drinks').map(x=>x.name),['Pije Freskuese','Kafe & Çaj','Birrë','Verë','Raki','Pije të Forta']);
-   const grilled = db.prepare("SELECT p.id FROM menu_products p JOIN menu_categories c ON c.id=p.category_id WHERE c.name='Në Zgarë & Klasike'").all();
-   assert.equal(grilled.length,8);
-   for (const item of grilled) {
-    const groups = db.prepare('SELECT id,name,required FROM modifier_groups WHERE product_id=? ORDER BY rowid').all(item.id);
-    assert.deepEqual(groups.map(g=>[g.name,g.required]),[['Shoqëruesit',1],['Sosërat',1]]);
-    for (const group of groups) assert.equal(db.prepare('SELECT COUNT(*) AS n FROM modifier_options WHERE group_id=? AND adjustment=0').get(group.id).n,5);
-   }
    session.selectWaiter({id:staff.find(x=>x.name==='Waiter').id,pin:values[4]});
    let listTables;
    registerTables({handle(_channel,fn){listTables=fn;}}, () => true, db, session);
@@ -79,13 +139,12 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
    db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(1,?,?,1,'open')").run(session.currentUserId(),session.currentUserId());
    let handler; const trusted = {};
    registerOrderItems({handle(_channel,fn){handler=fn;}}, event=>event===trusted, db, session);
-   const productId = grilled[0].id;
-   const options = db.prepare('SELECT o.id,o.group_id FROM modifier_options o JOIN modifier_groups g ON g.id=o.group_id WHERE g.product_id=? ORDER BY o.rowid').all(productId);
-   const add = optionIds => handler(trusted,{action:'add',orderId:1,productId,optionIds});
-   assert.equal(add([]).ok,false);
-   assert.equal(add([options[0].id]).ok,false);
-   assert.equal(add([options[0].id,options[1].id,options[5].id]).ok,false);
-   assert.equal(add([options[4].id,options[9].id]).ok,true);
+   let listMenu;
+   registerMenu({handle(_channel,fn){listMenu=fn;}}, event=>event===trusted, db, session);
+   const menu = listMenu(trusted, {});
+   assert.equal(menu.ok, true);
+   checkDrinks(menu.data);
+   checkGrill(menu.data, (productId, optionIds) => handler(trusted, {action:'add', orderId:1, productId, optionIds}));
    assert.equal(db.prepare("SELECT price FROM menu_products WHERE name='Ribeye Black Angus'").get().price,3300);
    assert.equal(db.prepare("SELECT destination FROM menu_products WHERE name='Espresso'").get().destination,'bar');
   } finally { db.close(); }

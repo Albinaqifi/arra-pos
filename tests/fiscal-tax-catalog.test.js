@@ -23,15 +23,16 @@ function fixture(t, open = openDatabase) {
   };
 }
 
-test('105 dine-in seed products carry the confirmed VAT group, including both groups at the bar', t => {
+test('103 dine-in seed products carry the confirmed VAT group, including both groups at the bar', t => {
   const { db } = fixture(t);
   seedArraMenu(db);
   const groups = db.prepare(`SELECT p.destination, t.tax_group, count(*) AS n FROM menu_products p
     LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id GROUP BY p.destination, t.tax_group ORDER BY 1,2`).all();
   assert.deepEqual(groups.map(g => [g.destination, g.tax_group, g.n]),
-    [['bar', 'А', 16], ['bar', 'В', 27], ['kitchen', 'В', 62]]);
-  for (const row of db.prepare('SELECT p.category_id, t.tax_group FROM menu_products p JOIN menu_product_fiscal_tax t ON p.id=t.product_id').all()) {
-    assert.equal(row.tax_group, ['arra-category-12', 'arra-category-13', 'arra-category-14', 'arra-category-15'].includes(row.category_id) ? 'А' : 'В');
+    [['bar', 'А', 16], ['bar', 'В', 25], ['kitchen', 'В', 23], ['kitchen2', 'В', 39]]);
+  for (const row of db.prepare(`SELECT p.name, c.name AS category, t.tax_group FROM menu_products p
+    JOIN menu_categories c ON c.id=p.category_id JOIN menu_product_fiscal_tax t ON p.id=t.product_id`).all()) {
+    assert.equal(row.tax_group, row.category === 'Alcoholic Drinks' ? 'А' : 'В', row.name);
   }
 });
 

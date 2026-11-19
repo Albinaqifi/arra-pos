@@ -82,7 +82,7 @@ test('waiter-only version 27 upgrade preserves identity without silently grantin
   db.exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS verified_waiter_pins; DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE IF EXISTS order_cancellations; DROP TABLE IF EXISTS restaurant_accounts; DROP TABLE IF EXISTS pending_staff; ALTER TABLE day_print_attempts DROP COLUMN scope; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=27');
   db.close();
   db = openDatabase(dir);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,52);
   assert.equal(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=1').get().scope, 'waiter');
   assert.equal(db.prepare("SELECT count(*) AS n FROM financial_scopes WHERE scope='combined'").get().n, 0);
   assert.throws(() => bootstrap(db, 'sample second', 'sample second password'));

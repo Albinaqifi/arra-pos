@@ -16,7 +16,7 @@ test('approval survives upgrade and restart and holds payment and closing until 
   db.close();
   db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir,{recursive:true,force:true}); });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,52);
   assert.throws(() => db.prepare('INSERT INTO simulated_card_approvals VALUES(1,1,69,1)').run());
   db.exec("INSERT INTO simulated_card_intents VALUES(1,1,1,70,1); INSERT INTO simulated_card_intent_results VALUES(1,'approved',1)");
   db.prepare('INSERT INTO simulated_card_approvals VALUES(1,1,70,1)').run();

@@ -24,7 +24,7 @@ The resulting diagnostic slip identifies the printer as **SYNERGY FP-700CRX**, w
 
 The operator ran the read-only VAT checker on the POS and reported **В (V) = 10%** and **А = 18%**. On 19 November 2026 the owner confirmed how Arra should classify dine-in sales. Food and nonalcoholic drinks, including espresso, use **В (10%)**. Alcoholic drinks use **А (18%)**. The supplied workbook lists these rates on its `Shitja ne lokal` sheet. Its purchase-rate column applies to supplier invoices. [VAT Act, Articles 29 and 30-а](https://ujp.gov.mk/files/attachment/0000/0986/______________________________________.____________267____30.12.2025.pdf#page=18) · [Fiscal equipment rulebook, Article 26](https://www.ujp.gov.mk/files/attachment/0000/1323/___________________________14_03_2022____________60-22.pdf#page=13)
 
-In the packaged 105-item Arra menu this rule maps 89 items to В and 16 alcoholic drinks to А. The latter comprise 2 beers, 8 wines, 2 rakis and 4 other spirits. The product's stored group now follows the item into the bill, even if the menu changes before payment.
+Fresh Arra menu setup assigns 87 of the 103 products to В. The 16 products in Alcoholic Drinks use А and appear in order by type (2 beers, 8 wines, 2 rakis and 4 other spirits). The product's stored group follows the item into the bill, even if the menu changes before payment.
 
 ### Checkout and the 1.0.5 identity check
 
