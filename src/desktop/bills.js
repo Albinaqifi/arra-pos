@@ -47,7 +47,7 @@ function attachFiscalPreview(db, bill, adapter) {
   }
 }
 
-function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = null) {
+function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = null, journalRecovery = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       !['review','generate'].includes(request.action) || !Number.isSafeInteger(request.orderId) || request.orderId <= 0 ||
@@ -64,7 +64,12 @@ function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = n
           const bill = db.prepare('SELECT id, order_id AS orderId, total, generated_at AS generatedAt, fingerprint FROM bills WHERE id=?').get(existing.id);
           bill.lines = db.prepare('SELECT item_id AS itemId, name, unit_price AS unitPrice, quantity, modifiers FROM bill_lines WHERE bill_id=? ORDER BY id').all(existing.id).map(l => ({ ...l, modifiers: JSON.parse(l.modifiers) }));
           attachFiscalPreview(db, bill, fiscalCheckout);
-          const fiscal = readFiscalCheckout(db, bill.id);
+          const journal = journalRecovery?.(db, bill.id);
+          if (journalRecovery && !journal) {
+            db.exec('ROLLBACK');
+            return {ok:false,error:'Could not match the approved receipt to this bill. Ask for help.'};
+          }
+          const fiscal = readFiscalCheckout(db, bill.id, journal);
           if (fiscal) bill.fiscal = fiscal;
           if (db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(bill.id)) bill.simulatedCardApproval = true;
           const intent = db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(bill.id);

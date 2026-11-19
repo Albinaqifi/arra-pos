@@ -43,7 +43,7 @@ function failure(fiscalStatus) {
   return { ok: false, fiscalStatus, error: errors[fiscalStatus] };
 }
 
-function readFiscalCheckout(db, billId) {
+function readFiscalCheckout(db, billId, journal = null) {
   const row = db.prepare(`SELECT s.mode,s.device_id AS deviceId,s.method,s.receipt,a.id AS attemptId,r.status,r.reference,r.evidence,b.previous_document AS previousDocumentNumber,
     EXISTS(SELECT 1 FROM payments WHERE bill_id=s.bill_id) AS paid
     FROM fiscal_checkout_sales s JOIN fiscal_checkout_attempts a ON a.bill_id=s.bill_id
@@ -55,15 +55,18 @@ function readFiscalCheckout(db, billId) {
   // A crash can leave the final, validated document ACK in the journal before
   // the sender saves its result. Bill review projects the evidence read-only.
   const trace = status === 'uncertain' && row.mode === 'device' && row.method === 'cash'
-    ? require('./pf700-closed-cash-trace').readClosedCashTrace(db, billId) : null;
+    ? journal || require('./pf700-closed-cash-trace').readClosedCashTrace(db, billId) : null;
   if (trace) status = 'submitted';
   if (status === 'accepted' && !row.paid) status = 'submitted';
   const baseline = row.previousDocumentNumber ? {deviceId:row.deviceId,previousDocumentNumber:row.previousDocumentNumber,
     expectedDocumentNumber:String(Number(row.previousDocumentNumber)+1).padStart(7,'0')} : null;
   const proof = trace?.evidence || (row.evidence && JSON.parse(row.evidence));
+  const evidence = proof?.kind === 'numbered-journal'
+    ? {kind:proof.kind, documentNumber:proof.documentNumber}
+    : proof && {documentNumber:proof.documentNumber, fiscalReceiptCount:proof.fiscalReceiptCount, reversalCount:proof.reversalCount};
   return { mode: row.mode, status, reference: trace?.reference ?? row.reference, method: row.method, receipt: JSON.parse(row.receipt),
     ...(row.deviceId ? { deviceId: row.deviceId } : {}), ...(baseline ? {baseline} : {}),
-    ...(proof ? {evidence:{documentNumber:proof.documentNumber,fiscalReceiptCount:proof.fiscalReceiptCount,reversalCount:proof.reversalCount}} : {}) };
+    ...(evidence ? {evidence} : {}) };
 }
 
 function buildReceipt(db, billId, method, total, adapter) {

@@ -1,79 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { DatabaseSync } = require('node:sqlite');
-const { createHash, randomInt } = require('node:crypto');
-const { migrate } = require('../src/desktop/database');
-const { enroll } = require('../src/desktop/pf700-commissioning');
-const { seedTables } = require('../src/desktop/tables');
-const { seedArraMenu } = require('../src/desktop/arra-menu');
-const { registerOrderItems } = require('../src/desktop/order-items');
-const { registerBills } = require('../src/desktop/bills');
-const { registerPayments } = require('../src/desktop/payments');
-const { probeIdentity } = require('../src/desktop/pf700-windows-checkout');
-const { executePf700Checkout } = require('../src/desktop/pf700-checkout-protocol');
+const { createHash } = require('node:crypto');
 const { encodeRequest } = require('../src/desktop/pf700-frame');
 const { readClosedCashTrace } = require('../src/desktop/pf700-closed-cash-trace');
-const { createStatefulPf700 } = require('./support/pf700-stateful-device');
-const { authorizedDatabase } = require('./support/authorized-database');
 const { readCandidate, classifyReply } = require('../scripts/pf700-close-evidence/evidence');
+const { lostClose } = require('./support/pf700-bill2-sale');
 
 const digest = data => createHash('sha256').update(data).digest('hex');
 const candidateFor = db => readCandidate(db, 2, '0000030');
-
-// Full local sale on an in-memory PF700, including a wrapped sequence and
-// one close intent. Only the delivery or receipt of that last command varies.
-async function lostClose(t, fault, {otherTax = false, reverse = false, imported = false} = {}) {
-  const db = new DatabaseSync(':memory:');
-  t.after(() => db.close());
-  migrate(db);
-  authorizedDatabase(db);
-  enroll(db);
-  seedTables(db);
-  seedArraMenu(db);
-  const device = createStatefulPf700();
-  device.state.document = 29;
-  device.fault(56, fault);
-  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'other-fixture',x'00',x'00');
-    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,2,'open');
-    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,0,'unused');
-    INSERT INTO order_waiter_ownership VALUES(2,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-11-1',1)`);
-  const profile = {
-    mode:'device', deviceId:device.serial, domesticProduct:false, requireOrigins:true,
-    async registerSale(receipt, journal) {
-      let probeId, probeHash;
-      const identity = await probeIdentity({exchange(frame) {
-        probeId = journal.beforeCommand({sequence:127, command:90, requestHash:digest(frame)});
-        const reply = device.exchange(frame);
-        probeHash = digest(reply);
-        return reply;
-      }}, 127, device.serial);
-      assert.ok(identity.ok && identity.onsiteFirmware);
-      journal.afterCommand({id:probeId, responseHash:probeHash, summary:{identityMatched:true, onsiteFirmware:true}});
-      return executePf700Checkout(receipt, { ...journal, firstSequence:32, domesticProduct:false, onsiteFirmware:true,
-        operatorNumber:1, operatorPassword:String(randomInt(100000,1000000)), tillNumber:1 }, device.exchange);
-    }
-  };
-  if (otherTax) db.exec("UPDATE menu_product_fiscal_tax SET tax_group='А' WHERE product_id='arra-product-11-0'");
-  if (imported) db.exec("UPDATE menu_product_fiscal_origin SET domestic=0 WHERE product_id='arra-product-11-0'");
-  const handlers = {};
-  const ipc = {handle(channel, handler) { handlers[channel] = handler; }};
-  const session = {currentUserId:() => 1, authenticatedUserId:() => 1, identityGeneration:() => 0};
-  registerOrderItems(ipc, () => true, db, session);
-  registerBills(ipc, () => true, db, session, profile);
-  registerPayments(ipc, () => true, db, session, null, profile);
-  const products = ['arra-product-11-0','arra-product-11-1'];
-  for (const productId of reverse ? products.reverse() : products) {
-    assert.ok(handlers['arra:order-items']({}, {action:'add', orderId:2, productId}).ok);
-  }
-  assert.ok(handlers['arra:order-items']({}, {action:'send', orderId:2, requestId:'synthetic-send'}).ok);
-  const {fingerprint} = handlers['arra:bill']({}, {action:'review', orderId:2}).data;
-  assert.equal(handlers['arra:bill']({}, {action:'generate', orderId:2, fingerprint}).data.id, 2);
-  const selection = {billId:2, method:'cash', account:'A'};
-  const {intentId} = handlers['arra:payment']({}, {...selection, preparePhysicalCash:true}).data;
-  assert.equal((await handlers['arra:payment']({}, {...selection, physicalIntentId:intentId})).fiscalStatus, 'uncertain');
-  return {db, device};
-}
 
 test('journal requires the original item order, printed VAT group and domestic origin for both lines', async t => {
   for (const options of [{}, {otherTax:true}, {imported:true}, {reverse:true}]) {
@@ -202,5 +136,56 @@ test('malformed frames and unrelated responses yield only a fixed classification
     wire(56, '0001,0000', {sequence:44}), wire(74, Buffer.from('888088e1809a','hex')),
     wire(74, '0001,0000'), wire(56, '0001,0000', {statusHex:'088080e1809a'})]) {
     assert.deepEqual(classifyReply({sequence:43}, bad), {kind:'inconclusive'});
+  }
+});
+
+test('settling a numbered journal keeps the original verification contract and a sealed incident witness', async t => {
+  const { originalVerifiedView, persistNumberedJournal } = require('../src/desktop/pf700-numbered-journal-result');
+  const { db } = await lostClose(t, 'after');
+  const candidate = candidateFor(db);
+  const proof = {kind:'numbered-journal', documentNumber:'0000030', binding:candidate.binding,
+    captureHash:'a'.repeat(64), journalHash:'b'.repeat(64), responseHash:'c'.repeat(64)};
+  const original = originalVerifiedView(db);
+  assert.ok(original);
+  const schema = () => db.prepare("SELECT sql FROM sqlite_schema WHERE name='fiscal_checkout_verified_results'").get().sql;
+  const witnessExists = () => !!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='pf700_bill2_numbered_journal'").get();
+  assert.throws(() => persistNumberedJournal(db, candidate, proof), /Invalid numbered/);
+  db.exec('BEGIN IMMEDIATE');
+  db.exec('DROP TRIGGER fiscal_checkout_result_guard');
+  assert.equal(originalVerifiedView(db), null);
+  assert.throws(() => persistNumberedJournal(db, candidate, proof), /schema/);
+  db.exec('ROLLBACK');
+  for (const [input, evidence] of [
+    [candidate, {...proof, binding:'d'.repeat(64)}],
+    [{...candidate, attemptId:candidate.attemptId+1}, proof],
+    [candidate, {...proof, fiscalReceiptCount:1, reversalCount:0}]
+  ]) {
+    db.exec('BEGIN IMMEDIATE');
+    assert.throws(() => persistNumberedJournal(db, input, evidence));
+    db.exec('ROLLBACK');
+    assert.equal(witnessExists(), false);
+  }
+  db.exec('BEGIN IMMEDIATE');
+  persistNumberedJournal(db, candidate, proof);
+  db.exec('ROLLBACK');
+  assert.equal(schema(), original);
+  assert.equal(witnessExists(), false);
+  assert.equal(db.prepare('SELECT count(*) n FROM fiscal_checkout_results').get().n, 0);
+  db.exec('BEGIN IMMEDIATE');
+  persistNumberedJournal(db, candidate, proof);
+  persistNumberedJournal(db, candidate, proof);
+  db.exec('COMMIT');
+  assert.ok(schema().startsWith(original));
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 50);
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  const result = db.prepare('SELECT status,source,reference,evidence FROM fiscal_checkout_verified_results').all();
+  assert.equal(result.length, 1);
+  assert.deepEqual({...result[0],evidence:JSON.parse(result[0].evidence)}, {
+    status:'accepted',source:'device-'+candidate.serial,reference:'0000030',evidence:proof});
+  assert.equal(db.prepare(`SELECT count(*) n FROM pf700_command_intents c JOIN pf700_command_acks a
+    ON a.command_id=c.id WHERE c.command=56`).get().n, 0);
+  for (const operation of ["DELETE FROM pf700_bill2_numbered_journal", "UPDATE pf700_bill2_numbered_journal SET evidence='{}'",
+    "INSERT OR REPLACE INTO pf700_bill2_numbered_journal SELECT * FROM pf700_bill2_numbered_journal"]) {
+    assert.throws(() => db.exec(operation), /immutable/);
   }
 });

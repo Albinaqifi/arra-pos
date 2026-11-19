@@ -22,6 +22,7 @@ try {
         $files = @(
             'scripts/pf700-close-evidence/start.ps1', 'scripts/pf700-close-evidence/evidence.js',
             'scripts/pf700-close-evidence/evidence-files.js',
+            'src/desktop/pf700-bill2-candidate.js', 'src/desktop/pf700-bill2-capture.js',
             'src/desktop/pf700-frame.js', 'src/desktop/pf700-checkout-protocol.js',
             'src/desktop/pf700-commissioning.js', 'src/desktop/pf700-closed-cash-trace.js',
             'src/desktop/fiscal-checkout.js'

@@ -54,6 +54,8 @@
   "waiter.Macedonian-product mark included": "Me shenjen e produktit maqedonas",
   "waiter.Macedonian-product mark omitted": "Pa shenjen e produktit maqedonas",
   "waiter.Acknowledged document {number}": "Dokumenti i konfirmuar {number}",
+  "waiter.Could not match the approved receipt to this bill. Ask for help.": "Fatura e miratuar nuk perputhet me kete llogari. Kerkoni ndihme.",
+  "waiter.The printer journal confirms receipt {number}. Finish recording the Cash A payment in Arra. Nothing will print.": "Ditari i printerit konfirmon faturen {number}. Perfundoni regjistrimin e pageses me para ne dore ne llogarine A ne Arra. Nuk do te printohet asgje.",
   "waiter.Finish recording payment": "Perfundo regjistrimin e pageses",
   "waiter.Register cash sale": "Regjistro shitjen me para ne dore",
   "waiter.The receipt was acknowledged. Confirm the original payment to finish checkout.": "Fatura eshte pranuar. Konfirmoni pagesen fillestare per te perfunduar.",

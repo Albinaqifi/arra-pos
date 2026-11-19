@@ -1,13 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
+const { markerPath } = require('../../src/desktop/pf700-bill2-capture');
 const { DatabaseSync } = require('node:sqlite');
 const { pathToFileURL } = require('node:url');
-
-function markerPath(directory, serial) {
-  const device = createHash('sha256').update(serial).digest('hex');
-  return path.join(directory, device + '.bill2-close-capture.jsonl');
-}
 
 function appendRecord(fd, record) {
   fs.writeFileSync(fd, JSON.stringify(record) + '\n', 'utf8');

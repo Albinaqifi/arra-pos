@@ -143,6 +143,38 @@ test('local settlement retains its document on a mismatched reply and clears the
   assert.equal(locks.at(-1),false);
 });
 
+test('the waiter reopens the journal-confirmed Cash A receipt and retries only its local finish', async () => {
+  const calls = [];
+  const lines = [{...line,name:'Espresso',unitPrice:70,domesticProduct:true},
+    {...line,itemId:4,name:'Macchiato',unitPrice:80,domesticProduct:true}];
+  const confirmed = {...fiscal, reference:'0000030',receipt:{domesticProduct:false,lines},
+    evidence:{kind:'numbered-journal',documentNumber:'0000030'}};
+  // The recovery package has no active printer profile. Bill review still
+  // includes the frozen receipt with both original VAT groups and origins.
+  const data = {id:2,total:150,lines:lines.map(({taxRate,taxGroup,domesticProduct,...billLine}) => billLine),
+    physicalCashIntent:{...intent,profileMatches:false},fiscal:{...confirmed,status:'submitted'}};
+  const view = dialog({bill:async () => ({ok:true,data}), payment:async request => {
+    calls.push(keys(request));
+    if (calls.length === 1) throw Error('Lost local response');
+    return {ok:true,data:{id:1,fiscal:confirmed}};
+  }});
+  await view.review();
+  assert.equal(calls.length,0);
+  for (let i = 0; i < 2; i++) {
+    const output = JSON.stringify(view.render());
+    assert.match(output,/journal confirms receipt 0000030/);
+    assert.match(output,/150 den/);
+    assert.equal(output.match(/Macedonian-product mark included/g)?.length,2);
+    assert.equal(output.match(/VAT 10%/g)?.length,2);
+    assert.doesNotMatch(output,/acknowledged|Check printer status|Register cash sale|Macedonian-product mark omitted/i);
+    const button = find(view.render(),'button',n => n.children.includes('Finish recording payment'));
+    assert.ok(button && !button.props.disabled);
+    await button.props.onClick();
+  }
+  assert.deepEqual(calls,Array(2).fill({billId:2,account:'A',method:'cash',acknowledgedDocument:'0000030'}));
+  assert.equal(view.state.receipt.status,'accepted');
+});
+
 test('a definitely failed historic attempt is prepared again before another printer request',async()=>{
   const calls=[];const view=dialog({bill:async()=>({ok:true,data:{...base,fiscal:{...fiscal,status:'failed',reference:null}}}),payment:async request=>{
     calls.push(keys(request));return request.preparePhysicalCash ? {ok:true,data:{intentId:intent.id}} : {ok:false,fiscalStatus:'uncertain'};

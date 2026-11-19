@@ -54,6 +54,8 @@
   "waiter.Macedonian-product mark included": "Macedonian-product mark included",
   "waiter.Macedonian-product mark omitted": "Macedonian-product mark omitted",
   "waiter.Acknowledged document {number}": "Acknowledged document {number}",
+  "waiter.Could not match the approved receipt to this bill. Ask for help.": "Could not match the approved receipt to this bill. Ask for help.",
+  "waiter.The printer journal confirms receipt {number}. Finish recording the Cash A payment in Arra. Nothing will print.": "The printer journal confirms receipt {number}. Finish recording the Cash A payment in Arra. Nothing will print.",
   "waiter.Finish recording payment": "Finish recording payment",
   "waiter.Register cash sale": "Register cash sale",
   "waiter.The receipt was acknowledged. Confirm the original payment to finish checkout.": "The receipt was acknowledged. Confirm the original payment to finish checkout.",

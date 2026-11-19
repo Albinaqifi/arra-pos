@@ -122,7 +122,8 @@ export class DesktopBill extends React.Component {
     const physicalProfile = !!physicalIntent && !validPhysicalIntent && !submittedPhysicalCash(fiscal);
     const status = wrongProfile || cashProfile || physicalProfile || ((data.simulatedCardApproval || data.simulatedCardIntent) && data.fiscalMode !== 'simulation') ? 'profile' : rejection || fiscal?.status;
     this.setState({
-      data, loading: false, error: fiscalMessages[status] || '', simulatedRecoveryStage: null, physicalCheckAcknowledged:false, physicalObservation:null,
+      data, loading: false, error: status === 'submitted' && fiscal?.evidence?.kind === 'numbered-journal' ? '' : fiscalMessages[status] || '',
+      simulatedRecoveryStage: null, physicalCheckAcknowledged:false, physicalObservation:null,
       simulationInterrupt: validCashIntent ? cashIntent.interruption : '',
       fiscalStatus: status, fiscalHold: (!!fiscal || data.simulatedCardApproval || data.simulatedCardIntent || cashIntent || physicalIntent) && ['pending', 'uncertain', 'profile'].includes(status),
       fiscalTenderFixed: !!fiscal || !!data.simulatedCardApproval || !!data.simulatedCardIntent || !!cashIntent || !!physicalIntent,
@@ -255,7 +256,7 @@ export class DesktopBill extends React.Component {
         const uncertain = !!this.paymentSelection || this.state.uncertain || !!result?.uncertain;
         this.paymentSelection = uncertain ? selection : null;
         this.props.onUncertain?.(uncertain);
-        this.setState({ uncertain, error: uncertain && selection.acknowledgedDocument ? fiscalMessages.submitted :
+        this.setState({ uncertain, error: uncertain && selection.acknowledgedDocument && this.state.data?.fiscal?.evidence?.kind !== 'numbered-journal' ? fiscalMessages.submitted :
           this.serviceError(result?.error, 'Could not record payment. Retry the same selection.') });
       }
     } finally { this.end(operation); }
@@ -417,7 +418,7 @@ export class DesktopBill extends React.Component {
     await this.props.onPaid?.();
   }
   serviceError(error, fallback) {
-    const known = ['Invalid request', 'Access denied', 'Send or remove new items before billing', 'No eligible items', 'Order changed; review the bill again', 'Bill already generated', 'Could not prepare bill', 'Bill unavailable', 'Bill already paid with a different selection', 'Could not record payment. Retry the same selection.', 'Payment result unknown. Retry the same selection.'];
+    const known = ['Invalid request', 'Access denied', 'Could not match the approved receipt to this bill. Ask for help.', 'Send or remove new items before billing', 'No eligible items', 'Order changed; review the bill again', 'Bill already generated', 'Could not prepare bill', 'Bill unavailable', 'Bill already paid with a different selection', 'Could not record payment. Retry the same selection.', 'Payment result unknown. Retry the same selection.'];
     return known.includes(error) ? error : fallback;
   }
   render() {
@@ -438,6 +439,8 @@ export class DesktopBill extends React.Component {
     const observed = physicalInspect && this.state.physicalObservation;
     const moneyMinor = value => (value / 100).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}) + ' den';
     const domestic = fiscal?.receipt?.domesticProduct ?? d?.fiscalDomesticProduct;
+    const showReceiptOrigin = fiscal ? !fiscal.receipt.lines.some(l => typeof l.domesticProduct === 'boolean') : !d?.fiscalRequiresOrigins;
+    const billLines = fiscal && (receipt || submitted) ? fiscal.receipt.lines : d?.lines;
     const legacyTrial = fiscal?.status === 'failed' && fiscal.mode === 'device' &&
       fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
       typeof fiscal.receipt.domesticProduct === 'boolean' && !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct');
@@ -472,9 +475,11 @@ export class DesktopBill extends React.Component {
               ? d.simulatedCardIntent && !d.simulatedCardApproval ? 'Record the observed simulated terminal result. Do not take another payment.' : 'The simulated terminal payment was approved. Do not take another payment.'
               : 'Simulate the separate terminal result for this full amount. No terminal charge is made.')),
           liveSelection && h('p', { className: 'bill-warning' }, t('Supervised PF700 checkout. Confirming Cash A will register a real sale.')),
-          device && (!d?.fiscalRequiresOrigins || (fiscal && !fiscal.receipt.lines.some(l => typeof l.domesticProduct === 'boolean'))) && (liveSelection || fiscal) && typeof domestic === 'boolean' &&
+          device && showReceiptOrigin && (liveSelection || fiscal) && typeof domestic === 'boolean' &&
             h('p', { className: 'bill-status' }, t(domestic ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')),
-          !receipt && submitted && fiscal?.reference && h('p', { className: 'bill-status' }, t('Acknowledged document {number}', {number:fiscal.reference})),
+          !receipt && submitted && fiscal?.reference && h('p', { className: 'bill-status' }, t(fiscal.evidence?.kind === 'numbered-journal'
+            ? 'The printer journal confirms receipt {number}. Finish recording the Cash A payment in Arra. Nothing will print.'
+            : 'Acknowledged document {number}', {number:fiscal.reference})),
           device && this.state.fiscalStatus === 'uncertain' && fiscal?.baseline && h('p', { className: 'bill-warning' },
             t('For the person helping: expected document {number} on printer {device}.', {
               number:fiscal.baseline.expectedDocumentNumber, device:fiscal.baseline.deviceId
@@ -496,7 +501,7 @@ export class DesktopBill extends React.Component {
           !receipt && !legacyTrial && d?.fiscalRequiresOrigins && this.state.account === 'A' && d.lines.some(l => !l.taxGroup || typeof l.domesticProduct !== 'boolean') &&
             h('p', { role: 'alert', className: 'bill-warning' }, t('A bill item is missing its saved VAT group or Macedonian-product mark. Ask Combined to check Menu management.')),
           d && h('section', { className: 'bill-summary' },
-            h('ul', { className: 'bill-lines' }, (receipt ? receipt.receipt.lines : d.lines).map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.taxGroup && Number.isInteger(l.taxRate) && h('small', null, ' · ', t('VAT {rate}% ({group})', {rate:l.taxRate, group:l.taxGroup})), typeof l.domesticProduct === 'boolean' && h('small', null, ' · ', t(l.domesticProduct ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
+            h('ul', { className: 'bill-lines' }, billLines.map(l => h('li', { key: l.itemId }, l.quantity + ' × ' + l.name + ' · ' + money(l.quantity * l.unitPrice), l.taxGroup && Number.isInteger(l.taxRate) && h('small', null, ' · ', t('VAT {rate}% ({group})', {rate:l.taxRate, group:l.taxGroup})), typeof l.domesticProduct === 'boolean' && h('small', null, ' · ', t(l.domesticProduct ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')), l.modifiers.length > 0 && h('div', { className: 'bill-modifiers' }, l.modifiers.map(m => m.groupName + ': ' + m.optionName + ' (' + m.adjustment + ')').join(', '))))),
             h('div', { className: 'bill-total' }, h('strong', null, t('Total: {total}', {total:money(d.total)})))),
           d?.id && !receipt && h('div', { className: 'bill-payment' },
             h('p', { className: 'bill-payment-label' }, t("Choose payment method and account:")),

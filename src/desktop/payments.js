@@ -95,7 +95,7 @@ function inspectSimulatedCash(db, session, request, adapter, finish) {
   return {ok:true};
 }
 
-function preparePayment(db, session, request, actor, printing, adapter, completingSubmission = false) {
+function preparePayment(db, session, request, actor, printing, adapter, completingSubmission = false, journalRecovery = null) {
   const bill = db.prepare(`SELECT b.order_id AS orderId,b.total,o.status,o.retired_empty AS retired
     FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=?`).get(request.billId);
   if (!bill) return { response: { ok: false, error: 'Access denied' } };
@@ -103,7 +103,13 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
     ? {ok:false,error:'Access denied'} : recoverLegacyPayment(db, bill.orderId, actor, request) };
 
   const existing = db.prepare('SELECT id,method,account FROM payments WHERE bill_id=?').get(request.billId);
-  const fiscal = readFiscalCheckout(db, request.billId);
+  // A normal checkout or stale start cannot authorize journal reconciliation.
+  // Read the approved artifact and match its original bill again under this write lock.
+  const journal = journalRecovery?.(db, request.billId);
+  if (journalRecovery && (!journal || Boolean(journal.settled) !== Boolean(existing))) {
+    return {response:failure('uncertain')};
+  }
+  const fiscal = readFiscalCheckout(db, request.billId, journal);
   if (request.acknowledgedDocument && (fiscal?.mode !== 'device' || fiscal.method !== 'cash' ||
       fiscal.reference !== request.acknowledgedDocument || !['submitted','accepted'].includes(fiscal.status))) {
     return {response:failure('uncertain')};
@@ -166,7 +172,9 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
   }
   try {
     const settlingPhysicalCash = fiscal?.mode === 'device' && fiscal.method === 'cash' && fiscal.status === 'submitted';
-    if (settlingPhysicalCash) require('./pf700-closed-cash-trace').persistClosedCashTrace(db, request.billId);
+    if (journal && settlingPhysicalCash) {
+      require('./pf700-numbered-journal-result').persistNumberedJournal(db, journal.candidate, journal.evidence);
+    } else if (settlingPhysicalCash) require('./pf700-closed-cash-trace').persistClosedCashTrace(db, request.billId);
     const payment = recordPayment(db, request, bill, actor, printing, fiscal);
     // A later invocation that settles an existing receipt is recovery, even
     // when an older client repeats its normal Cash A or saved-intent request.
@@ -298,7 +306,7 @@ function recoverSimulatedCard(db, session, request, adapter) {
   return {ok:true};
 }
 
-function registerPayments(ipcMain, isAllowedSender, db, session, printing = null, fiscalCheckout = null) {
+function registerPayments(ipcMain, isAllowedSender, db, session, printing = null, fiscalCheckout = null, journalRecovery = null) {
   if (fiscalCheckout && !validFiscalAdapter(fiscalCheckout)) {
     throw Error('Unsupported fiscal checkout adapter');
   }
@@ -339,6 +347,11 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
         let step;
         try {
           if (!authorized()) step = { response: { ok: false, error: 'Access denied' } };
+          else if (journalRecovery) {
+            step = request.billId === 2 && request.acknowledgedDocument === '0000030'
+              ? preparePayment(db,session,request,actor,printing,fiscalCheckout,false,journalRecovery)
+              : {response:failure('selection')};
+          }
           else if (request.preparePhysicalCash) step = {response:preparePhysicalCash(db,session,request,actor,fiscalCheckout)};
           else if (request.releasePhysicalCash) step = {response:releasePhysicalCash(db,session,request,actor)};
           else if (request.inspectPhysicalCash) {
