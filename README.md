@@ -1,6 +1,6 @@
 # Arra POS waiter demo
 
-This is a development demo using sample data and simulated actions. It is not a production POS and is not connected to a payment system. Windows desktop supports experimental non-fiscal bill printing; preparation test printing requires an isolated sample database. Desktop tables, active table orders, pending items and their notes, and the sample menu persist locally. Other screen actions remain simulated.
+The Windows evaluation packages use sample data. The desktop app stores tables, orders, bills and payments locally and supports experimental Windows queue printing. A separate supervised Account A trial has registered a receipt on the Synergy PF700. For UI changes and the eventual restaurant installer, see the verified baseline, POS test results, data locations and outstanding live-release work in the [PF700 release handoff](docs/progress/handoffs/S-084.md#pf700-release-handoff).
 
 Preparation tickets retain local simulated print jobs and attempt history. The simulation controls do not control a physical printer. Tickets created before print jobs were introduced are recorded as uncertain because no attempt result was saved at the time.
 

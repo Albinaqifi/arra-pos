@@ -2,6 +2,8 @@
 
 ## S-084 update: Synergy PF700, 2026-11-18
 
+For the current status of the physical printer, the 1.0.6 rehearsal on the restaurant PC, and what to carry into the final Windows installer, see the [PF700 release handoff](progress/handoffs/S-084.md#pf700-release-handoff).
+
 The owner identified the fiscal printer in a photograph as a Synergy PF700 and clarified that S-084's intended end result is an actual Account A fiscal daily report. The printer is on the POS PC, and the owner requested preparation without contacting it. Accent's [download page](https://www.accent.mk/%D0%BF%D0%BE%D0%B4%D0%B4%D1%80%D1%88%D0%BA%D0%B0/?lang=en) lists PF550/PF700 control codes, example input files and Windows communication tools. Its [device page](https://synergy.com.mk/?page_id=47) lists network, USB and serial connections.
 
 ### POS connection prepared for S-084
@@ -73,9 +75,9 @@ Research recorded 2026-11-09. This is a preliminary source review, not legal adv
 
 These are public authority findings, not confirmation of the restaurant's equipment or its obligations. Pages are in Macedonian; translations above are summaries, and current law and professional interpretation must be checked before implementation or use.
 
-## Provider and hardware: unresolved
+## Provider and hardware questions from the initial investigation
 
-The owner previously said a local provider supplies terminals and printers, but its name and the models are unknown. No contact has been made. No device-specific interface, SDK, protocol, certification, supported Windows version, or test equipment has been verified; no device is recommended or presumed approved.
+At the initial investigation on 9 November 2026 the owner had identified a local supplier but had not yet supplied the device model or interface. The later S-084 work above identifies the fiscal printer, firmware, protocol and Windows connection. The following questions record the original scope for the supplier and the other restaurant devices.
 
 Request from the provider or authorized service centre:
 
