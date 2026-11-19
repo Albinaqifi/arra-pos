@@ -16,6 +16,8 @@ In the packaged 105-item Arra menu this rule maps 89 items to В and 16 alcoholi
 
 ### Checkout in version 1.0.4
 
+On site, command 90 with option 0 returned a valid frame on COM3 with six comma-separated fields, of lengths 11, 19, 4, 8, 1 and 11. The published v1.40 command description has five fields. The app stopped before confirming the unit. To compare the final field directly with the case label, extract `Arra-PF700-Compare-Identity-1.0.4.zip` in the existing `payload` directory and open `PF700-Compare-Identity.cmd`. It uses the extracted 1.0.4 runtime for one identity query. Enter the label serial locally and keep the comparison result for follow-up.
+
 Extract the complete offline ZIP and run `test-arra.cmd`. Its version-specific training database starts with the restaurant menu, 16 available tables and zero sales. Use the ordinary waiter checkout. Cash A and Card A use a simulated PF700 and show a receipt prefixed `SIM-`. Cash B follows the existing local payment path. The versioned launcher uses no serial or Windows print transport. A separate card terminal remains responsible for collecting card payments.
 
 For the future attended check, use Windows PowerShell in the installed program folder, `%LOCALAPPDATA%\Arra POS Offline Test\1.0.4`. Run each step separately on the POS.

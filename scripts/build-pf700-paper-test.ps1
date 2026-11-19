@@ -2,7 +2,8 @@
 param(
     [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\build\sample-installer'),
     [Parameter(ParameterSetName = 'Reply')][switch]$CheckReplyOnly,
-    [Parameter(ParameterSetName = 'Vat')][switch]$CheckVatRates
+    [Parameter(ParameterSetName = 'Vat')][switch]$CheckVatRates,
+    [Parameter(ParameterSetName = 'Identity')][switch]$CompareIdentity
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -12,7 +13,10 @@ $sources = @(
     'scripts/pf700-paper-test/paper-exchange.ps1',
     'src/desktop/pf700-frame.js'
 )
-if ($CheckVatRates) {
+if ($CompareIdentity) {
+    $filename = 'Arra-PF700-Compare-Identity-1.0.4.zip'
+    $sources = @('scripts/pf700-paper-test/PF700-Compare-Identity.cmd', 'scripts/pf700-paper-test/compare-identity.ps1', 'scripts/pf700-paper-test/check-identity-layout.js')
+} elseif ($CheckVatRates) {
     $filename = 'Arra-PF700-Check-VAT.zip'
     $sources += 'scripts/pf700-paper-test/PF700-Check-VAT.cmd', 'scripts/pf700-paper-test/check-vat.js'
 } elseif ($CheckReplyOnly) {
@@ -29,7 +33,7 @@ try {
     $archive = [IO.Compression.ZipFile]::Open($tempZip, 'Create')
     try {
         foreach ($source in $sources) {
-            $entry = if ($source.EndsWith('.cmd')) { [IO.Path]::GetFileName($source) } else { $source }
+            $entry = if ($CompareIdentity -or $source.EndsWith('.cmd')) { [IO.Path]::GetFileName($source) } else { $source }
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $repo $source), $entry)
         }
     } finally {
