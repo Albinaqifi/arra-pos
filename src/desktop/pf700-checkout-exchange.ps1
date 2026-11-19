@@ -1,6 +1,6 @@
 # Windows PowerShell 5.1. The checkout process owns the private stdin/stdout
 # pipes. Running this helper with no valid identity probe opens no port.
-param([ValidateSet('Checkout', 'DailyReport', 'ReadDailyReport', 'ReadCheckout')][string]$Operation = 'Checkout')
+param([ValidateSet('Checkout', 'CardTrial', 'DailyReport', 'ReadDailyReport', 'ReadCheckout')][string]$Operation = 'Checkout')
 
 function Read-Pf700CheckoutReply($Port, $Deadline = 20000, $BusyLimit = 48) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -49,8 +49,15 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             if ($request[0] -ne 1 -or $request[1] -ne $request.Length + 26 -or $request[-1] -ne 3) {
                 throw 'Invalid frame'
             }
-            if ($Operation -eq 'Checkout') {
-                if ($request[3] -notin @(90,74,76,97,113,48,49,51,103,53,56)) { throw 'Invalid checkout command' }
+            if ($Operation -in @('Checkout','CardTrial')) {
+                if ($Operation -eq 'CardTrial' -and $request[3] -eq 110) {
+                    if ($request.Length -ne 10) { throw 'Invalid tender register inquiry' }
+                } elseif ($request[3] -notin @(90,74,76,97,113,48,49,51,103,53,56)) { throw 'Invalid checkout command' }
+                if ($request[3] -eq 53) {
+                    $tender = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
+                    $format = if ($Operation -eq 'CardTrial') { '\A\tD[1-9][0-9]{0,6}\z' } else { '\A\t(?:P[1-9][0-9]{0,7})?\z' }
+                    if ($tender -cnotmatch $format) { throw 'Invalid tender for this checkout mode' }
+                }
             } elseif ($Operation -eq 'ReadCheckout') {
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
                 $queries = @{ 90 = '0'; 76 = 'T'; 103 = ''; 113 = '' }

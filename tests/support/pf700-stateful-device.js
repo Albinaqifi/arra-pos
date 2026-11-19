@@ -15,8 +15,9 @@ function response(sequence, command, data, open) {
   return Buffer.concat([Buffer.from([1]), body, Buffer.from([12, 8, 4, 0].map(shift => 48 + ((sum >> shift) & 15))), Buffer.from([3])]);
 }
 
-function createStatefulPf700({legacy = false} = {}) {
+function createStatefulPf700({legacy = false, debitRegister = 2, receiptCountOffset = 0} = {}) {
   const state = { open: false, items: 0, sums: [0, 0, 0, 0], paid: 0, tenders: 0, closes: 0, document: 1 };
+  const registers = [10, 20, 30, 40];
   const transcript = [];
   let cache = null, fault = null;
   const hit = (command, mode) => {
@@ -45,6 +46,10 @@ function createStatefulPf700({legacy = false} = {}) {
           legacy ? '+' + String(state.paid).padStart(9,'0') : amount(state.paid)].join(',');
         break;
       case 97: value = '18.00,5.00,10.00,0.00'; break;
+      case 110:
+        if (state.open || payload) throw Error('Invalid synthetic tender register query');
+        value = [...registers.map(amount), '0007', String(1 + state.closes + receiptCountOffset).padStart(4, '0')].join(',');
+        break;
       case 113: value = String(state.document).padStart(7, '0'); break;
       case 48:
         if (state.open || state.closes || !/^[1-8],[0-9]{4,6},[0-9]{1,5}$/.test(payload)) throw Error('Invalid synthetic open');
@@ -63,9 +68,10 @@ function createStatefulPf700({legacy = false} = {}) {
         if (!state.open || payload) throw Error('Invalid synthetic VAT query');
         value = legacy ? ['0',...state.sums].join(',') : ['1', ...state.sums.map(amount)].join(','); break;
       case 53:
-        if (!state.open || payload !== (legacy ? '\tP'+total : '\t') || !total) throw Error('Invalid synthetic tender');
+        if (!state.open || ![legacy ? '\tP'+total : '\t', '\tD'+total].includes(payload) || !total) throw Error('Invalid synthetic tender');
         // The protocol allows another total command; deliberately model a
         // duplicate tender as harmful instead of granting idempotency for free.
+        registers[payload.startsWith('\tD') ? debitRegister : 0] += total;
         state.paid += total; state.tenders++; value = 'R+000000000'; break;
       case 56:
         if (!state.open || state.paid !== total || !total) throw Error('Invalid synthetic close');

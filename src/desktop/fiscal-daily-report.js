@@ -42,6 +42,7 @@ function validAdapter(adapter) {
 // Match each individual effective-A payment to its immutable registered sale.
 // Matching aggregate totals alone cannot distinguish equal days or a transfer.
 function coverage(db, dayId, report, adapter) {
+  if (require('./supervised-card').blocksClose(db)) return {reason:'unresolved'};
   if (!report) return {reason:'coverage'};
   if (!report.count) return {reason:'empty'};
   if (db.prepare(`SELECT 1 FROM fiscal_checkout_attempts a LEFT JOIN fiscal_checkout_verified_results r ON r.attempt_id=a.id
@@ -62,7 +63,8 @@ function coverage(db, dayId, report, adapter) {
     } catch { return {reason:'unavailable'}; }
   }
 
-  const rows = db.prepare(`SELECT p.id,p.bill_id AS billId,p.method,p.amount,s.receipt,r.reference,r.evidence
+  const rows = db.prepare(`SELECT p.id,p.bill_id AS billId,p.method,p.amount,s.receipt,r.reference,r.evidence,
+    EXISTS(SELECT 1 FROM pf700_card_intents i WHERE i.bill_id=p.bill_id AND r.source='device-' || i.device_id AND s.method='card') AS supervisedCard
     FROM fiscal_checkout_verified_results r JOIN fiscal_checkout_attempts a ON a.id=r.attempt_id
     JOIN fiscal_checkout_sales s ON s.bill_id=a.bill_id JOIN payments p ON p.bill_id=s.bill_id
     JOIN payment_business_days pd ON pd.payment_id=p.id
@@ -90,6 +92,7 @@ function coverage(db, dayId, report, adapter) {
     let documentNumber;
     if (adapter.mode === 'device') {
       const proof = JSON.parse(row.evidence);
+      if (row.supervisedCard && proof.debitAmountMinor !== row.amount * 100) return {reason:'coverage'};
       if (proof.fiscalReceiptCount !== index + 1 || proof.reversalCount !== 0) return {reason:'period'};
       documentNumber = row.reference;
     } else {
@@ -107,6 +110,7 @@ function coverage(db, dayId, report, adapter) {
 function describe(db, dayId, report, alreadyClosed, adapter) {
   const record = saved(db,dayId);
   if (record?.reportNumber) return {mode:record.mode,status:'complete',reportNumber:record.reportNumber};
+  if (require('./supervised-card').blocksClose(db)) return {mode:'device',status:'blocked',reason:'unresolved'};
   if (record) return {mode:record.mode,status:flights(db).has(dayId) ? 'pending' : 'uncertain',
     canReconcile:!flights(db).has(dayId) && !!adapter && matches(adapter,record)};
   if (alreadyClosed && !deviceSales(db,dayId)) {
@@ -165,6 +169,7 @@ function currentDate() {
 async function handle(db, req, actor, authorized, adapter, report, originalCloseId) {
   const {dayId,mode} = req;
   if (!adapter || mode !== adapter.mode || !authorized()) return {ok:false};
+  if (require('./supervised-card').blocksClose(db)) return {ok:false,error:'unresolved'};
   let record = saved(db,dayId);
   if (record && !matches(adapter,record)) return {ok:false,error:'unavailable'};
   if (record?.reportNumber) return {ok:true};

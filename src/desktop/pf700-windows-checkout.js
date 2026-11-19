@@ -112,12 +112,13 @@ async function checkWindowsPf700Identity(expectedSerial, startProcess = spawn) {
 }
 
 function createWindowsPf700Checkout(profile, startProcess = spawn) {
-  const { expectedSerial, operatorNumber, operatorPassword, tillNumber, domesticProduct, mayProbe, beforeOpen, allowLegacyOrigin = false } = profile;
+  const { expectedSerial, operatorNumber, operatorPassword, tillNumber, domesticProduct, mayProbe, beforeOpen,
+    allowLegacyOrigin = false, supervisedCardTrial = false } = profile;
   if (!validSerial(expectedSerial) ||
       !['string','number'].includes(typeof operatorNumber) || !/^[1-8]$/.test(String(operatorNumber)) ||
       typeof operatorPassword !== 'string' || !/^[0-9]{4,6}$/.test(operatorPassword) ||
       !['string','number'].includes(typeof tillNumber) || !/^[0-9]{1,5}$/.test(String(tillNumber)) || typeof domesticProduct !== 'boolean' ||
-      typeof allowLegacyOrigin !== 'boolean' || (mayProbe !== undefined && typeof mayProbe !== 'function') ||
+      typeof allowLegacyOrigin !== 'boolean' || typeof supervisedCardTrial !== 'boolean' || (mayProbe !== undefined && typeof mayProbe !== 'function') ||
       (beforeOpen !== undefined && typeof beforeOpen !== 'function')) throw Error('Invalid PF700 checkout profile');
   let busy = false;
   return Object.freeze({
@@ -137,7 +138,7 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
       } catch { try { if (pipe) await pipe.close(); } finally { busy=false; } return null; }
     },
     async registerSale(snapshot, context) {
-      if (busy || typeof context?.beforeOpen !== 'function' || (snapshot?.domesticProduct !== domesticProduct && !(allowLegacyOrigin &&
+      if (busy || snapshot?.method !== (supervisedCardTrial ? 'card' : 'cash') || typeof context?.beforeOpen !== 'function' || (snapshot?.domesticProduct !== domesticProduct && !(allowLegacyOrigin &&
           typeof snapshot?.domesticProduct === 'boolean' && snapshot.lines?.length === 1 &&
           snapshot.lines[0].quantity === 1 && !Object.hasOwn(snapshot.lines[0], 'domesticProduct'))) ||
           !canEncodePf700Receipt(snapshot)) return { status: 'failed' };
@@ -145,7 +146,7 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
       let pipe, opening = false;
       try {
         if (mayProbe && !mayProbe()) return { status: 'failed' };
-        pipe = windowsPipe(startProcess);
+        pipe = windowsPipe(startProcess, supervisedCardTrial ? 'CardTrial' : 'Checkout');
         const sequence = randomInt(0x20, 0x80);
         const probe = encodeRequest({sequence,command:90,data:Buffer.from('0')});
         const probeId = context.beforeCommand?.({command:90,sequence,requestHash:createHash('sha256').update(probe).digest('hex')});
@@ -156,7 +157,7 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
         return await executePf700Checkout(snapshot, {
           firstSequence: sequence === 0x7f ? 0x20 : sequence + 1,
           operatorNumber, operatorPassword, tillNumber, domesticProduct: snapshot.domesticProduct,
-          onsiteFirmware: identity.onsiteFirmware,
+          onsiteFirmware: identity.onsiteFirmware, supervisedCardTrial,
           beforeCommand:context.beforeCommand, afterCommand:context.afterCommand,
           async beforeOpen(baseline) {
             if (beforeOpen) await beforeOpen(baseline);

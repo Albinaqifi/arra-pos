@@ -1,13 +1,15 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const { offlineCheckoutRequested } = require('./fiscal-checkout');
 const { createTrainingPf700 } = require('./training-pf700');
 const { createWindowsPf700DailyReport } = require('./pf700-daily-report');
-const { isCommissionedDirectory, deviceTrial } = require('./pf700-commissioning');
+const { isCommissionedDirectory, deviceTrial, cardTrialLedger } = require('./pf700-commissioning');
 const { createWindowsPf700Checkout } = require('./pf700-windows-checkout');
 
 const supervised = '--pf700-supervised-checkout';
 const routine = '--pf700-routine-checkout';
+const cardTrial = '--pf700-supervised-card-trial';
 
 // The attended launcher passes the local settings through a private pipe and
 // closes it before the app opens. Never include its contents in errors or logs.
@@ -40,7 +42,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
     }
     return createTrainingPf700(directory);
   }
-  if (![supervised, routine].includes(switches[0]) || process.platform !== 'win32' ||
+  if (![supervised, routine, cardTrial].includes(switches[0]) || process.platform !== 'win32' ||
       args.some(arg => arg.startsWith('--sample-data-directory')) ||
       fs.existsSync(path.join(directory, 'SAMPLE-DATA-ONLY')) ||
       !fs.existsSync(path.join(directory, 'arra.sqlite')) || !isCommissionedDirectory(directory)) {
@@ -53,16 +55,43 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
   }
   const trial = deviceTrial(profile.expectedSerial);
   const isRoutine = switches[0] === routine;
+  const isCardTrial = switches[0] === cardTrial;
+  // An enrolled SQLite backup alone must not authorize a second terminal
+  // invitation on another PC or Windows account. This attended profile is
+  // for the already commissioned unit on the original POS.
+  if (isCardTrial) {
+    const original = path.join(process.env.APPDATA, 'Arra POS PF700 Commissioning');
+    if (!trial.wasClaimed() || !fs.existsSync(original) ||
+        fs.realpathSync.native(original).toLowerCase() !== fs.realpathSync.native(directory).toLowerCase()) {
+      throw Error('Use the original commissioned printer, POS data folder and Windows account for the card trial.');
+    }
+  }
+  const cardLedger = cardTrialLedger();
   const adapter = createDevice({
     operatorNumber: profile.operatorNumber, operatorPassword: profile.operatorPassword,
     tillNumber: profile.tillNumber, expectedSerial: profile.expectedSerial, domesticProduct: profile.domesticProduct,
-    ...(isRoutine ? {allowLegacyOrigin:true} : {mayProbe: trial.available, beforeOpen: trial.claim})
+    ...(isCardTrial ? {supervisedCardTrial:true} : isRoutine ? {allowLegacyOrigin:true} : {mayProbe: trial.available, beforeOpen: trial.claim})
   });
   return Object.freeze({
     ...adapter,
-    ...(isRoutine ? { requireOrigins: true } : {}),
+    ...((isRoutine || isCardTrial) ? { requireOrigins: true } : {}),
+    readCardTrial: cardLedger.read,
+    ...(isCardTrial ? {
+      supervisedCardTrial: true,
+      cardTrialAvailable: () => cardLedger.read() === null,
+      claimCardTrial: token => cardLedger.claim(profile.expectedSerial, token),
+      recordCardOutcome: (token, outcome) => cardLedger.outcome(profile.expectedSerial, token, outcome),
+      cardDispatchAvailable(token) {
+        const record = cardLedger.read();
+        return Boolean(record && record.token === token && record.outcome === 'approved' && !record.dispatched &&
+          record.deviceHash === createHash('sha256').update(profile.expectedSerial).digest('hex'));
+      },
+      claimCardDispatch: token => cardLedger.dispatch(profile.expectedSerial, token)
+    } : {}),
     dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
     canRegister(receipt, prior) {
+      if (isCardTrial) return receipt.account === 'A' && receipt.method === 'card' &&
+        receipt.lines.length > 0 && receipt.lines.every(line => typeof line.domesticProduct === 'boolean');
       const legacy = typeof receipt.domesticProduct === 'boolean' && receipt.lines.length === 1 &&
         receipt.lines[0].quantity === 1 && !Object.hasOwn(receipt.lines[0], 'domesticProduct');
       return receipt.method === 'cash' && receipt.account === 'A' && (isRoutine

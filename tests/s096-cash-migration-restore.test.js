@@ -33,7 +33,7 @@ test('v48 interrupted checkout remains unresolved after migration and restart', 
     INSERT INTO fiscal_checkout_attempts(id,bill_id,started_at) VALUES(1,1,1);`);
   db.close(); db = openDatabase(dir);
   for (let attempt = 0; attempt < 2; attempt++) {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version,50);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
     assert.equal(readFiscalCheckout(db,1).status,'uncertain');
     assert.equal(db.prepare('SELECT count(*) n FROM simulated_cash_attempts').get().n,0);
     for (const account of ['A','B']) assert.throws(() =>
@@ -140,7 +140,7 @@ for (const mode of ['legacy','sample','day']) test('v49 ' + mode + ' recovery co
   if (mode !== 'legacy') copies.push(copy);
   assert.equal(fs.existsSync(path.join(copy,'simulated-pf700.sqlite')),false);
   db=openDatabase(copy);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,50);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
   assert.deepEqual({...db.prepare('SELECT attempt_id,nonce,interruption FROM simulated_cash_attempts').get()},saved);
   assert.equal(readFiscalCheckout(db,bill.id).status,'uncertain');
   assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');
@@ -154,6 +154,6 @@ for (const mode of ['legacy','sample','day']) test('v49 ' + mode + ' recovery co
   db.close(); db=openDatabase(source);
   assert.deepEqual({...db.prepare('SELECT attempt_id,nonce,interruption FROM simulated_cash_attempts').get()},saved);
   assert.equal(readFiscalCheckout(db,bill.id).status,'uncertain');
-  db.exec('PRAGMA user_version=51'); db.close(); db=null;
+  db.exec('PRAGMA user_version=52'); db.close(); db=null;
   await assert.rejects(makeCopy(), /Unsupported|Expected version/);
 });

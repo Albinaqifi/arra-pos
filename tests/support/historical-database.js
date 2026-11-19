@@ -20,6 +20,21 @@ function historicalDatabase(version) {
 // Older test fixtures assemble prior schemas by removing later migrations.
 // Remove later fiscal objects before rebuilding their referenced tables.
 const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS pf700_card_block_pf700_cash_intents;
+  DROP TRIGGER IF EXISTS pf700_card_block_simulated_card_intents;
+  DROP TRIGGER IF EXISTS pf700_card_block_simulated_cash_intents;
+  DROP TRIGGER IF EXISTS pf700_card_block_shift_closes;
+  DROP TRIGGER IF EXISTS pf700_card_block_account_a_closes;
+  DROP TRIGGER IF EXISTS pf700_card_block_fiscal_daily_reports;
+  DROP TRIGGER IF EXISTS pf700_card_block_business_days;
+  DROP TRIGGER IF EXISTS pf700_card_order_guard;
+  DROP TRIGGER IF EXISTS pf700_card_payment_guard;
+  DROP TRIGGER IF EXISTS pf700_card_attempt_guard;
+  DROP TRIGGER IF EXISTS pf700_card_result_guard;
+  DROP TRIGGER IF EXISTS pf700_card_sale_guard;
+  DROP VIEW IF EXISTS pf700_card_open_intents;
+  DROP TABLE IF EXISTS pf700_card_outcomes;
+  DROP TABLE IF EXISTS pf700_card_intents;
   DROP TRIGGER IF EXISTS pf700_cash_card_guard;
   DROP TRIGGER IF EXISTS pf700_cash_sample_guard;
   DROP TRIGGER IF EXISTS pf700_cash_payment_guard;

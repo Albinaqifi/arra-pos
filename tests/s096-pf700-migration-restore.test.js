@@ -61,7 +61,7 @@ function ledger(db) {
 }
 function verifyHeld(db, expected, actor=1) {
   assert.deepEqual(ledger(db),expected);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,50);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
   assert.equal(readFiscalCheckout(db,1).status,'uncertain');
   assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n,0);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(),[]);
@@ -92,7 +92,7 @@ test('v49 legacy physical unknown remains held and retains its journal after upg
     INSERT INTO fiscal_checkout_baselines(attempt_id,device_id,previous_document) VALUES(1,'SYNTHETIC01','0000000');`);
   db.close(); db=openDatabase(directory);
   for (let iteration=0; iteration<2; iteration++) {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version,50);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version,51);
     assert.equal(readFiscalCheckout(db,1).status,'uncertain');
     assert.equal(db.prepare('SELECT count(*) n FROM pf700_cash_intents').get().n,0);
     assert.equal(db.prepare('SELECT count(*) n FROM pf700_command_intents').get().n,0);
@@ -176,6 +176,6 @@ for (const mode of ['legacy','sample','day']) test('v50 '+mode+' recovery-copy p
     mode==='sample' ? recoverSampleCombined(sourceFile,'sample-admin',phrase) : upgradeSampleBusinessDays(sourceFile,'sample-admin',phrase);
   copy=await makeCopy();db=openDatabase(copy);verifyHeld(db,expected,2);db.close();db=null;
   db=openDatabase(source);assert.deepEqual(ledger(db),expected);
-  db.exec('PRAGMA user_version=51');db.close();db=null;
+  db.exec('PRAGMA user_version=52');db.close();db=null;
   await assert.rejects(makeCopy(),/Unsupported|Expected version/);
 });
