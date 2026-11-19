@@ -16,10 +16,10 @@ function registerAdminSentCorrection(ipcMain, isAllowedSender, db, session, test
         FROM orders o JOIN order_items i ON i.order_id=o.id JOIN dining_tables t ON t.id=o.table_id LEFT JOIN dining_areas a ON a.id=t.area_id
         WHERE o.status='open' AND o.retired_empty=0 AND t.active=1 AND COALESCE(a.active,1)=1 AND i.status='sent' AND NOT EXISTS(SELECT 1 FROM bills b WHERE b.order_id=o.id)
         ORDER BY o.table_id,o.id,i.id`).all().filter(i=>i.remaining>0)}};
-      let attempt;
       db.exec('BEGIN IMMEDIATE');
       try {
         const prior=db.prepare('SELECT * FROM sent_item_corrections WHERE request_id=?').get(req.requestId);
+        let correctionId=prior?.id;
         if (prior) {
           if (prior.order_id!==req.orderId || prior.item_id!==req.itemId || prior.quantity!==req.quantity || prior.reason!==req.reason.trim() || prior.actor_id!==actor) throw Error('Invalid retry');
         } else {
@@ -29,11 +29,14 @@ function registerAdminSentCorrection(ipcMain, isAllowedSender, db, session, test
           const now=Date.now();
           const result=db.prepare('INSERT INTO sent_item_corrections(request_id,item_id,order_id,actor_id,quantity,reason,occurred_at) VALUES(?,?,?,?,?,?,?)').run(req.requestId,req.itemId,req.orderId,actor,req.quantity,req.reason.trim(),now);
           markService(db,now);
-          const noticeId=cancellationPrinting.createCancellationJob(db,result.lastInsertRowid,req.itemId,req.quantity);
-          if (testPrinting) attempt=cancellationPrinting.reserveCancellationAttempt(db,noticeId,'initial-'+noticeId,actor);
+          correctionId=result.lastInsertRowid;
+          cancellationPrinting.createCancellationJob(db,correctionId,req.itemId,req.quantity);
           recordAudit(db,actor,'correct_sent','order_item',req.itemId,req.orderId,{correctionId:result.lastInsertRowid,quantity:req.quantity,reason:req.reason.trim(),source:'administrator'});
         }
-        db.exec('COMMIT'); if (testPrinting) cancellationPrinting.dispatchCancellation(db,testPrinting.adapter,attempt); return {ok:true};
+        const output=cancellationPrinting.initialCancellationOutput(db,correctionId,actor,testPrinting,prior);
+        db.exec('COMMIT');
+        if (testPrinting) cancellationPrinting.dispatchCancellation(db,testPrinting.adapter,output.attempt);
+        return {ok:true,testPrintEnabled:!!testPrinting && !output.deferred,preparationMode:testPrinting?.preparationMode};
       } catch (_) { db.exec('ROLLBACK'); return {ok:false}; }
     } catch (_) { return {ok:false}; }
   });

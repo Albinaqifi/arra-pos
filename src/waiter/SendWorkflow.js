@@ -48,7 +48,11 @@ export class SendWorkflow extends FeatureState {
       const pending = data.items.some(item => item.status === 'pending');
       const printNotice = await this.printing.handoffNotice(this.getLanguage());
       if (!this.current(target)) return;
-      const physicalNotice = data.testPrintEnabled
+      const physicalNotice = data.preparationMode === 'training'
+        ? this.t('Preparation tickets used simulated queues.')
+        : data.preparationMode === 'routine'
+        ? this.t('Check the preparation printers for paper output.')
+        : data.testPrintEnabled
         ? this.t('Test print output is not confirmed. Check the printer and paper.')
         : this.t('No physical ticket was printed.');
       const notice = [pending ? this.t('Table {id} has new items still pending. Reopen the table with your PIN and send again.', { id: target.tableId }) : '', printNotice, physicalNotice].filter(Boolean).join(' ');

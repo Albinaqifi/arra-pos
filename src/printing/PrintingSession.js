@@ -58,9 +58,10 @@ export class PrintingSession {
     return this.#change('printJobs', () => ({ action: 'simulate', destination, result }));
   }
 
-  retry(jobId) {
+  retry(jobId, checked = false) {
     return this.#change('printJobs', () => ({
       action: 'retry', jobId, requestId: this.#retryToken(this.#retryTokens, jobId),
+      ...(checked ? { checked: true } : {}),
     }), () => this.#retryTokens.delete(jobId));
   }
 
@@ -112,7 +113,16 @@ export class PrintingSession {
     try {
       const jobs = await this.listJobs();
       if (jobs.ok) {
-        return jobs.data.jobs.some(job => job.result !== 'success' || job.hadUncertain)
+        let needsAttention = jobs.data.jobs.some(job => job.result !== 'success' || job.hadUncertain);
+        if (jobs.data.preparationMode) {
+          const queues = await this.listTestJobs();
+          if (!queues.ok || queues.data.preparationMode !== jobs.data.preparationMode)
+            return waiterTranslate(language, 'waiter.Print status unavailable. Reopen your table and check print jobs.');
+          if (queues.data.notices.some(job => job.retryBlocked))
+            return waiterTranslate(language, 'waiter.Original printer output could not be verified. Tell preparation staff in person.');
+          needsAttention ||= [...queues.data.jobs, ...queues.data.notices].some(job => !job.cancelled && job.result !== 'accepted');
+        }
+        return needsAttention
           ? waiterTranslate(language, 'waiter.A print job needs attention or had uncertain output. Reopen your table to review it and retry if needed.')
           : '';
       }

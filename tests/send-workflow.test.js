@@ -86,6 +86,24 @@ test('a confirmed send does not become an item failure if the later handoff thro
   assert.equal(app.tableOrders.state.items[0].status, 'sent'); assert.equal(app.shell.state.toast, null);
 });
 
+test('simulated checkout handoff reads the preparation queues and retains their failure warning', async () => {
+  const preparationMode = 'training', reads = [];
+  const { app } = harness({
+    orderItems: async () => ({ ok: true, data: { items: [row()], testPrintEnabled: true, preparationMode } }),
+    printJobs: async ({ action }) => { reads.push(action); return { ok: true, data: { jobs: [], preparationMode } }; },
+    testPrinting: async ({ action }) => {
+      reads.push(action);
+      return { ok: true, data: { jobs: [{ result: 'failed' }], notices: [], preparationMode } };
+    },
+    clearWaiter: async () => ({ ok: true }), getEntryTables: async () => ({ ok: true, data: [] }),
+  });
+  await app.sendWorkflow.send();
+  assert.deepEqual(reads, ['list', 'list']);
+  assert.match(app.session.state.handoffNotice, /print job needs attention/i);
+  assert.match(app.session.state.handoffNotice, /simulated queues/i);
+  assert.doesNotMatch(app.session.state.handoffNotice, /check the printer and paper/i);
+});
+
 test('an unresolved movement or correction blocks direct send after its write lease ends', async () => {
   let sends = 0;
   const { app } = harness({ orderItems: async () => { sends++; return { ok: false }; } });

@@ -7,7 +7,7 @@ class TestBillPrint extends React.Component {
   componentDidMount() { this.refresh(); }
   async refresh() {
     if (!window.arra.testPrinting) return;
-    try { const r=await window.arra.testPrinting({action:'list'}); if(r.disabled) this.setState({disabled:true}); else if(r.ok) this.setState({job:r.data.jobs.find(j=>j.billId===this.props.billId) || null,message:'',disabled:false}); else this.setState({message:this.t('Test print status unavailable; displayed status may be stale.')}); }
+    try { const r=await window.arra.testPrinting({action:'list'}); if(r.disabled || r.data?.preparationMode) this.setState({disabled:true}); else if(r.ok) this.setState({job:r.data.jobs.find(j=>j.billId===this.props.billId) || null,message:'',disabled:false}); else this.setState({message:this.t('Test print status unavailable; displayed status may be stale.')}); }
     catch (_) { this.setState({message:this.t('Test print status unavailable; displayed status may be stale.')}); }
   }
   async print() {
@@ -15,6 +15,7 @@ class TestBillPrint extends React.Component {
     this.setState({busy:true,message:''});
     try {
       const list=await window.arra.testPrinting({action:'list'});
+      if (list.disabled || list.data?.preparationMode) { this.setState({busy:false,disabled:true}); return; }
       if (!list.ok) { this.setState({busy:false,message:this.t('Test printing unavailable. Check the printer and try again.')}); return; }
       const job=list.data.jobs.find(j=>j.billId===this.props.billId);
       let request;

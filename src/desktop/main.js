@@ -27,6 +27,7 @@ const { registerSession } = require('./session');
 const { registerLanguage } = require('./language');
 const { registerEmployeeConfig } = require('./employee-config');
 const testPrinting = require('./test-printing');
+const { selectPreparationPrinting } = require('./preparation-printing');
 const { printTestJob } = require('./windows-test-printer');
 
 let database;
@@ -83,10 +84,11 @@ app.whenReady().then(() => {
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
   registerLegacyOrderAssignment(require('electron').ipcMain, isAllowedSender, database, session);
   registerBills(require('electron').ipcMain, isAllowedSender, database, session, fiscalCheckout);
-  // The dedicated PF700 rehearsal runs the ordinary checkout without any
-  // Windows output, including automatic preparation tickets and bill copies.
-  const localPrinter = !fiscalCheckout && process.platform === 'win32' ? printTestJob : null;
-  const testPrintEnabled = !!localPrinter && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
+  const windowsPrinter = process.platform === 'win32' ? printTestJob : null;
+  const preparation = selectPreparationPrinting(process.argv, database, fiscalCheckout, windowsPrinter);
+  // Fiscal checkout selects only its PF700 for receipts. The preparation
+  // adapter is never passed to payment, bill history or reporting.
+  const localPrinter = fiscalCheckout ? null : windowsPrinter;
   registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
@@ -99,12 +101,12 @@ app.whenReady().then(() => {
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
-  const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:localPrinter } : null;
-  registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
-  registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
+  registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session, preparation);
+  registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, preparation);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
-  registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
-  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, localPrinter || (() => 'failed'), true, !testPrintEnabled);
+  registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session, preparation?.preparationMode);
+  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session,
+    preparation?.adapter || localPrinter || (() => 'failed'), !!preparation || !fiscalCheckout, !preparation, preparation?.preparationMode);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

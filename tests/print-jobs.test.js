@@ -125,3 +125,79 @@ test('owner can configure simulated printers without receiving shared preparatio
  actor=authenticated=4; assert.equal(call({action:'list'}).ok,false);
  actor=2; authenticated=1; assert.equal(call({action:'list'}).ok,false);
 });
+
+test('a prior PF700 training profile recovers only unmatched simulator tickets after restart', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-old-training-'));
+  let db = authorizedDatabase(openDatabase(directory));
+  t.after(() => { db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+  seedTables(db);
+  seedMenu(db);
+  db.exec(`UPDATE menu_products SET destination='bar' WHERE id='espresso';
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');`);
+  let actor = 1;
+  const session = { currentUserId: () => actor, authenticatedUserId: () => actor };
+  function register(mode, adapter) {
+    const handlers = new Map();
+    const ipc = { handle: (name, handler) => handlers.set(name, handler) };
+    registerOrderItems(ipc, () => true, db, session, adapter);
+    registerPrintJobs(ipc, () => true, db, session, mode);
+    return {
+      items: req => handlers.get('arra:order-items')({}, { orderId: 1, ...req }),
+      jobs: req => handlers.get('arra:print-jobs')({}, req),
+    };
+  }
+  // This is the pre-S-098 offline PF700 startup wiring: no preparation adapter.
+  let api = register();
+  const setResult = (destination, result) => assert.equal(api.jobs({ action: 'simulate', destination, result }).ok, true);
+  setResult('kitchen', 'uncertain');
+  setResult('bar', 'failed');
+  for (const productId of ['espresso', 'qebapa']) assert.equal(api.items({ action: 'add', productId }).ok, true);
+  assert.equal(api.items({ action: 'send', requestId: 'older-training' }).ok, true);
+  const original = api.jobs({ action: 'list' }).data.jobs;
+  const kitchen = original.find(j => j.destination === 'kitchen').id;
+  const bar = original.find(j => j.destination === 'bar').id;
+  assert.deepEqual(original.map(j => j.result).sort(), ['failed', 'uncertain']);
+
+  // An ordinary sample round creates both a simulator shadow and a queue job.
+  const printing = require('../src/desktop/test-printing');
+  api = register(undefined, { ...printing, adapter: () => 'accepted' });
+  assert.equal(api.items({ action: 'add', productId: 'espresso' }).ok, true);
+  assert.equal(api.items({ action: 'send', requestId: 'sample-queue' }).ok, true);
+  await new Promise(resolve => setImmediate(resolve));
+  const paired = api.jobs({ action: 'list' }).data.jobs.find(j => j.round === 2).id;
+  db.close();
+  db = openDatabase(directory);
+
+  const { createTrainingPf700 } = require('../src/desktop/training-pf700');
+  const { selectPreparationPrinting } = require('../src/desktop/preparation-printing');
+  const training = selectPreparationPrinting([], db, createTrainingPf700(directory), assert.fail);
+  api = register(training.preparationMode, training);
+  const retry = (jobId, requestId, checked) => api.jobs({ action: 'retry', jobId, requestId, checked });
+  assert.deepEqual(api.jobs({ action: 'list' }).data.jobs.map(j => j.id), original.map(j => j.id));
+  assert.equal(retry(kitchen, 'check-first', false).ok, false);
+  assert.equal(api.jobs({ action: 'retry', jobId: kitchen, requestId: 'no-check' }).ok, false);
+  assert.equal(retry(paired, 'paired-shadow', true).ok, false);
+  actor = 99;
+  assert.equal(retry(kitchen, 'wrong-actor', true).ok, false);
+  actor = 1;
+  setResult('kitchen', 'success');
+  setResult('bar', 'success');
+  for (const id of [bar, kitchen]) {
+    const requestId = 'old-retry-' + id;
+    assert.equal(retry(id, requestId, true).ok, true);
+    assert.equal(retry(id, requestId, true).ok, true);
+    assert.equal(retry(id, 'already-accepted', true).ok, false);
+  }
+  const recovered = api.jobs({ action: 'list' }).data.jobs;
+  assert.ok(recovered.every(j => j.attempts === 2 && j.result === 'success'));
+  assert.equal(recovered.find(j => j.id === kitchen).hadUncertain, 1);
+  assert.equal(db.prepare('SELECT count(*) n FROM test_print_attempts').get().n, 1);
+  assert.equal(db.prepare('SELECT count(*) n FROM order_items').get().n, 3);
+  assert.equal(db.prepare('SELECT count(*) n FROM payments').get().n, 0);
+  assert.equal(db.prepare('SELECT count(*) n FROM fiscal_checkout_sales').get().n, 0);
+  assert.equal(fs.existsSync(path.join(directory, 'simulated-pf700.sqlite')), false);
+  api = register('routine');
+  assert.deepEqual(api.jobs({ action: 'list' }).data.jobs, []);
+  assert.equal(retry(kitchen, 'real-queue', true).ok, false);
+});
