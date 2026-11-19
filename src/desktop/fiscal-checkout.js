@@ -92,16 +92,22 @@ function reserveSale(db, request, total, actor, prior, adapter) {
   // the POS payment still needs to be finalized in a later session.
   if (adapter.mode === 'device' && !adapter.requireOrigins && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
       WHERE source=? AND status='accepted' LIMIT 1`).get('device-' + adapter.deviceId)) return failure('scope');
-  const receipt = prior?.receipt || buildReceipt(db, request.billId, request.method, total, adapter);
+  const physicalIntent = request.physicalIntentId && db.prepare('SELECT * FROM pf700_cash_open_intents WHERE id=? AND bill_id=?')
+    .get(request.physicalIntentId,request.billId);
+  const receipt = prior?.receipt || (physicalIntent && JSON.parse(physicalIntent.receipt)) || buildReceipt(db, request.billId, request.method, total, adapter);
   if (receipt.ok === false) return receipt;
+  if (physicalIntent && (adapter.mode !== 'device' || physicalIntent.device_id !== adapter.deviceId ||
+      physicalIntent.receipt !== JSON.stringify(receipt))) return failure('selection');
   if (!require('./pf700-checkout-protocol').canEncodePf700Receipt(receipt)) return failure('unavailable');
   // Trial restrictions are local, synchronous predicates. Reject a tender,
   // quantity or additional sale before freezing the operator's selection.
   if (adapter.canRegister && adapter.canRegister(receipt, prior) !== true) return failure('scope');
   const now = Date.now();
   if (!prior) db.prepare(`INSERT INTO fiscal_checkout_sales(bill_id,actor_id,mode,device_id,method,receipt,created_at)
-    VALUES(?,?,?,?,?,?,?)`).run(request.billId, actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);
+    VALUES(?,?,?,?,?,?,?)`).run(request.billId, physicalIntent?.actor_id ?? actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);
   const attemptId = db.prepare('INSERT INTO fiscal_checkout_attempts(bill_id,started_at) VALUES(?,?)').run(request.billId, now).lastInsertRowid;
+  if (physicalIntent) db.prepare('INSERT INTO pf700_cash_dispatches(attempt_id,intent_id,created_at) VALUES(?,?,?)')
+    .run(attemptId,physicalIntent.id,now);
   if (adapter.mode === 'simulation' && request.method === 'card' &&
       db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId)) {
     db.prepare('INSERT INTO simulated_card_attempts(attempt_id,nonce) VALUES(?,?)')
@@ -137,9 +143,20 @@ async function submitSale(db, adapter, reservation) {
   pending.add(attemptId);
   try {
     const cashAttempt = db.prepare('SELECT nonce,interruption FROM simulated_cash_attempts WHERE attempt_id=?').get(attemptId);
+    const physicalTrace = db.prepare('SELECT 1 FROM pf700_cash_dispatches WHERE attempt_id=?').get(attemptId);
     const result = await adapter.registerSale(receipt, {
       simulationAttempt: cashAttempt?.nonce || db.prepare('SELECT nonce FROM simulated_card_attempts WHERE attempt_id=?').get(attemptId)?.nonce,
       ...(cashAttempt ? { simulateInterrupt:cashAttempt.interruption } : {}),
+      ...(physicalTrace ? {
+        beforeCommand({command,sequence,requestHash}) {
+          return db.prepare('INSERT INTO pf700_command_intents(attempt_id,command,sequence,request_hash,created_at) VALUES(?,?,?,?,?)')
+            .run(attemptId,command,sequence,requestHash,Date.now()).lastInsertRowid;
+        },
+        afterCommand({id,responseHash,summary}) {
+          db.prepare('INSERT INTO pf700_command_acks(command_id,response_hash,summary,created_at) VALUES(?,?,?,?)')
+            .run(id,responseHash,JSON.stringify(summary),Date.now());
+        }
+      } : {}),
       beforeOpen({previousDocumentNumber}) {
         if (adapter.mode !== 'device' || typeof previousDocumentNumber !== 'string' ||
             !/^[0-9]{7}$/.test(previousDocumentNumber) || previousDocumentNumber === '9999999') {
@@ -151,11 +168,20 @@ async function submitSale(db, adapter, reservation) {
     });
     const accepted = acceptedOutcome(adapter, receipt, result);
     if (!accepted && result?.status !== 'failed') return failure('uncertain');
+    // A sealed attempt may be under read-only investigation from another
+    // session. The sender cannot publish a result after handing it off.
     // Persist device acknowledgement independently of the POS transaction. If
     // finalizing the payment later fails, retry finalization without a new sale.
     const source = adapter.mode === 'simulation' ? 'simulation' : 'device-' + adapter.deviceId;
-    db.prepare('INSERT INTO fiscal_checkout_results(attempt_id,status,source,reference,evidence,ended_at) VALUES(?,?,?,?,?,?)')
-      .run(attemptId, result.status, source, accepted?.reference ?? null, accepted?.evidence ?? null, Date.now());
+    if (physicalTrace) db.exec('BEGIN IMMEDIATE');
+    try {
+      if (physicalTrace && db.prepare('SELECT 1 FROM pf700_command_seals WHERE attempt_id=?').get(attemptId)) {
+        db.exec('ROLLBACK'); return failure('uncertain');
+      }
+      db.prepare('INSERT INTO fiscal_checkout_results(attempt_id,status,source,reference,evidence,ended_at) VALUES(?,?,?,?,?,?)')
+        .run(attemptId, result.status, source, accepted?.reference ?? null, accepted?.evidence ?? null, Date.now());
+      if (physicalTrace) db.exec('COMMIT');
+    } catch (error) { if (physicalTrace && db.isTransaction) db.exec('ROLLBACK'); throw error; }
     return accepted ? { ok: true } : failure('failed');
   } catch {
     return failure('uncertain');
@@ -164,4 +190,4 @@ async function submitSale(db, adapter, reservation) {
   }
 }
 
-module.exports = { offlineCheckoutRequested, createOfflineFiscalCheckout, validFiscalAdapter, readFiscalCheckout, reserveSale, submitSale, failure };
+module.exports = { offlineCheckoutRequested, createOfflineFiscalCheckout, validFiscalAdapter, readFiscalCheckout, buildReceipt, reserveSale, submitSale, failure };

@@ -1,6 +1,6 @@
 // Accent PF550/PF700 v1.40. This module never acquires a port. The caller owns
 // exclusive device access, durable intent and commissioning of the device profile.
-const { randomInt } = require('node:crypto');
+const { randomInt, createHash } = require('node:crypto');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
 
 const MAX_AMOUNT = 99999999;
@@ -122,10 +122,12 @@ async function executePf700Checkout(snapshot, operator, exchange) {
       typeof operatorPassword === 'string' && /^[0-9]{4,6}$/.test(operatorPassword) &&
       ['string', 'number'].includes(typeof tillNumber) && /^[0-9]{1,5}$/.test(String(tillNumber)));
     let sequence = firstSequence;
-    async function send(command, data, open, allowedControls = []) {
+    async function send(command, data, open, allowedControls = [], validate = () => ({})) {
       const identity = { sequence, command };
       sequence = sequence === 0x7f ? 0x20 : sequence + 1;
       const request = encodeRequest({ ...identity, data, allowedControls });
+      const id = operator.beforeCommand?.({ command, sequence:identity.sequence,
+        requestHash:command === 48 ? null : createHash('sha256').update(request).digest('hex') });
       const frame = await exchange(request);
       requireMatch(Buffer.isBuffer(frame) && frame.length <= 149);
       let start = 0;
@@ -133,45 +135,53 @@ async function executePf700Checkout(snapshot, operator, exchange) {
       const reply = decodeResponse(frame.subarray(start), identity);
       ready(reply.status, open);
       if (command === 74) requireMatch(reply.data.equals(reply.status));
+      // Persist only after command-specific content checks, not merely a valid
+      // envelope. Summaries contain no credentials, raw text or raw frames.
+      const summary = validate(reply.data);
+      if (operator.afterCommand) await operator.afterCommand({id,responseHash:createHash('sha256').update(frame).digest('hex'),summary});
       return reply.data;
     }
 
     await send(74, ascii('X'), false);
-    checkState(await send(76, ascii('T'), false), false, onsiteFirmware);
-    checkRates(await send(97, undefined, false));
-    const priorDocument = documentNumber(await send(113, undefined, false));
+    await send(76, ascii('T'), false, [], data => { checkState(data,false,onsiteFirmware); return {stateChecked:true}; });
+    await send(97, undefined, false, [], data => { checkRates(data); return {ratesChecked:true}; });
+    const priorDocument = documentNumber(await send(113, undefined, false, [], data => {
+      const number=documentNumber(data); requireMatch(Number(number)<9999999); return {documentNumber:number};
+    }));
     requireMatch(Number(priorDocument) < 9999999);
 
     if (operator.beforeOpen) await operator.beforeOpen({ previousDocumentNumber: priorDocument });
     openAttempted = true;
-    const before = counters(await send(48, ascii([operatorNumber, operatorPassword, tillNumber].join(',')), true));
+    const before = counters(await send(48, ascii([operatorNumber, operatorPassword, tillNumber].join(',')), true, [], data => {
+      const pair=counters(data); requireMatch(pair[0]<9999); return {fiscalReceiptCount:pair[0],reversalCount:pair[1]};
+    }));
     requireMatch(before[0] < 9999);
     for (const item of items) {
-      requireMatch((await send(49, item, true, [9, 10])).length === 0);
+      await send(49, item, true, [9, 10], data => { requireMatch(data.length===0); return {itemAccepted:true}; });
     }
     if (onsiteFirmware) {
       // These two inquiries were verified together before the on-site cash
       // tender. Require the exact receipt, an unpaid balance and each VAT sum.
-      checkState(await send(76, ascii('T'), true), true, true, items.length, total, 0);
-      const current = (await send(103, undefined, true)).toString('latin1');
-      requireMatch(current === ['1', ...sums.map(onsiteAmount)].join(','));
+      await send(76, ascii('T'), true, [], data => { checkState(data,true,true,items.length,total,0); return {state:'open_unpaid',items:items.length,total}; });
+      await send(103, undefined, true, [], data => { requireMatch(data.toString('latin1')===['1', ...sums.map(onsiteAmount)].join(',')); return {taxTotalsMatched:true}; });
     } else {
-      const totals = (await send(51, ascii('00'), true)).toString('latin1').split(',');
-      checkAmounts(totals, [total, ...sums]);
-      const current = (await send(103, undefined, true)).toString('latin1').split(',');
-      requireMatch(['0', '1'].includes(current[0]));
-      checkAmounts(current.slice(1), sums);
+      await send(51, ascii('00'), true, [], data => { checkAmounts(data.toString('latin1').split(','),[total,...sums]); return {subtotalMatched:true}; });
+      await send(103, undefined, true, [], data => { const current=data.toString('latin1').split(',');
+        requireMatch(['0','1'].includes(current[0])); checkAmounts(current.slice(1),sums); return {taxTotalsMatched:true}; });
     }
     // A lone TAB tenders the full balance in cash on the on-site unit.
     // D remains the explicit debit register in the card rehearsal.
     const tender = onsiteFirmware && method === 'cash' ? ascii('\t') : ascii('\t' + (method === 'card' ? 'D' : 'P') + total);
-    const paid = (await send(53, tender, true, [9])).toString('latin1');
-    requireMatch(onsiteFirmware ? paid.length <= 14 && /^[RD] *\+?0{1,10}(?:\.0{1,2})?$/.test(paid) : /^R\+0{1,9}$/.test(paid));
-    checkState(await send(76, ascii('T'), true), true, onsiteFirmware, items.length, total);
-    const after = counters(await send(56, undefined, false));
+    await send(53, tender, true, [9], data => { const paid=data.toString('latin1');
+      requireMatch(onsiteFirmware ? paid.length<=14 && /^[RD] *\+?0{1,10}(?:\.0{1,2})?$/.test(paid) : /^R\+0{1,9}$/.test(paid));
+      return {tenderAccepted:true}; });
+    await send(76, ascii('T'), true, [], data => { checkState(data,true,onsiteFirmware,items.length,total); return {state:'open_paid',items:items.length,total}; });
+    const after = counters(await send(56, undefined, false, [], data => { const pair=counters(data);
+      requireMatch(pair[0]===before[0]+1 && pair[1]===before[1]); return {fiscalReceiptCount:pair[0],reversalCount:pair[1]}; }));
     requireMatch(after[0] === before[0] + 1 && after[1] === before[1]);
-    checkState(await send(76, ascii('T'), false), false, onsiteFirmware, items.length, total);
-    const reference = documentNumber(await send(113, undefined, false));
+    await send(76, ascii('T'), false, [], data => { checkState(data,false,onsiteFirmware,items.length,total); return {state:'closed',items:items.length,total}; });
+    const reference = documentNumber(await send(113, undefined, false, [], data => { const number=documentNumber(data);
+      requireMatch(Number(number)===Number(priorDocument)+1); return {documentNumber:number}; }));
     requireMatch(Number(reference) === Number(priorDocument) + 1);
     return { status: 'accepted', reference, evidence: {
       documentNumber: reference, fiscalReceiptCount: after[0], reversalCount: after[1]

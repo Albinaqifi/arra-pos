@@ -1,15 +1,15 @@
 const { spawn } = require('node:child_process');
-const { randomInt } = require('node:crypto');
+const { randomInt, createHash } = require('node:crypto');
 const path = require('node:path');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
 const { canEncodePf700Receipt, executePf700Checkout } = require('./pf700-checkout-protocol');
 
 const validSerial = serial => typeof serial === 'string' && /^[A-Za-z0-9]{11}$/.test(serial);
 
-function inspectIdentity(frame, sequence, expectedSerial) {
+function inspectIdentity(frame, sequence, expectedSerial, allowOpen = false) {
   const { data, status } = decodeResponse(frame, { command: 90, sequence });
   if ((status[0] & 0x37) || (status[1] & 0x3f) ||
-      (status[2] & 0x0d) || (status[4] & 0x35) || (status[5] & 0x01) || (status[5] & 0x1a) !== 0x1a) {
+      (status[2] & (allowOpen ? 0x05 : 0x0d)) || (status[4] & 0x35) || (status[5] & 0x01) || (status[5] & 0x1a) !== 0x1a) {
     return { ok: false, reason: 'status' };
   }
   const fields = data.toString('latin1').split(',');
@@ -65,13 +65,21 @@ function windowsPipe(startProcess, operation = 'Checkout') {
     if (!pending || pending.data.length + bytes.length > 204) { fail(); return; }
     pending.data += bytes.toString('latin1');
     if (!pending.data.includes('\n')) return;
-    if (!/^(?:[0-9A-F]{2}){1,101}\r?\n$/.test(pending.data)) { fail(); return; }
+    const isReady = pending.kind === 'open' && /^READY\r?\n$/.test(pending.data);
+    if (!isReady && (pending.kind === 'open' || !/^(?:[0-9A-F]{2}){1,101}\r?\n$/.test(pending.data))) { fail(); return; }
     const { data, resolve, timer } = pending;
     pending = null;
     clearTimeout(timer);
-    resolve(Buffer.from(data.trimEnd(), 'hex'));
+    resolve(isReady ? true : Buffer.from(data.trimEnd(), 'hex'));
   });
   return {
+    reserve() {
+      if (operation !== 'ReadCheckout' || stopped || pending) throw Error('PF700 exchange unavailable');
+      return new Promise((resolve,reject)=>{
+        pending={kind:'open',data:'',resolve,reject,timer:setTimeout(fail,25000)};
+        child.stdin.write('OPEN\n',error=>{if(error)fail();});
+      });
+    },
     exchange(request) {
       if (stopped || pending) throw Error('PF700 exchange unavailable');
       return new Promise((resolve, reject) => {
@@ -114,6 +122,20 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
   let busy = false;
   return Object.freeze({
     mode: 'device', deviceId: expectedSerial, domesticProduct,
+    async acquireCashObservation() {
+      if (busy) return null;
+      busy = true;
+      let pipe;
+      try {
+        pipe=windowsPipe(startProcess,'ReadCheckout');
+        await pipe.reserve();
+        let closed=false;
+        return {
+          observe:()=>require('./pf700-checkout-observation').observeCheckout(pipe,expectedSerial,randomInt(0x20,0x80),inspectIdentity),
+          async close() { if (closed) return; closed=true; try { await pipe.close(); } finally { busy=false; } }
+        };
+      } catch { try { if (pipe) await pipe.close(); } finally { busy=false; } return null; }
+    },
     async registerSale(snapshot, context) {
       if (busy || typeof context?.beforeOpen !== 'function' || (snapshot?.domesticProduct !== domesticProduct && !(allowLegacyOrigin &&
           typeof snapshot?.domesticProduct === 'boolean' && snapshot.lines?.length === 1 &&
@@ -125,12 +147,17 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
         if (mayProbe && !mayProbe()) return { status: 'failed' };
         pipe = windowsPipe(startProcess);
         const sequence = randomInt(0x20, 0x80);
-        const identity = await probeIdentity(pipe, sequence, expectedSerial);
+        const probe = encodeRequest({sequence,command:90,data:Buffer.from('0')});
+        const probeId = context.beforeCommand?.({command:90,sequence,requestHash:createHash('sha256').update(probe).digest('hex')});
+        const probeReply = await pipe.exchange(probe);
+        const identity = inspectIdentity(probeReply, sequence, expectedSerial);
         if (!identity.ok) return { status: 'failed' };
+        if (context.afterCommand) await context.afterCommand({id:probeId,responseHash:createHash('sha256').update(probeReply).digest('hex'),summary:{identityMatched:true,onsiteFirmware:identity.onsiteFirmware}});
         return await executePf700Checkout(snapshot, {
           firstSequence: sequence === 0x7f ? 0x20 : sequence + 1,
           operatorNumber, operatorPassword, tillNumber, domesticProduct: snapshot.domesticProduct,
           onsiteFirmware: identity.onsiteFirmware,
+          beforeCommand:context.beforeCommand, afterCommand:context.afterCommand,
           async beforeOpen(baseline) {
             if (beforeOpen) await beforeOpen(baseline);
             await context.beforeOpen(baseline);

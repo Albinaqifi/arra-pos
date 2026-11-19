@@ -3,7 +3,7 @@ const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService, assignPayment } = require('./shifts');
 const { createBillJob, reserveAttempt, dispatch } = require('./test-printing');
-const { validFiscalAdapter, readFiscalCheckout, reserveSale, submitSale, failure } = require('./fiscal-checkout');
+const { validFiscalAdapter, readFiscalCheckout, buildReceipt, reserveSale, submitSale, failure } = require('./fiscal-checkout');
 const { isCommissioned } = require('./pf700-commissioning');
 const CHANNEL = 'arra:payment';
 
@@ -27,8 +27,11 @@ function recordPayment(db, request, bill, actor, printing, fiscal) {
   const trainingCash = db.prepare(`SELECT s.actor_id AS originalActor FROM fiscal_checkout_sales s
     JOIN fiscal_checkout_attempts a ON a.bill_id=s.bill_id JOIN simulated_cash_attempts t ON t.attempt_id=a.id
     WHERE s.bill_id=? AND s.mode='simulation' AND s.method='cash' ORDER BY a.id DESC LIMIT 1`).get(request.billId);
+  const physicalCash = db.prepare('SELECT id,actor_id AS originalActor FROM pf700_cash_open_intents WHERE bill_id=?').get(request.billId);
   const id = db.prepare('INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(?,?,?,?,?,?)')
-    .run(request.billId, trainingCash?.originalActor ?? actor, paidAt, bill.total, request.method, request.account).lastInsertRowid;
+    .run(request.billId, physicalCash?.originalActor ?? trainingCash?.originalActor ?? actor, paidAt, bill.total, request.method, request.account).lastInsertRowid;
+  if (physicalCash) db.prepare("INSERT INTO pf700_cash_intent_results(intent_id,actor_id,status,created_at) VALUES(?,?,'paid',?)")
+    .run(physicalCash.id,actor,paidAt);
   markService(db, paidAt);
   assignPayment(db, id, paidAt);
   db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty=0").run(bill.orderId);
@@ -103,6 +106,7 @@ function preparePayment(db, session, request, actor, printing, adapter) {
   const approval = db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId);
   const intent = db.prepare('SELECT id,actor_id AS actorId FROM simulated_card_open_intents WHERE bill_id=?').get(request.billId);
   const cashIntent = db.prepare('SELECT id,interruption FROM simulated_cash_open_intents WHERE bill_id=?').get(request.billId);
+  const physicalIntent = db.prepare('SELECT id,device_id AS deviceId FROM pf700_cash_open_intents WHERE bill_id=?').get(request.billId);
   if (existing) {
     if (existing.method !== request.method || existing.account !== request.account) {
       return { response: { ok: false, error: 'Bill already paid with a different selection' } };
@@ -111,6 +115,10 @@ function preparePayment(db, session, request, actor, printing, adapter) {
     return { response: success(existing.id, fiscal) };
   }
   if (bill.status !== 'open' || bill.retired) return { response: { ok: false, error: 'Bill unavailable' } };
+  if (physicalIntent && (request.method!=='cash' || request.account!=='A')) return {response:failure('selection')};
+  if (physicalIntent && fiscal?.status!=='submitted' && (adapter?.mode!=='device' || adapter.deviceId!==physicalIntent.deviceId)) return {response:failure('profile')};
+  if (adapter?.mode==='device' && request.method==='cash' && request.account==='A' && fiscal?.status!=='submitted' &&
+      (!physicalIntent || request.physicalIntentId!==physicalIntent.id)) return {response:failure('selection')};
   if (cashIntent && (request.method!=='cash' || request.account!=='A')) return {response:failure('selection')};
   if (cashIntent && !trainingRecoveryAllowed(db,adapter)) return {response:failure('profile')};
   if (cashIntent && !fiscal && (request.intentId!==cashIntent.id || request.simulateInterrupt!==cashIntent.interruption)) return {response:failure('selection')};
@@ -157,6 +165,66 @@ function preparePayment(db, session, request, actor, printing, adapter) {
     if (fiscal?.status === 'submitted') error.fiscalSubmitted = true;
     throw error;
   }
+}
+
+// Preparing a physical Cash A selection never contacts a printer. In particular,
+// a lost IPC response to preparation cannot itself have opened a receipt.
+function preparePhysicalCash(db,session,request,actor,adapter) {
+  if (adapter?.mode!=='device') return failure('profile');
+  const bill=db.prepare(`SELECT b.order_id AS orderId,b.total,o.status,o.retired_empty AS retired FROM bills b
+    JOIN orders o ON o.id=b.order_id WHERE b.id=?`).get(request.billId);
+  if (!bill || !ownsOrder(db,session,bill.orderId)) return {ok:false,error:'Access denied'};
+  if (bill.status!=='open' || bill.retired || db.prepare('SELECT 1 FROM payments WHERE bill_id=?').get(request.billId)) return failure('selection');
+  if (db.prepare(`SELECT 1 FROM fiscal_daily_current d LEFT JOIN fiscal_daily_confirmations c USING(day_id)
+    WHERE c.day_id IS NULL LIMIT 1`).get()) return failure('blocked');
+  const existing=db.prepare('SELECT id,device_id AS deviceId FROM pf700_cash_open_intents WHERE bill_id=?').get(request.billId);
+  if (existing) return existing.deviceId===adapter.deviceId ? {ok:true,data:{intentId:existing.id}} : failure('profile');
+  if (db.prepare('SELECT 1 FROM simulated_card_open_intents WHERE bill_id=?').get(request.billId) ||
+      db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId) ||
+      db.prepare('SELECT 1 FROM simulated_cash_open_intents WHERE bill_id=?').get(request.billId)) return failure('selection');
+  const fiscal=readFiscalCheckout(db,request.billId);
+  if (fiscal && (fiscal.mode!=='device' || fiscal.deviceId!==adapter.deviceId || fiscal.method!=='cash')) return failure('profile');
+  if (fiscal && fiscal.status!=='failed') return failure(fiscal.status);
+  if (fiscal && fiscal.receipt.domesticProduct!==adapter.domesticProduct &&
+      !(adapter.requireOrigins && fiscal.receipt.lines.length===1 && fiscal.receipt.lines[0].quantity===1 &&
+        !Object.hasOwn(fiscal.receipt.lines[0],'domesticProduct'))) return failure('profile');
+  if (db.prepare(`SELECT 1 FROM fiscal_checkout_attempts a LEFT JOIN fiscal_checkout_verified_results r ON r.attempt_id=a.id
+    WHERE r.attempt_id IS NULL LIMIT 1`).get()) return failure('blocked');
+  if (!adapter.requireOrigins && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
+    WHERE source=? AND status='accepted' LIMIT 1`).get('device-' + adapter.deviceId)) return failure('scope');
+  const receipt=fiscal?.receipt || buildReceipt(db,request.billId,'cash',bill.total,adapter);
+  if (receipt.ok===false) return receipt;
+  if (!require('./pf700-checkout-protocol').canEncodePf700Receipt(receipt)) return failure('unavailable');
+  if (adapter.canRegister && adapter.canRegister(receipt,fiscal)!==true) return failure('scope');
+  const id=db.prepare('INSERT INTO pf700_cash_intents(bill_id,actor_id,device_id,receipt,created_at) VALUES(?,?,?,?,?)')
+    .run(request.billId,actor,adapter.deviceId,JSON.stringify(receipt),Date.now()).lastInsertRowid;
+  return {ok:true,data:{intentId:id}};
+}
+
+// A later start must still hold the same open intent in the reservation
+// transaction. Releasing it makes even a delayed start request fail.
+function releasePhysicalCash(db,session,request,actor) {
+  const bill=db.prepare('SELECT order_id AS orderId FROM bills WHERE id=?').get(request.billId);
+  if (!bill || !ownsOrder(db,session,bill.orderId)) return {ok:false,error:'Access denied'};
+  const intent=db.prepare('SELECT id FROM pf700_cash_open_intents WHERE bill_id=?').get(request.billId);
+  if (!intent) return failure('selection');
+  const unresolved=db.prepare(`SELECT 1 FROM pf700_cash_dispatches d LEFT JOIN fiscal_checkout_verified_results r ON r.attempt_id=d.attempt_id
+    WHERE d.intent_id=? AND (r.status IS NULL OR r.status!='failed')`).get(intent.id);
+  if (unresolved) return failure('uncertain');
+  db.prepare("INSERT INTO pf700_cash_intent_results(intent_id,actor_id,status,created_at) VALUES(?,?,'released',?)").run(intent.id,actor,Date.now());
+  return {ok:true};
+}
+
+function validPhysicalObservation(value) {
+  if (!value || typeof value!=='object' || Array.isArray(value) || typeof value.open!=='boolean' ||
+      !Number.isInteger(value.items) || value.items<0 || value.items>9999 ||
+      !Number.isSafeInteger(value.amountMinor) || value.amountMinor<0 || value.amountMinor>999999999 ||
+      !Number.isSafeInteger(value.tenderMinor) || value.tenderMinor<0 || value.tenderMinor>999999999 ||
+      typeof value.lastDocumentNumber!=='string' || !/^[0-9]{7}$/.test(value.lastDocumentNumber)) return null;
+  if (value.open && (!Array.isArray(value.taxTotalsMinor) || value.taxTotalsMinor.length!==4 ||
+      !value.taxTotalsMinor.every(n=>Number.isSafeInteger(n) && n>=0 && n<=999999999))) return null;
+  return {open:value.open,items:value.items,amountMinor:value.amountMinor,tenderMinor:value.tenderMinor,
+    lastDocumentNumber:value.lastDocumentNumber,...(value.open?{taxTotalsMinor:value.taxTotalsMinor.slice()}: {})};
 }
 
 function simulatedTerminalIntent(db, session, request, actor, adapter) {
@@ -230,14 +298,20 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
         (request.method === 'card' && ((Object.hasOwn(request,'prepareSimulated') && request.prepareSimulated === true) ||
           (Object.hasOwn(request,'recoverSimulated') && request.recoverSimulated === true))) ||
         (request.method === 'cash' && request.account === 'A' &&
-          ((Object.hasOwn(request,'prepareSimulatedCash') && ['before_open','after_items','after_tender','after_close','after_ack'].includes(request.prepareSimulatedCash)) ||
+          ((Object.hasOwn(request,'preparePhysicalCash') && request.preparePhysicalCash === true) ||
+           (Object.hasOwn(request,'releasePhysicalCash') && request.releasePhysicalCash === true) ||
+           (Object.hasOwn(request,'physicalIntentId') && Number.isSafeInteger(request.physicalIntentId) && request.physicalIntentId > 0) ||
+           (Object.hasOwn(request,'prepareSimulatedCash') && ['before_open','after_items','after_tender','after_close','after_ack'].includes(request.prepareSimulatedCash)) ||
            (Object.hasOwn(request,'checkSimulated') && request.checkSimulated === true) ||
            (Object.hasOwn(request,'finishSimulated') && request.finishSimulated === true))))) ||
-      (Reflect.ownKeys(request).length === 5 && (!Object.hasOwn(request,'intentId') ||
-        !Number.isSafeInteger(request.intentId) || request.intentId <= 0 || !(
+      (Reflect.ownKeys(request).length === 5 && !(
+        (request.method==='cash' && request.account==='A' && request.inspectPhysicalCash===true && request.checkedNoOtherActivity===true &&
+          Object.hasOwn(request,'inspectPhysicalCash') && Object.hasOwn(request,'checkedNoOtherActivity')) ||
+        (Object.hasOwn(request,'intentId') &&
+        Number.isSafeInteger(request.intentId) && request.intentId > 0 && (
           (request.method === 'card' && Object.hasOwn(request,'terminalApproved') && request.terminalApproved === true) ||
           (request.method === 'cash' && request.account === 'A' && Object.hasOwn(request,'simulateInterrupt') &&
-            ['before_open','after_items','after_tender','after_close','after_ack'].includes(request.simulateInterrupt)))))) return { ok: false, error: 'Invalid request' };
+            ['before_open','after_items','after_tender','after_close','after_ack'].includes(request.simulateInterrupt))))))) return { ok: false, error: 'Invalid request' };
     const actor = session.currentUserId();
     const authenticated = session.authenticatedUserId();
     const generation = session.identityGeneration?.();
@@ -251,6 +325,14 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
         let step;
         try {
           if (!authorized()) step = { response: { ok: false, error: 'Access denied' } };
+          else if (request.preparePhysicalCash) step = {response:preparePhysicalCash(db,session,request,actor,fiscalCheckout)};
+          else if (request.releasePhysicalCash) step = {response:releasePhysicalCash(db,session,request,actor)};
+          else if (request.inspectPhysicalCash) {
+            const bill=db.prepare('SELECT order_id AS orderId FROM bills WHERE id=?').get(request.billId);
+            if (!bill || !ownsOrder(db,session,bill.orderId)) step={response:{ok:false,error:'Access denied'}};
+            else if (!require('./pf700-recovery-observation').candidate(db,request.billId,fiscalCheckout)) step={response:failure('uncertain')};
+            else step={inspection:{orderId:bill.orderId}};
+          }
           else if ((request.simulateInterrupt || request.prepareSimulatedCash || request.checkSimulated || request.finishSimulated) && !trainingRecoveryAllowed(db,fiscalCheckout)) {
             step = {response:failure('profile')};
           }
@@ -281,6 +363,37 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
           throw error;
         }
         if (step.printAttempt) dispatch(db, printing, step.printAttempt);
+        if (step.inspection) return (async()=>{
+          let handle;
+          try {
+            // Obtain exclusive transport without sending anything first. A live
+            // checkout must not be sealed while it still owns the serial port.
+            handle=await fiscalCheckout.acquireCashObservation();
+            if (!authorized()) return {ok:false,error:'Access denied'};
+            if (!handle || typeof handle.observe!=='function' || typeof handle.close!=='function') return failure('uncertain');
+            db.exec('BEGIN IMMEDIATE');
+            try {
+              if (!authorized() || !ownsOrder(db,session,step.inspection.orderId)) {
+                db.exec('ROLLBACK');
+                return {ok:false,error:'Access denied'};
+              }
+              const sealed=require('./pf700-recovery-observation').seal(db,request.billId,fiscalCheckout,actor);
+              if (!sealed) { db.exec('ROLLBACK'); return failure('uncertain'); }
+              recordAudit(db,actor,'inspect','fiscal_checkout',request.billId,step.inspection.orderId,{});
+              db.exec('COMMIT');
+            } catch (error) {
+              if (db.isTransaction) db.exec('ROLLBACK');
+              throw error;
+            }
+            const observation=validPhysicalObservation(await handle.observe());
+            if (!authorized()) return {ok:false,error:'Access denied'};
+            return observation ? {ok:true,data:{observation}} : failure('uncertain');
+          } catch (_) {
+            return authorized()?failure('uncertain'):{ok:false,error:'Access denied'};
+          } finally {
+            if (handle && typeof handle.close==='function') await Promise.resolve().then(()=>handle.close()).catch(()=>{});
+          }
+        })();
         if (step.reservation) return submitSale(db, fiscalCheckout, step.reservation).then(result => {
           // An acknowledgement belongs to the original checkout even if the
           // operator switched. Disclose or finalize it only to that identity.
