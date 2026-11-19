@@ -89,6 +89,17 @@ test('compares Windows-1251 text locally and rejects a bad checksum', async () =
   assert.equal(bad.calls.length,1);
 });
 
+test('a complete item line distinguishes Latin B from a Windows-1251 Cyrillic В', async () => {
+  const itemPrefix = 'Sample drink 2 x 12,00 24,00 ';
+  const lines = ['P,' + itemPrefix + '\xc2', 'P,TOTAL 24,00', 'P,' + cashBytes + ' 24,00',
+    'P,Doc: ' + doc, '*,'];
+  for (const [mark, itemMatches] of [['\u0042', 0], ['\u0412', 1]]) {
+    const result = await readJournal(device({ lines }).exchange, serial, doc, { ...paper, item: itemPrefix + mark });
+    assert.deepEqual(result, { lines: 4, end: 'document separator',
+      matches: { item: itemMatches, total: 1, cash: 1, documentNumber: 1 } });
+  }
+});
+
 test('partial amounts, mixed fields and unsupported paper layouts stop before connecting', async () => {
   const d = device();
   for (const patch of [
