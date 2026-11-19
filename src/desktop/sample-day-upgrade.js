@@ -14,7 +14,7 @@ async function upgradeSampleBusinessDays(sourceFile, username, password) {
   let directory, copy;
   try {
     const version = source.prepare('PRAGMA user_version').get().user_version;
-    if (version < 22 || version > 49) throw new Error('Expected version 22 through 49 sample');
+    if (version < 22 || version > 50) throw new Error('Expected version 22 through 50 sample');
     const sourceActor = verifyLocalAccount(source, username, password);
     if (!sourceActor || source.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(sourceActor)?.scope !== 'combined') throw new Error('Combined sample account unavailable');
     if (source.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='business_days.close'").get(sourceActor)) throw new Error('Close grant already exists');

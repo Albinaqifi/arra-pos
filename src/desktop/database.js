@@ -380,6 +380,7 @@ const migrations = [
   { version: 47, run: require('./fiscal-origin-v47').migrateFiscalOrigin },
   { version: 48, run: require('./simulated-card-v48').migrateSimulatedCard },
   { version: 49, run: require('./simulated-cash-recovery-v49').migrateSimulatedCashRecovery },
+  { version: 50, run: require('./pf700-recovery-v50').migratePf700Recovery },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

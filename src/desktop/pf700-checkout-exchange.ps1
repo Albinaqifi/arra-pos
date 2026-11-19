@@ -1,6 +1,6 @@
 # Windows PowerShell 5.1. The checkout process owns the private stdin/stdout
 # pipes. Running this helper with no valid identity probe opens no port.
-param([ValidateSet('Checkout', 'DailyReport', 'ReadDailyReport')][string]$Operation = 'Checkout')
+param([ValidateSet('Checkout', 'DailyReport', 'ReadDailyReport', 'ReadCheckout')][string]$Operation = 'Checkout')
 
 function Read-Pf700CheckoutReply($Port, $Deadline = 20000, $BusyLimit = 48) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -27,9 +27,21 @@ function Read-Pf700CheckoutReply($Port, $Deadline = 20000, $BusyLimit = 48) {
 
 function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation = 'Checkout') {
     $opened = $false
+    $identified = $false
     $reportSent = $false
     try {
         while ($null -ne ($line = $InputReader.ReadLine())) {
+            # Acquire the serial handle without writing a device command. The
+            # caller then atomically seals the checkout before any observation.
+            if ($Operation -eq 'ReadCheckout' -and !$opened -and $line -ceq 'OPEN') {
+                $Port.Open()
+                $opened = $true
+                if ($Port.BytesToRead -ne 0) { throw 'Unexpected pending input' }
+                $OutputWriter.WriteLine('READY')
+                $OutputWriter.Flush()
+                continue
+            }
+            if ($Operation -eq 'ReadCheckout' -and !$opened) { throw 'Port reservation required' }
             if ($line -cnotmatch '\A(?:[0-9a-f]{2}){10,101}\z') { throw 'Invalid request' }
             [byte[]]$request = @(for ($i = 0; $i -lt $line.Length; $i += 2) {
                 [Convert]::ToByte($line.Substring($i, 2), 16)
@@ -39,6 +51,11 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             }
             if ($Operation -eq 'Checkout') {
                 if ($request[3] -notin @(90,74,76,97,113,48,49,51,103,53,56)) { throw 'Invalid checkout command' }
+            } elseif ($Operation -eq 'ReadCheckout') {
+                $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
+                $queries = @{ 90 = '0'; 76 = 'T'; 103 = ''; 113 = '' }
+                $command = [int]$request[3]
+                if (!$queries.ContainsKey($command) -or $queries[$command] -cne $payload) { throw 'Invalid checkout inquiry' }
             } else {
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
                 $queries = @{ 90 = '0'; 74 = 'X'; 76 = 'T'; 62 = ''; 64 = ''; 65 = ''; 67 = ''; 110 = ''; 113 = '' }
@@ -54,6 +71,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
                 $Port.Open()
                 $opened = $true
             }
+            if (!$identified -and ($request[3] -ne 90 -or $request.Length -ne 11 -or $request[4] -ne 0x30)) { throw 'Identity probe required' }
             if ($Port.BytesToRead -ne 0) { throw 'Unexpected pending input' }
             $Port.Write($request, 0, $request.Length)
             if ($request[3] -eq 69) {
@@ -65,6 +83,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             if ($Port.BytesToRead -ne 0) { throw 'Unexpected trailing input' }
             $OutputWriter.WriteLine([BitConverter]::ToString($reply).Replace('-', ''))
             $OutputWriter.Flush()
+            $identified = $true
         }
     } catch {
         $OutputWriter.WriteLine('FAIL')
