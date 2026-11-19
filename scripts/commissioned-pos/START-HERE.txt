@@ -1,0 +1,15 @@
+Arra POS for the restaurant's existing PF700 profile
+
+Extract the whole ZIP to its own folder on the POS PC. Wait for the next
+guided step before launching Arra. Copying or extracting the ZIP cannot
+print a receipt, charge a card or record a sale.
+
+Use the Windows account that ran the original espresso checkout.
+The first app launch updates the existing menu. Keep the verified
+pre-upgrade backup and close any older Arra session before that launch.
+
+Arra-Cash-A opens routine Cash A. Arra-Card-A-Trial opens one supervised
+Card A trial using the separate card terminal. The live checkout
+confirmations in Arra can register a fiscal sale and print a receipt.
+
+Recovery contains the read-only check for the original espresso sale.

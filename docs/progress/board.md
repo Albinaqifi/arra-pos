@@ -6,7 +6,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | --- | --- | --- |
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |
-| S-097 | In progress | The Windows training checkout passed offline. The owner authorized one supervised Card A trial and deferred packaging. Real terminal and PF700 acceptance are pending. [Handoff](handoffs/S-097.md) |
+| S-097 | In progress | POS kit 1.0.10 includes routine Cash A and one supervised Card A trial. Real terminal and PF700 acceptance are pending. [Handoff](handoffs/S-097.md) |
 | S-096 | Blocked | The espresso receipt matched the printer journal. The owner located the original checkout's recovery file. Reading it is the next check. Recovery after a missing printer reply still needs physical evidence. [Handoff](handoffs/S-096.md) |
 | S-095 | In progress | Routine Cash A checkout reviewed and automated tests passed; offline desktop and physical PF700 checks remain. [Handoff](handoffs/S-095.md) |
 | S-093 | In progress | Original story merged in PR #136; table PIN auto-submit follow-up reviewed and tested, PR pending. Owner-requested assigned waiter names added to entry grid; verification and delivery in progress. |
@@ -105,7 +105,7 @@ S-052's local recovery exercise is complete. The owner cannot test on another ma
 | S-075 | In progress | PR #102 merged into S-074 branch as 0f08803; not yet on main. Owner reports printer flow works; detailed physical/offline checks and prerequisite verification outstanding. |
 | S-076 | Done | Independent review and tests passed; owner confirmed setup, restart, offline workflows and upgrade data; PR #106 merged as `851ce22`. |
 
-| S-077 | In progress | PR #110 merged as `e963ab6`. PR #153 covers preparation routing and the owner's fiscal origin list for all 103 menu items (85 Yes, 18 No). The ZIP is on hold for more menu edits. Target-PC verification is pending. [Handoff](handoffs/S-077.md) |
+| S-077 | In progress | PR #110 merged as `e963ab6`. POS kit 1.0.10 includes PR #153's preparation routes and fiscal origin settings for all 103 items (85 Yes, 18 No). Target-PC verification is pending. [Handoff](handoffs/S-077.md) |
 | S-078 | In progress | PR #112 merged; independent code review and focused tests found no defects, but rendered review and desktop verification remain outstanding. |
 
 | S-079 | Done | PR #114 merged as `e7f382c`; independent review and tests passed; owner reports all detailed checks passed. |
