@@ -14,17 +14,19 @@ function permittedOrders(db, scope) {
   const outgoing = db.prepare("SELECT order_id, context FROM application_audit WHERE action='move_items' AND entity_type='order' AND order_id=? LIMIT ?");
   const incoming = db.prepare("SELECT order_id, context FROM application_audit WHERE action='move_items' AND entity_type='order' AND json_extract(context,'$.destinationOrderId')=? LIMIT ?");
   let examined = 0;
-  const check = db.prepare(`SELECT b.id, COALESCE(CASE WHEN c.id IS NOT NULL THEN 'A' END,p.account) AS account
-    FROM bills b LEFT JOIN payments p ON p.bill_id=b.id LEFT JOIN payment_account_corrections c ON c.payment_id=p.id WHERE b.order_id=?`);
+  const check = db.prepare(`SELECT EXISTS(SELECT 1 FROM bills b WHERE b.order_id=?) AS hasBill,
+    EXISTS(SELECT 1 FROM bills b JOIN payments p ON p.bill_id=b.id
+      LEFT JOIN payment_account_corrections c ON c.payment_id=p.id
+      WHERE b.order_id=? AND COALESCE(CASE WHEN c.id IS NOT NULL THEN 'A' END,p.account)<>?) AS forbidden`);
   const memo = new Map();
   return id => {
     if (memo.has(id)) return memo.get(id);
     const seen = new Set(), todo = [id]; let missingBill = false, forbidden = false;
     while (todo.length) {
       const n = todo.pop(); if (seen.has(n)) continue; seen.add(n);
-      const row = check.get(n);
-      if (!row) missingBill = true;
-      else if (row.account && row.account !== scope) forbidden = true;
+      const row = check.get(n,n,scope);
+      if (!row.hasBill) missingBill = true;
+      if (row.forbidden) forbidden = true;
       for (const query of [outgoing,incoming]) {
         const links = query.all(n,MAX_ROWS-examined+1);
         examined += links.length;

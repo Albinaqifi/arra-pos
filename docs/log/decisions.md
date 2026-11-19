@@ -110,3 +110,9 @@ Append-only log. Accepted architecture recommendations are recorded below; `[P]`
 - **What:** A waiter can cancel an individual product entered by mistake, including after it was sent, with an explanation recorded for administrator review. Other products in the order remain.
 - **Why:** Staff need to correct an incorrectly entered product during service with accountability.
 - **Revisit if:** The owner changes this direction or defines additional cancellation cases.
+
+## D-019 — Item-based split bills
+- **Origin:** Owner direction, 2026-11-18; supersedes the v1 exclusion of split bills in the approved intent without editing that document.
+- **What:** Include item-based split bills in version 1. The waiter can select individual units, and each selected group becomes a separate bill and payment. Keep the table open for remaining items and allow further items to be added and sent. An unpaid committed selection stays reserved until paid rather than being cancelled back into the remainder.
+- **Why:** Let customers pay for selected items while the rest of the table continues service.
+- **Revisit if:** The owner changes the split, reservation or release rules. Card remains Account A and existing payment and history protections apply.

@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-094 | In progress | Refining independently safe split-bill delivery slices; implementation and verification remain. |
 | S-093 | In progress | Original story merged in PR #136; table PIN auto-submit follow-up reviewed and tested, PR pending. Owner-requested assigned waiter names added to entry grid; verification and delivery in progress. |
 | S-092 | Done | PR #132 merged as `f38e174`; review, full suite and sample desktop checks passed. Owner deferred full host-offline verification; it does not block other stories. |
 | S-090 | In progress | PR #130 merged as `0ba16b2`; independent review and focused tests passed; baseline full-suite failures, desktop, offline and physical-paper verification outstanding. |
