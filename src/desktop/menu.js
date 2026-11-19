@@ -1,4 +1,5 @@
 const { hasPermissions } = require('./permissions');
+const { seedFiscalTax } = require('./fiscal-tax-v44');
 const CHANNEL = 'arra:menu';
 
 function registerMenu(ipcMain, isAllowedSender, db, session) {
@@ -32,7 +33,9 @@ function seedMenu(db) {
       ['qebapa', 'food', 'Qebapa', 220], ['shopska', 'food', 'Shopska salad', 180],
       ['espresso', 'drinks', 'Espresso', 70], ['cola', 'drinks', 'Coca-Cola', 100],
       ['baklava', 'desserts', 'Baklava', 150]
-    ]) product.run(...row);
+    ]) {
+      if (product.run(...row).changes) seedFiscalTax(db, row[0]);
+    }
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

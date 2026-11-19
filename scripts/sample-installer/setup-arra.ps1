@@ -1,11 +1,15 @@
+param([switch]$PrepareSupervisedProfile)
 $ErrorActionPreference = 'Stop'
-$data = if ($env:ARRA_MENU_TEST_DATA) { $env:ARRA_MENU_TEST_DATA } else { Join-Path $env:APPDATA 'Arra POS Sample Data' }
+$data = if ($PrepareSupervisedProfile) { Join-Path $env:APPDATA 'Arra POS PF700 Commissioning' }
+        elseif ($env:ARRA_MENU_TEST_DATA) { $env:ARRA_MENU_TEST_DATA } else { Join-Path $env:APPDATA 'Arra POS Sample Data' }
 if (![System.IO.Path]::IsPathRooted($data)) { throw 'The sample data path must be absolute.' }
 if (Test-Path -LiteralPath $data) {
-    Write-Host 'The sample data directory already exists. It was not changed.'
+    Write-Host 'The data directory already exists. Setup preserves its contents.'
     exit 1
 }
-Write-Host 'SAMPLE DATA ONLY. Do not enter real sales or personal information.'
+if ($PrepareSupervisedProfile) {
+    Write-Host 'Preparing a fresh restaurant profile for one supervised PF700 sale. Keep this database and its backups after the sale.'
+} else { Write-Host 'SAMPLE DATA ONLY. Do not enter real sales or personal information.' }
 $prompts = @('Enter the restaurant account password', 'Enter the Owner A password', 'Enter the Owner B password', 'Enter the combined owner password', 'Enter the four-digit waiter PIN', 'Enter the six-digit transfer manager PIN')
 $values = @()
 try {
@@ -26,6 +30,7 @@ try {
     $info.FileName = Join-Path $PSScriptRoot 'electron.exe'
     $script = Join-Path $PSScriptRoot 'resources\app\src\desktop\setup-arra-sample.js'
     $info.Arguments = '"' + $script + '" "' + $data + '"'
+    if ($PrepareSupervisedProfile) { $info.Arguments += ' --new-pf700-commissioning-profile' }
     $info.UseShellExecute = $false
     $info.RedirectStandardInput = $true
     $info.RedirectStandardOutput = $true

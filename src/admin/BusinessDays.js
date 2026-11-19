@@ -1,4 +1,4 @@
-import { financeText } from './finance-i18n.js';
+import { financeText, closeBlockMessage } from './finance-i18n.js';
 const h=React.createElement;
 const date=value=>new Date(value).toLocaleString();
 // Unacknowledged operations survive navigation but never cross authenticated actors.
@@ -129,6 +129,13 @@ export class BusinessDays extends React.Component {
       try { r=await window.arra.businessDays(request ? request.body : {action:'close',dayId:id}); }
       finally { if(request) request.pending=false; }
       if(sequence!==this.sequence) return;
+      const blocked = !r.ok && closeBlockMessage(r.error);
+      if(blocked) {
+        uncertainWalletCloses.delete(ownerKey);
+        uncertainCloses.delete(ownerKey);
+        this.setState({busy:false,confirmId:null,unknownId:null,error:blocked});
+        return;
+      }
       if(request && !r.ok) {
         uncertainWalletCloses.delete(ownerKey);
         if(r.error==='stale') { this.setState({busy:false,confirmId:null,wallet:null,walletCount:'',error:'Cash changed while counting. Review the day and count again.'}); return; }

@@ -50,6 +50,8 @@
 
 **Owner clarification, 2026-11-18:** The intended end result is an actual fiscal daily report for Account A using the pictured Synergy PF700; this supersedes the earlier exclusion of fiscal output. Prepare integration for this device; the existing S-084 report is an internal, non-fiscal summary and does not satisfy that fiscal goal. Fiscal receipt registration, the device's fiscal-day boundary, corrections and uncertain-result recovery must be designed and verified before enabling real fiscal output. The owner verified a live status reply on the Windows 10 POS and requested a paper test that records no sale.
 
+**Checkout milestone, 2026-11-19.** Connect Account A checkout to the PF700 and test it offline. The owner confirmed 10% for dine-in food and nonalcoholic drinks and 18% for alcohol. Prepare the Windows package for a later on-site check. The owner reserved all printer operations for that visit.
+
 **Acceptance:**
 
 - In Combined's Financial information, provide an Account A closing option for a shared business day closed after the feature is installed. When multiple days await Account A closing, let the owner select and close each pending day. Clearly identify the day, opening and closing times, and whether its Account A close is pending or complete. The main day close continues to start the next shared day; the separate A close does not close or interrupt that new day. Account B closing is outside this story.

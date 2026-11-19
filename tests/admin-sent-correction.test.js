@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test=require('node:test'), assert=require('node:assert/strict');
 const fs=require('node:fs'), os=require('node:os'), path=require('node:path');
 const {randomBytes,randomInt,randomUUID}=require('node:crypto');
@@ -42,9 +43,9 @@ test('upgrade preserves a previously revoked Combined correction grant', t=>{
  seedSampleIdentities(db,passwords,String(randomInt(10000)).padStart(4,'0'),String(randomInt(1000000)).padStart(6,'0'));
  const actor=db.prepare("SELECT user_id AS id FROM financial_scopes WHERE scope='combined'").get().id;
  db.prepare("DELETE FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").run(actor);
- db.exec('DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE order_cancellations; DROP TABLE restaurant_accounts; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=30');db.close();db=openDatabase(dir);
+ db.exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE order_cancellations; DROP TABLE restaurant_accounts; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=30');db.close();db=openDatabase(dir);
  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
- assert.equal(db.prepare('PRAGMA user_version').get().user_version,43);
+ assert.equal(db.prepare('PRAGMA user_version').get().user_version,45);
  assert.equal(db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor),undefined);
 });
 

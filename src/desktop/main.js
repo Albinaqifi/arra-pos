@@ -9,6 +9,7 @@ const { registerOrders } = require('./orders');
 const { registerLegacyOrderAssignment } = require('./legacy-order-assignment');
 const { registerBills } = require('./bills');
 const { registerPayments } = require('./payments');
+const { selectPf700Checkout } = require('./pf700-checkout-mode');
 const { registerActivityReport } = require('./activity-report');
 const { registerOperationalReports } = require('./operational-reports');
 const { registerTransferCorrection } = require('./transfer-correction');
@@ -52,8 +53,17 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  let fiscalCheckout;
   try {
     const directory = dataDirectory(process.argv, app.getPath('userData'));
+    try {
+      fiscalCheckout = selectPf700Checkout(process.argv, directory);
+    } catch {
+      dialog.showErrorBox('PF700 checkout',
+        'Arra could not start the selected PF700 mode. Check the launcher, data folder and local settings.\n\nArra nuk mund te hape menyren e zgjedhur per PF700. Kontrolloni programin nises, dosjen e te dhenave dhe cilesimet lokale.');
+      app.quit();
+      return;
+    }
     database = openDatabase(directory);
   } catch (error) {
     dialog.showErrorBox('Database could not be opened / Baza e te dhenave nuk mund te hapet',
@@ -72,25 +82,28 @@ app.whenReady().then(() => {
   registerTables(require('electron').ipcMain, isAllowedSender, database, session);
   registerOrders(require('electron').ipcMain, isAllowedSender, database, session);
   registerLegacyOrderAssignment(require('electron').ipcMain, isAllowedSender, database, session);
-  registerBills(require('electron').ipcMain, isAllowedSender, database, session);
-  const testPrintEnabled = process.platform === 'win32' && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
-  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : null);
+  registerBills(require('electron').ipcMain, isAllowedSender, database, session, fiscalCheckout);
+  // The dedicated PF700 rehearsal runs the ordinary checkout without any
+  // Windows output, including automatic preparation tickets and bill copies.
+  const localPrinter = !fiscalCheckout && process.platform === 'win32' ? printTestJob : null;
+  const testPrintEnabled = !!localPrinter && process.argv.some(arg => arg.startsWith('--sample-data-directory='));
+  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
-  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed');
+  registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session, localPrinter || (() => 'failed'));
   registerFinancialVisibility(require('electron').ipcMain, isAllowedSender, database, session);
-  registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: process.platform === 'win32' ? printTestJob : null });
+  registerBillHistory(require('electron').ipcMain, isAllowedSender, database, session, { saveDialog: () => dialog.showSaveDialog(mainWindow, { title: 'Export bill history', defaultPath: 'bill-history.xml', filters: [{ name: 'Excel XML workbook', extensions: ['xml'] }] }), print: localPrinter });
   registerActivityReport(require('electron').ipcMain, isAllowedSender, database, session);
   registerOperationalReports(require('electron').ipcMain, isAllowedSender, database, session);
   registerMoveOrder(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenuConfig(require('electron').ipcMain, isAllowedSender, database, session);
   registerMenu(require('electron').ipcMain, isAllowedSender, database, session);
-  const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:printTestJob } : null;
+  const testPrinter = testPrintEnabled ? { ...testPrinting, adapter:localPrinter } : null;
   registerAdminSentCorrection(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderItems(require('electron').ipcMain, isAllowedSender, database, session, testPrinter);
   registerOrderHistory(require('electron').ipcMain, isAllowedSender, database, session);
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session);
-  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, process.platform === 'win32' ? printTestJob : () => 'failed', true, !testPrintEnabled);
+  testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session, localPrinter || (() => 'failed'), true, !testPrintEnabled);
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -1,6 +1,6 @@
 {
   "name": "arra-pos-waiter-demo",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Self-contained React demo of the Arra POS waiter design",
   "scripts": {

@@ -3,6 +3,7 @@ const { hasPermissions } = require('./permissions');
 const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService } = require('./shifts');
+const { readFiscalCheckout } = require('./fiscal-checkout');
 const CHANNEL = 'arra:bill';
 
 function snapshot(db, orderId) {
@@ -28,7 +29,19 @@ function snapshot(db, orderId) {
   const data = { orderId, tableId: order.tableId, lines, total };
   return { ...data, fingerprint: createHash('sha256').update(JSON.stringify(data)).digest('hex') };
 }
-function registerBills(ipcMain, isAllowedSender, db, session) {
+function attachFiscalPreview(db, bill, adapter) {
+  if (!adapter) return;
+  bill.fiscalMode = adapter.mode;
+  if (adapter.mode === 'device') bill.fiscalDomesticProduct = adapter.domesticProduct;
+  const groups = new Map(db.prepare(`SELECT t.item_id, t.tax_group FROM order_item_fiscal_tax t
+    JOIN order_items i ON i.id=t.item_id WHERE i.order_id=?`).all(bill.orderId).map(row => [row.item_id, row.tax_group]));
+  for (const line of bill.lines) {
+    const group = groups.get(line.itemId);
+    if (group) Object.assign(line, { taxGroup: group, taxRate: group === 'А' ? 18 : 10 });
+  }
+}
+
+function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       !['review','generate'].includes(request.action) || !Number.isSafeInteger(request.orderId) || request.orderId <= 0 ||
@@ -44,9 +57,13 @@ function registerBills(ipcMain, isAllowedSender, db, session) {
           if (request.action === 'generate' && existing.fingerprint !== request.fingerprint) throw Error('Bill already generated');
           const bill = db.prepare('SELECT id, order_id AS orderId, total, generated_at AS generatedAt, fingerprint FROM bills WHERE id=?').get(existing.id);
           bill.lines = db.prepare('SELECT item_id AS itemId, name, unit_price AS unitPrice, quantity, modifiers FROM bill_lines WHERE bill_id=? ORDER BY id').all(existing.id).map(l => ({ ...l, modifiers: JSON.parse(l.modifiers) }));
+          attachFiscalPreview(db, bill, fiscalCheckout);
+          const fiscal = readFiscalCheckout(db, bill.id);
+          if (fiscal) bill.fiscal = fiscal;
           db.exec('COMMIT'); return { ok: true, data: bill };
         }
         const data = snapshot(db, request.orderId);
+        attachFiscalPreview(db, data, fiscalCheckout);
         if (request.action === 'generate') {
           if (data.fingerprint !== request.fingerprint) throw Error('Order changed; review the bill again');
           const generatedAt = Date.now();

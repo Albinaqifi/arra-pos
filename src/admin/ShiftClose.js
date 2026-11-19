@@ -1,4 +1,4 @@
-import { financeText } from './finance-i18n.js';
+import { financeText, closeBlockMessage } from './finance-i18n.js';
 
 const h=React.createElement;
 // A close can outlive this screen. Track its target and settlement, scoped to its actor.
@@ -110,6 +110,9 @@ export class ShiftClose extends React.Component {
             const refreshed=await this.fetch();
             if(!this.mounted || sequence!==this.sequence || identity(refreshed.day)!==key) return;
             return this.setState({busy:false,...refreshed,confirm:false,walletUnknown:false,error:'Cash changed while counting. Count the wallet again.'});
+          } else if(execution?.error==='checkout-unresolved') {
+            // The prepared count remains recoverable by its original request ID.
+            return this.setState({busy:false,walletUnknown:true,error:closeBlockMessage(execution.error)});
           } else throw Error('Execution unknown');
         } else result=execution.data;
       }
@@ -177,6 +180,11 @@ export class ShiftClose extends React.Component {
     try {
       const r=await window.arra.businessDays({action:'shiftClose',shiftId:shift.id});
       if(!this.mounted || sequence!==this.sequence) return;
+      const blocked = !r.ok && closeBlockMessage(r.error);
+      if(blocked) {
+        if(uncertain.get(key)===request) uncertain.delete(key);
+        return this.setState({busy:false,confirm:false,unknownId:null,error:blocked});
+      }
       if(!r.ok || r.data?.shift?.id!==shift.id || r.data.shift.closedAt===null) return this.setState({busy:false,confirm:false,unknownId:shift.id,error:'The close result is unknown. Check this shift before another action.'});
       if(uncertain.get(key)===request) uncertain.delete(key);
       this.setState({busy:false,confirm:false,unknownId:null,completed:r.data.shift});

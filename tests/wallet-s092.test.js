@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
@@ -98,9 +99,9 @@ test('v40 upgrade preserves shifts and starts with no wallet counts',t=>{
   const f=fixture(t),day=f.day;
   assert.equal(f.pay(1).ok,true);
   const shift=day({action:'shiftList'}).data.shifts[0];
-  f.db().exec('DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE wallet_requests; DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40');
+  f.db().exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE wallet_requests; DROP TABLE wallet_closings; DROP TABLE wallet_movements; DROP TABLE wallet_baselines; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=40');
   f.restart();
-  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,43);
+  assert.equal(f.db().prepare('PRAGMA user_version').get().user_version,45);
   assert.equal(day({action:'shiftList'}).data.shifts[0].id,shift.id);
   assert.equal(day({action:'walletStatus'}).data.baseline,null);
   assert.deepEqual(f.db().prepare('PRAGMA foreign_key_check').all(),[]);

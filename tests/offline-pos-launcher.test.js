@@ -93,7 +93,7 @@ test('offline launcher isolates a new release and reopens its saved test data', 
   const expected = {
     file: path.join(program, 'electron.exe'), cwd: program,
     args: [path.join(program, 'resources', 'app'), '--sample-data-directory=' + data,
-      '--user-data-dir=' + path.join(data, 'browser-profile')],
+      '--user-data-dir=' + path.join(data, 'browser-profile'), '--pf700-offline-checkout'],
   };
   const recorded = () => JSON.parse(fs.readFileSync(env.TEST_RECORD, 'utf8'));
   assert.deepEqual(recorded(), expected);

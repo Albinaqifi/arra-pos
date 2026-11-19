@@ -7,6 +7,19 @@ const keys = (x, expected) => Reflect.ownKeys(x).length === expected.length && e
 const id = x => typeof x === 'string' && x === x.trim() && x.length > 0 && x.length <= 100;
 const name = x => id(x);
 const number = x => Number.isSafeInteger(x) && x >= 0;
+function validProduct(req) {
+  const fields = ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder'];
+  if (Object.hasOwn(req, 'destination')) {
+    if (!['kitchen', 'kitchen2', 'bar'].includes(req.destination)) return false;
+    fields.push('destination');
+  }
+  if (Object.hasOwn(req, 'taxGroup')) {
+    if (![null, 'А', 'В'].includes(req.taxGroup)) return false;
+    fields.push('taxGroup');
+  }
+  return keys(req, fields) && (req.id === null || id(req.id)) && id(req.categoryId) &&
+    name(req.name) && number(req.price) && typeof req.active === 'boolean' && number(req.sortOrder);
+}
 function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
   ipcMain.handle(CHANNEL, (event, req) => {
     if (!isAllowedSender(event) || !plain(req) || typeof req.action !== 'string') return { ok: false, error: 'Invalid request' };
@@ -15,7 +28,8 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
       const execute = () => {
       if (req.action === 'list' && keys(req, ['action'])) return { ok: true, data: {
         categories: db.prepare('SELECT id, name, active, parent_id AS parentId, sort_order AS sortOrder FROM menu_categories ORDER BY sort_order, rowid').all(),
-        products: db.prepare('SELECT id, category_id AS categoryId, name, price, active, sort_order AS sortOrder, destination FROM menu_products ORDER BY sort_order, rowid').all(),
+        products: db.prepare(`SELECT p.id, p.category_id AS categoryId, p.name, p.price, p.active, p.sort_order AS sortOrder, p.destination, t.tax_group AS taxGroup
+          FROM menu_products p LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id ORDER BY p.sort_order, p.rowid`).all(),
         groups: db.prepare('SELECT id, product_id AS productId, name, required, active FROM modifier_groups ORDER BY rowid').all(),
         options: db.prepare('SELECT id, group_id AS groupId, name, adjustment, active FROM modifier_options ORDER BY rowid').all()
       } };
@@ -28,10 +42,14 @@ function registerMenuConfig(ipcMain, isAllowedSender, db, session) {
         else if (!db.prepare('UPDATE menu_categories SET name = ?, active = ?, parent_id = ?, sort_order = ? WHERE id = ?').run(req.name, Number(req.active), req.parentId, req.sortOrder, req.id).changes) return { ok: false, error: 'Category unavailable' };
         return { ok: true };
       }
-      if (req.action === 'product' && (keys(req, ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder']) || (keys(req, ['action', 'id', 'categoryId', 'name', 'price', 'active', 'sortOrder', 'destination']) && ['kitchen', 'kitchen2', 'bar'].includes(req.destination))) && (req.id === null || id(req.id)) && id(req.categoryId) && name(req.name) && number(req.price) && typeof req.active === 'boolean' && number(req.sortOrder)) {
+      if (req.action === 'product' && validProduct(req)) {
         if (!db.prepare('SELECT 1 FROM menu_categories WHERE id = ?').get(req.categoryId)) return { ok: false, error: 'Category unavailable' };
-        if (req.id === null) db.prepare('INSERT INTO menu_products (id, category_id, name, price, active, sort_order, destination) VALUES (?, ?, ?, ?, ?, ?, ?)').run(randomUUID(), req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || 'kitchen');
-        else if (!db.prepare('UPDATE menu_products SET category_id = ?, name = ?, price = ?, active = ?, sort_order = ?, destination = COALESCE(?, destination) WHERE id = ?').run(req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || null, req.id).changes) return { ok: false, error: 'Product unavailable' };
+        const productId = req.id ?? randomUUID();
+        if (req.id === null) db.prepare('INSERT INTO menu_products (id, category_id, name, price, active, sort_order, destination) VALUES (?, ?, ?, ?, ?, ?, ?)').run(productId, req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || 'kitchen');
+        else if (!db.prepare('UPDATE menu_products SET category_id = ?, name = ?, price = ?, active = ?, sort_order = ?, destination = COALESCE(?, destination) WHERE id = ?').run(req.categoryId, req.name, req.price, Number(req.active), req.sortOrder, req.destination || null, productId).changes) return { ok: false, error: 'Product unavailable' };
+        if (req.taxGroup === null) db.prepare('DELETE FROM menu_product_fiscal_tax WHERE product_id=?').run(productId);
+        else if (Object.hasOwn(req, 'taxGroup')) db.prepare(`INSERT INTO menu_product_fiscal_tax(product_id,tax_group) VALUES(?,?)
+          ON CONFLICT(product_id) DO UPDATE SET tax_group=excluded.tax_group`).run(productId, req.taxGroup);
         return { ok: true };
       }
       if (req.action === 'group' && keys(req, ['action','id','productId','name','required','active']) && (req.id === null || id(req.id)) && id(req.productId) && name(req.name) && typeof req.required === 'boolean' && typeof req.active === 'boolean') {

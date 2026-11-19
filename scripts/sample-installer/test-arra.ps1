@@ -44,7 +44,7 @@ try {
     }
     if (!(Test-Path -LiteralPath (Join-Path $data 'SAMPLE-DATA-ONLY')) -or !(Test-Path -LiteralPath (Join-Path $data 'ARRA-SETUP-COMPLETE')) -or !(Test-Path -LiteralPath (Join-Path $data 'arra.sqlite'))) { throw 'The separate test data folder is incomplete. Move it aside before trying again.' }
     $browserProfile = Join-Path $data 'browser-profile'
-    Start-Process -FilePath $electron -ArgumentList ('"{0}" "--sample-data-directory={1}" "--user-data-dir={2}"' -f $app, $data, $browserProfile) -WorkingDirectory $program
+    Start-Process -FilePath $electron -ArgumentList ('"{0}" "--sample-data-directory={1}" "--user-data-dir={2}" --pf700-offline-checkout' -f $app, $data, $browserProfile) -WorkingDirectory $program
     Write-Host "Opening the Arra POS $version offline test."
 } catch {
     Write-Host 'The test could not start. Your existing installation and its data were not changed.'

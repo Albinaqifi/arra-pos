@@ -2,51 +2,131 @@ const { hasPermissions } = require('./permissions');
 const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService, assignPayment } = require('./shifts');
-const CHANNEL = 'arra:payment';
 const { createBillJob, reserveAttempt, dispatch } = require('./test-printing');
+const { validFiscalAdapter, readFiscalCheckout, reserveSale, submitSale, failure } = require('./fiscal-checkout');
+const { isCommissioned } = require('./pf700-commissioning');
+const CHANNEL = 'arra:payment';
 
-function registerPayments(ipcMain, isAllowedSender, db, session, printing = null) {
+function success(id, fiscal) {
+  return { ok: true, data: fiscal ? { id, fiscal } : { id } };
+}
+
+// Reconcile only the original payer's exact historic selection when a payment
+// lost its response before waiter ownership was introduced.
+function recoverLegacyPayment(db, orderId, actor, request) {
+  const legacy = db.prepare(`SELECT p.id FROM legacy_unassigned_orders l JOIN orders o ON o.id=l.order_id
+    JOIN bills b ON b.order_id=o.id JOIN payments p ON p.bill_id=b.id WHERE l.order_id=? AND o.status='completed'
+    AND b.id=? AND p.actor_id=? AND p.method=? AND p.account=?
+    AND NOT EXISTS(SELECT 1 FROM order_waiter_ownership w WHERE w.order_id=o.id)`)
+    .get(orderId, request.billId, actor, request.method, request.account);
+  return legacy ? success(legacy.id) : { ok: false, error: 'Access denied' };
+}
+
+function recordPayment(db, request, bill, actor, printing, fiscal) {
+  const paidAt = Date.now();
+  const id = db.prepare('INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(?,?,?,?,?,?)')
+    .run(request.billId, actor, paidAt, bill.total, request.method, request.account).lastInsertRowid;
+  markService(db, paidAt);
+  assignPayment(db, id, paidAt);
+  db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty=0").run(bill.orderId);
+  recordAudit(db, actor, 'record', 'payment', id, bill.orderId, {});
+  // Keep ordinary non-fiscal bill jobs separate from the fiscal journal. A
+  // previously printed unpaid bill is never automatically printed again.
+  let attempt = null;
+  if (!db.prepare('SELECT 1 FROM test_print_jobs WHERE bill_id=?').get(request.billId)) {
+    const jobId = createBillJob(db, request.billId);
+    if (printing) attempt = reserveAttempt(db, jobId, 'payment-' + id, actor);
+  }
+  return { response: success(id, fiscal ? { ...fiscal, status: 'accepted' } : null), printAttempt: attempt };
+}
+
+function preparePayment(db, session, request, actor, printing, adapter) {
+  const bill = db.prepare(`SELECT b.order_id AS orderId,b.total,o.status,o.retired_empty AS retired
+    FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=?`).get(request.billId);
+  if (!bill) return { response: { ok: false, error: 'Access denied' } };
+  if (!ownsOrder(db, session, bill.orderId)) return { response: recoverLegacyPayment(db, bill.orderId, actor, request) };
+
+  const existing = db.prepare('SELECT id,method,account FROM payments WHERE bill_id=?').get(request.billId);
+  const fiscal = readFiscalCheckout(db, request.billId);
+  if (existing) {
+    if (existing.method !== request.method || existing.account !== request.account) {
+      return { response: { ok: false, error: 'Bill already paid with a different selection' } };
+    }
+    if (fiscal && fiscal.status !== 'accepted') return {response:failure('uncertain')};
+    return { response: success(existing.id, fiscal) };
+  }
+  if (bill.status !== 'open' || bill.retired) return { response: { ok: false, error: 'Bill unavailable' } };
+  if (fiscal) {
+    if (request.method !== fiscal.method || request.account !== 'A') return { response: failure('selection') };
+    if (fiscal.status === 'pending' || fiscal.status === 'uncertain') return { response: failure(fiscal.status) };
+    if (fiscal.status === 'failed' && (!adapter || fiscal.mode !== adapter.mode || fiscal.deviceId !== adapter.deviceId ||
+        (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== adapter.domesticProduct))) {
+      return { response: failure('profile') };
+    }
+  }
+  if (request.account === 'A' && !(fiscal?.mode === 'device' && fiscal.status === 'submitted')) {
+    if (adapter?.mode !== 'device' && db.prepare('SELECT 1 FROM fiscal_checkout_open_device_sales LIMIT 1').get()) {
+      return { response: failure('blocked') };
+    }
+    if (isCommissioned(db) && (adapter?.mode !== 'device' || (fiscal && fiscal.mode !== 'device'))) {
+      return { response: failure('profile') };
+    }
+  }
+  if (adapter && request.account === 'A' && fiscal?.status !== 'submitted') {
+    const reserved = reserveSale(db, request, bill.total, actor, fiscal, adapter);
+    return reserved.ok === false ? { response: reserved } : { reservation: reserved };
+  }
+  try {
+    return recordPayment(db, request, bill, actor, printing, fiscal);
+  } catch (error) {
+    if (fiscal?.status === 'submitted') error.fiscalSubmitted = true;
+    throw error;
+  }
+}
+
+function registerPayments(ipcMain, isAllowedSender, db, session, printing = null, fiscalCheckout = null) {
+  if (fiscalCheckout && !validFiscalAdapter(fiscalCheckout)) {
+    throw Error('Unsupported fiscal checkout adapter');
+  }
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       Reflect.ownKeys(request).length !== 3 || !['billId', 'method', 'account'].every(k => Object.hasOwn(request, k)) ||
       !Number.isSafeInteger(request.billId) || request.billId <= 0 || !['cash', 'card'].includes(request.method) ||
       !['A', 'B'].includes(request.account) || (request.method === 'card' && request.account !== 'A')) return { ok: false, error: 'Invalid request' };
-    if (!hasPermissions(db, session, 'orders.view', 'orders.change')) return { ok: false, error: 'Access denied' };
-    try {
-      db.exec('BEGIN IMMEDIATE');
+    const actor = session.currentUserId();
+    const authenticated = session.authenticatedUserId();
+    const generation = session.identityGeneration?.();
+    const authorized = () => isAllowedSender(event) && session.currentUserId() === actor &&
+      authenticated === session.authenticatedUserId() && generation === session.identityGeneration?.() &&
+      hasPermissions(db, session, 'orders.view', 'orders.change');
+
+    function execute() {
       try {
-        const order = db.prepare('SELECT order_id FROM bills WHERE id=?').get(request.billId);
-        if (!order || !ownsOrder(db, session, order.order_id)) {
-          // A payment committed before the upgrade may have lost its response. The
-          // original payer can reconcile only that exact payment; this does not
-          // assign an owner or grant access to the underlying order.
-          const legacy = order && db.prepare("SELECT p.id FROM legacy_unassigned_orders l JOIN orders o ON o.id=l.order_id JOIN bills b ON b.order_id=o.id JOIN payments p ON p.bill_id=b.id WHERE l.order_id=? AND o.status='completed' AND b.id=? AND p.actor_id=? AND p.method=? AND p.account=? AND NOT EXISTS(SELECT 1 FROM order_waiter_ownership w WHERE w.order_id=o.id)").get(order.order_id,request.billId,session.currentUserId(),request.method,request.account);
-          if (legacy) { db.exec('COMMIT'); return {ok:true,data:{id:legacy.id}}; }
-          db.exec('ROLLBACK'); return { ok:false, error:'Access denied' };
+        db.exec('BEGIN IMMEDIATE');
+        let step;
+        try {
+          step = authorized() ? preparePayment(db, session, request, actor, printing, fiscalCheckout) :
+            { response: { ok: false, error: 'Access denied' } };
+          db.exec('COMMIT');
+        } catch (error) {
+          if (db.isTransaction) db.exec('ROLLBACK');
+          if (step?.response?.data?.fiscal?.status === 'accepted') error.fiscalSubmitted = true;
+          throw error;
         }
-        const existing = db.prepare('SELECT id, method, account FROM payments WHERE bill_id=?').get(request.billId);
-        if (existing) {
-          if (existing.method !== request.method || existing.account !== request.account) throw Error('Bill already paid with a different selection');
-          db.exec('COMMIT'); return { ok: true, data: { id: existing.id } };
-        }
-        const bill = db.prepare("SELECT b.order_id AS orderId, b.total FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=? AND o.status='open' AND o.retired_empty = 0").get(request.billId);
-        if (!bill) throw Error('Bill unavailable');
-        const paidAt = Date.now();
-        const id = db.prepare('INSERT INTO payments (bill_id, actor_id, paid_at, amount, method, account) VALUES (?, ?, ?, ?, ?, ?)').run(request.billId, session.currentUserId(), paidAt, bill.total, request.method, request.account).lastInsertRowid;
-        markService(db, paidAt);
-        assignPayment(db, id, paidAt);
-        db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty = 0").run(bill.orderId);
-        recordAudit(db, session.currentUserId(), 'record', 'payment', id, bill.orderId, {});
-        let job = db.prepare('SELECT id FROM test_print_jobs WHERE bill_id=?').get(request.billId);
-        const isNew = !job;
-        if (isNew) job = { id: createBillJob(db, request.billId) };
-        // A previously printed unpaid bill must never be printed automatically again.
-        const attempt = isNew && printing ? reserveAttempt(db, job.id, 'payment-' + id, session.currentUserId()) : null;
-        db.exec('COMMIT');
-        if (attempt) dispatch(db, printing, attempt);
-        return { ok: true, data: { id } };
-      } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } catch (error) { return { ok: false, error: ['Bill unavailable', 'Bill already paid with a different selection'].includes(error.message) ? error.message : 'Could not record payment. Retry the same selection.' }; }
+        if (step.printAttempt) dispatch(db, printing, step.printAttempt);
+        if (step.reservation) return submitSale(db, fiscalCheckout, step.reservation).then(result => {
+          // An acknowledgement belongs to the original checkout even if the
+          // operator switched. Disclose or finalize it only to that identity.
+          if (result.ok) return execute();
+          return authorized() ? result : { ok: false, error: 'Access denied' };
+        });
+        return step.response;
+      } catch (error) {
+        if (error.fiscalSubmitted) return failure('submitted');
+        return { ok: false, error: 'Could not record payment. Retry the same selection.' };
+      }
+    }
+    return execute();
   });
 }
 module.exports = { CHANNEL, registerPayments };

@@ -2,6 +2,15 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const source=require('./support/renderer-bundle').moduleSource(path.resolve('src/admin/ShiftClose.js'),'Feature');
 function setup(api){class Component{constructor(props){this.props=props}setState(x){Object.assign(this.state,x)}};const context={React:{Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})},window:{arra:api,localStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}}};vm.runInNewContext(source,context);return context.Feature.ShiftClose;}
 const tick=()=>new Promise(setImmediate);
+test('a fiscal hold leaves the shift open and explains the next action in Albanian',async()=>{
+  const f=fixture(), original=f.api.businessDays;
+  f.api.businessDays=async request=>request.action==='shiftClose' ? {ok:false,error:'checkout-unresolved'} : original(request);
+  const Screen=setup(f.api), page=new Screen({language:'sq'});
+  page.componentDidMount();await tick();await page.review();await page.close();
+  assert.equal(page.state.unknownId,null);
+  assert.match(JSON.stringify(page.render()),/Sqaroni rezultatin e pageses se hapur ne PF700/);
+  page.componentWillUnmount();
+});
 function fixture(){
   let actor=1,scope='combined',coverage='available',shifts=[{id:11,dayId:5,openedAt:1000,closedAt:null,reportable:true,count:2,total:150,cash:100,card:50}],result='success';
   const calls=[];

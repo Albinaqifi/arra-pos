@@ -29,6 +29,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-arra.cmd') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\setup-arra.ps1') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\check-pf700.ps1') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'sample-installer\start-supervised-pf700.ps1') -Destination $payload
     Compress-Archive -Path (Join-Path $payload '*') -DestinationPath (Join-Path $source 'payload.zip') -CompressionLevel Optimal
     if (!$OfflineTestOnly) { Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\install.*') -Destination $source }
     Copy-Item -Path (Join-Path $PSScriptRoot 'sample-installer\test-arra.*') -Destination $source

@@ -1,4 +1,12 @@
+export function closeBlockMessage(code) {
+  if (code === 'period-blocked') return 'Closing is unavailable. Ask the Combined administrator to check the open period.';
+  if (code === 'checkout-unresolved') return 'Resolve the open PF700 checkout before closing the day or shift.';
+  return '';
+}
+
 const sq={
+'Closing is unavailable. Ask the Combined administrator to check the open period.':'Mbyllja nuk eshte e disponueshme. Kerkoni nga administratori i kombinuar te kontrolloje periudhen e hapur.',
+'Resolve the open PF700 checkout before closing the day or shift.':'Sqaroni rezultatin e pageses se hapur ne PF700 para mbylljes se dites ose te nderrimit.',
 'PF700 fiscal printer connection':'Lidhja e printerit fiskal PF700',
 'Loading connection settings…':'Po ngarkohen cilesimet e lidhjes…',
 'Access to the fiscal printer settings was denied.':'Nuk keni qasje te cilesimet e printerit fiskal.',

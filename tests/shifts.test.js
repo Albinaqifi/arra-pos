@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'), os=require('node:os'), path=require('node:path');
@@ -53,7 +54,7 @@ test('an idle successor is not finalized at day close',t=>{
 
 test('upgrade marks an already used day unavailable and starts tracking on the next day',t=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-shift-upgrade-')); let db=openDatabase(dir);t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
- db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'combined',x'00',x'00'); INSERT INTO user_permissions VALUES(1,'business_days.close'); INSERT INTO financial_scopes VALUES(1,'combined');
+ db.exec(removeFiscalSchemaSql + `INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'combined',x'00',x'00'); INSERT INTO user_permissions VALUES(1,'business_days.close'); INSERT INTO financial_scopes VALUES(1,'combined');
  INSERT INTO application_audit(actor_id,occurred_at,action,entity_type,entity_id,context) VALUES(1,unixepoch()*1000+1000,'add','order_item','1','{}');
  DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE payment_shifts; DROP TABLE shift_closes; DROP TABLE restaurant_shifts; DROP TABLE shift_coverage_unavailable; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=38;`);
  db.close();db=openDatabase(dir);let handler;registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,{currentUserId:()=>1,authenticatedUserId:()=>1});const call=req=>handler({},req);

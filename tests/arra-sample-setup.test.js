@@ -17,13 +17,26 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
  const script = path.join(__dirname,'../src/desktop/setup-arra-sample.js');
  const passwords = Array.from({length:3},()=>crypto.randomBytes(16).toString('hex'));
  const values = [passwords[0],passwords[1],passwords[1],passwords[2],String(crypto.randomInt(1000,10000)),String(crypto.randomInt(100000,1000000)), 'restaurant-arra','admin','adminB','dardan-admin','Waiter','Dardan'];
- const run = (input,target=directory) => spawnSync(electron,[script,target],{input:JSON.stringify(input),encoding:'utf8',env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});
+ const run = (input,target=directory,...options) => spawnSync(electron,[script,target,...options],{input:JSON.stringify(input),encoding:'utf8',env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});
  try {
   assert.notEqual(run(['invalid']).status,0); assert.equal(fs.existsSync(directory),false);
   const duplicate = values.slice(); duplicate[7] = duplicate[6];
   assert.notEqual(run(duplicate).status,0); assert.equal(fs.existsSync(directory),false);
   const custom = values.slice(); custom.splice(6,6,'entry-x','owner-x','owner-y','owner-z','staff-x','manager-x');
   const customDirectory = path.join(parent,'custom'); assert.equal(run(custom,customDirectory).status,0);
+  const supervised = path.join(parent,'supervised');
+  assert.equal(run(custom,supervised,'--new-pf700-commissioning-profile').status,0);
+  assert.equal(fs.existsSync(path.join(supervised,'SAMPLE-DATA-ONLY')),false);
+  assert.ok(require('../src/desktop/pf700-commissioning').isCommissionedDirectory(supervised));
+  const prepared = openDatabase(supervised);
+  try {
+   for (const table of ['orders','bills','payments','fiscal_checkout_sales','account_a_closes']) {
+    assert.equal(prepared.prepare('SELECT count(*) AS n FROM ' + table).get().n,0,table);
+   }
+   assert.equal(prepared.prepare('SELECT count(*) AS n FROM menu_product_fiscal_tax').get().n,105);
+  } finally { prepared.close(); }
+  assert.notEqual(run(custom,customDirectory,'--new-pf700-commissioning-profile').status,0);
+  assert.equal(require('../src/desktop/pf700-commissioning').isCommissionedDirectory(customDirectory),false);
   const customDb = openDatabase(customDirectory);
   try { const customSession = createSession(customDb); assert.equal(customSession.signIn({username:'entry-x',password:values[0]}).ok,true); assert.ok(customSession.listWaiters().data.some(user=>user.name==='staff-x')); }
   finally { customDb.close(); }
