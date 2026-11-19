@@ -128,10 +128,11 @@ test('origin classification is authorized, audited and frozen on order entry', t
 });
 
 test('v46 upgrade leaves existing bill origins unknown and preserves its lines', t => {
-  const f=fixture(t,historicalDatabase(46).openDatabase); seedArraMenu(f.db);
+  const f=fixture(t,historicalDatabase(46).openDatabase); seedArraMenu(f.db, { applyOrigins: false });
   f.db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO bill_lines(bill_id,item_id,name,unit_price,quantity,modifiers) VALUES(1,1,'Espresso',70,1,'[]')");
   f.reopen();
-  assert.equal(f.db.prepare('SELECT count(*) n FROM menu_product_fiscal_origin').get().n,0);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM menu_product_fiscal_origin').get().n,103);
+  assert.equal(f.db.prepare("SELECT domestic FROM menu_product_fiscal_origin WHERE product_id='arra-product-11-0'").get().domestic,1);
   assert.equal(f.db.prepare('SELECT count(*) n FROM order_item_fiscal_origin').get().n,0);
   assert.equal(f.db.prepare('SELECT total FROM bills WHERE id=1').get().total,70);
   const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
@@ -153,7 +154,7 @@ test('v46 upgrade leaves existing bill origins unknown and preserves its lines',
 });
 
 test('an existing fiscal attempt freezes even missing origin and hides the classification action', t => {
-  const f=fixture(t); const db=f.db; seedArraMenu(db);
+  const f=fixture(t); const db=f.db; seedArraMenu(db, { applyOrigins: false });
   db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1; INSERT INTO user_permissions VALUES(1,'menu.change'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO fiscal_checkout_sales VALUES(1,1,'simulation',NULL,'cash','{}',1); INSERT INTO fiscal_checkout_attempts VALUES(1,1,1)");
   const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
   const session={currentUserId:()=>1,authenticatedUserId:()=>1};

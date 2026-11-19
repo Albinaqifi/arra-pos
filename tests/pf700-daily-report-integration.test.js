@@ -50,7 +50,6 @@ function trainingRestaurant(t) {
   const pins = { waiter: String(randomInt(1000, 10000)), transfer: String(randomInt(100000, 1000000)) };
   seedSampleIdentities(db, passwords, pins.waiter, pins.transfer);
   seedArraMenu(db);
-  db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
   seedTables(db);
 
   function call(channel, request) { return handlers.get('arra:' + channel)(trusted, request); }

@@ -65,7 +65,7 @@ test('upgrading the corrected Arra menu preserves history and sends a mixed orde
   const f = fixture(t, historicalDatabase(51).openDatabase);
   const old = authorizedDatabase(f.db);
   seedTables(old);
-  seedArraMenu(old);
+  seedArraMenu(old, { applyOrigins: false });
   old.exec(`UPDATE menu_products SET destination='kitchen';
     INSERT INTO orders(id,table_id,opened_at,status) VALUES (1,1,1,'open'), (2,2,1,'open');
     INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open'), (2,1,1,1,'open');`);
@@ -100,7 +100,7 @@ test('upgrading the corrected Arra menu preserves history and sends a mixed orde
 
 test('upgrade includes custom products in Arra sections, isolates other roots and retains subsequent admin choices', t => {
   const f = fixture(t, historicalDatabase(51).openDatabase);
-  seedArraMenu(f.db);
+  seedArraMenu(f.db, { applyOrigins: false });
   f.db.exec(`INSERT INTO menu_categories(id,name,active,parent_id) VALUES
     ('custom-food','Specials',1,'arra-food'), ('custom-drinks','Cocktails',1,'arra-drinks'),
     ('other-root','Food',1,NULL), ('other-section','Pizza',1,'other-root');`);
@@ -134,7 +134,7 @@ test('an unrelated menu with similar section names and no Arra roots keeps its r
 
 test('a failed v52 route update rolls back all route changes and can be retried', t => {
   const { db } = fixture(t, historicalDatabase(51).openDatabase);
-  seedArraMenu(db);
+  seedArraMenu(db, { applyOrigins: false });
   db.exec(`UPDATE menu_products SET destination='bar';
     CREATE TRIGGER route_failure BEFORE UPDATE OF destination ON menu_products
     WHEN NEW.id='arra-product-6-0' BEGIN SELECT RAISE(ABORT, 'route write failed'); END;`);
@@ -143,7 +143,7 @@ test('a failed v52 route update rolls back all route changes and can be retried'
   assert.equal(db.prepare("SELECT count(*) AS n FROM menu_products WHERE destination!='bar'").get().n, 0);
   db.exec('DROP TRIGGER route_failure');
   migrate(db);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 52);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 53);
   checkSeedRoutes(db);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
 });

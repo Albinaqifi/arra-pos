@@ -11,7 +11,7 @@ function legacyMenu(t) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   migrate(db);
-  seedArraMenu(db);
+  seedArraMenu(db, { applyOrigins: false });
   db.exec(`PRAGMA user_version=51;
     DELETE FROM modifier_options WHERE group_id LIKE '%-doneness';
     DELETE FROM modifier_groups WHERE id LIKE '%-doneness';
@@ -55,7 +55,7 @@ test('v51 upgrade exposes the corrected waiter menu and preserves original IDs, 
   assert.equal(add({action:'add',orderId:1,productId:salmon,optionIds:selected}).ok,true);
   assert.equal(add({action:'add',orderId:1,productId:'arra-product-10-18'}).ok,true);
   assert.equal(add({action:'send',orderId:1,requestId:'before-upgrade'}).ok,true);
-  const snapshot = () => ['menu_product_fiscal_tax','order_items','order_item_modifiers','order_item_fiscal_tax','preparation_tickets','preparation_ticket_items','application_audit']
+  const snapshot = () => ['menu_product_fiscal_tax','order_items','order_item_modifiers','order_item_fiscal_tax','order_item_fiscal_origin','preparation_tickets','preparation_ticket_items','application_audit']
     .map(table => db.prepare('SELECT * FROM ' + table + ' ORDER BY rowid').all());
   const before = snapshot();
   migrate(db);
@@ -89,7 +89,7 @@ test('v51 upgrade exposes the corrected waiter menu and preserves original IDs, 
   assert.equal(add({action:'add',orderId:1,productId:'arra-product-10-18'}).ok,false);
 });
 
-test('retains local menu edits and fiscal origins, with unknown origin for a genuinely new generic juice', t => {
+test('retains local menu edits and old fruit origins while assigning the new fresh juice its own domestic mark', t => {
   const db = legacyMenu(t);
   db.exec(`INSERT INTO menu_product_fiscal_origin VALUES('arra-product-10-17',1),('arra-product-10-18',0);
     UPDATE menu_products SET price=210 WHERE id='arra-product-10-18';
@@ -105,8 +105,10 @@ test('retains local menu edits and fiscal origins, with unknown origin for a gen
   const generic = menu.products.find(p => p.name === 'Leng I shtrydhur');
   assert.equal(generic.price,180);
   assert.notEqual(generic.id,'arra-product-10-17');
-  assert.deepEqual(db.prepare('SELECT * FROM menu_product_fiscal_origin ORDER BY product_id').all().map(o => [o.product_id,o.domestic]),
-    [['arra-product-10-17',1],['arra-product-10-18',0]]);
+  const origin = db.prepare('SELECT domestic FROM menu_product_fiscal_origin WHERE product_id=?');
+  assert.equal(origin.get('arra-product-10-17').domestic,1);
+  assert.equal(origin.get('arra-product-10-18').domestic,0);
+  assert.equal(origin.get(generic.id).domestic,1);
   assert.equal(db.prepare('SELECT tax_group FROM menu_product_fiscal_tax WHERE product_id=?').get(generic.id).tax_group,'В');
   assert.equal(menu.products.find(p => p.id === 'arra-product-10-18').price,210);
   assert.deepEqual({...db.prepare("SELECT name,active FROM menu_products WHERE id='arra-product-10-17'").get()},
@@ -120,7 +122,7 @@ test('retains local menu edits and fiscal origins, with unknown origin for a gen
   assert.deepEqual({...wine},{price:600,sort_order:27});
 });
 
-test('an already renamed generic keeps its identity and origin while standard flavors retire', t => {
+test('an already renamed generic keeps its identity and receives the confirmed origin while standard flavors retire', t => {
   const db = legacyMenu(t);
   db.exec(`UPDATE menu_products SET name='Leng I shtrydhur' WHERE id='arra-product-10-17';
     INSERT INTO menu_product_fiscal_origin VALUES('arra-product-10-17',0);
@@ -130,7 +132,7 @@ test('an already renamed generic keeps its identity and origin while standard fl
   const menu = service(db,registerMenu)({}).data;
   assert.deepEqual(menu.products.filter(p => p.name === 'Leng I shtrydhur').map(p => [p.id,p.price]),[['arra-product-10-17',180]]);
   assert.equal(menu.products.some(p => p.name.startsWith('Lëng Natyral')),false);
-  assert.equal(db.prepare("SELECT domestic FROM menu_product_fiscal_origin WHERE product_id='arra-product-10-17'").get().domestic,0);
+  assert.equal(db.prepare("SELECT domestic FROM menu_product_fiscal_origin WHERE product_id='arra-product-10-17'").get().domestic,1);
   assert.equal(db.prepare("SELECT active FROM menu_products WHERE id='older-generic'").get().active,0);
 });
 

@@ -16,7 +16,8 @@ const { createOfflineFiscalCheckout, offlineCheckoutRequested } = require('../sr
 function setup(t, adapter = createOfflineFiscalCheckout()) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-fiscal-checkout-'));
   let db = authorizedDatabase(openDatabase(directory));
-  seedTables(db); seedArraMenu(db);
+  seedTables(db);
+  seedArraMenu(db, { applyOrigins: false }); // Individual checkout scenarios supply their own marks.
   db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'other',x'00',x'00');
     INSERT INTO financial_scopes VALUES(2,'waiter');
     INSERT INTO user_permissions VALUES(2,'orders.change'),(2,'orders.view');

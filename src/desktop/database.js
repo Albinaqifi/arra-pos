@@ -383,6 +383,7 @@ const migrations = [
   { version: 50, run: require('./pf700-recovery-v50').migratePf700Recovery },
   { version: 51, run: require('./pf700-card-v51').migratePf700Card },
   { version: 52, run: require('./arra-menu-v52').migrateArraMenu },
+  { version: 53, run: require('./arra-origin-v53').migrateArraOrigins },
 ];
 
 // Rebuild constrained tables without changing their historic rows or references.

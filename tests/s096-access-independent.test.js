@@ -21,8 +21,7 @@ test('another authorized waiter cannot inspect or finish a held sample checkout'
     INSERT INTO financial_scopes VALUES(2,'waiter');
     INSERT INTO user_permissions VALUES(2,'orders.view'),(2,'orders.change');
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
-    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1);`);
+    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');`);
   let actor = 1;
   const session = {currentUserId:()=>actor, authenticatedUserId:()=>actor, identityGeneration:()=>actor};
   const handlers = {}, ipc = {handle:(channel,fn)=>{handlers[channel]=fn;}};

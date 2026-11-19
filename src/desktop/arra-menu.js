@@ -1,5 +1,6 @@
 const { seedFiscalTax } = require('./fiscal-tax-v44');
 const { arraDestination } = require('./arra-menu-v52');
+const { applyArraOrigins } = require('./arra-origin-v53');
 
 // The VAT catalog uses the original product IDs even when drinks share a menu category.
 function drinksFromSection(section, products) {
@@ -34,7 +35,7 @@ const grillGroups = [
  ['group-1', 'Sosërat', ['Pepe verde', 'Sos me kërpudha', 'Krem gorgonzola', 'Sos chimichurri', 'Pa sos']]
 ];
 
-function seedArraMenu(db) {
+function seedArraMenu(db, { applyOrigins = true } = {}) {
  db.exec('BEGIN IMMEDIATE');
  try {
   const category = db.prepare('INSERT INTO menu_categories(id,name,active,parent_id,sort_order) VALUES(?,?,1,?,?)');
@@ -65,6 +66,7 @@ function seedArraMenu(db) {
     }
    });
   });
+  if (applyOrigins) applyArraOrigins(db);
   db.exec('COMMIT');
  } catch (error) { db.exec('ROLLBACK'); throw error; }
 }

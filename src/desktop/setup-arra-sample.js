@@ -6,6 +6,7 @@ const { openDatabase } = require('./database');
 const { hashPassword, validPassword } = require('./session');
 const { seedTables } = require('./tables');
 const { seedArraMenu } = require('./arra-menu');
+const { isS096TrainingDirectory } = require('./s096-training-directory');
 let db, values;
 try {
  const directory = process.argv[2];
@@ -37,7 +38,8 @@ try {
   const manager = add(values[11],randomBytes(32).toString('hex'),values[5]); db.prepare('INSERT INTO transfer_managers VALUES(?)').run(manager);
   db.exec('COMMIT');
  } catch (error) { db.exec('ROLLBACK'); throw error; }
- seedTables(db); seedArraMenu(db);
+ seedTables(db);
+ seedArraMenu(db, { applyOrigins: commissioning || !isS096TrainingDirectory(directory) });
  if (commissioning) require('./pf700-commissioning').enroll(db);
  fs.writeFileSync(path.join(directory,'ARRA-SETUP-COMPLETE'), 'Arra setup complete.\n', {flag:'wx'});
  console.log('Arra setup complete. The menu is ready and all tables are available.');

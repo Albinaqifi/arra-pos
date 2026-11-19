@@ -33,7 +33,7 @@ test('v48 interrupted checkout remains unresolved after migration and restart', 
     INSERT INTO fiscal_checkout_attempts(id,bill_id,started_at) VALUES(1,1,1);`);
   db.close(); db = openDatabase(dir);
   for (let attempt = 0; attempt < 2; attempt++) {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version,52);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version,53);
     assert.equal(readFiscalCheckout(db,1).status,'uncertain');
     assert.equal(db.prepare('SELECT count(*) n FROM simulated_cash_attempts').get().n,0);
     for (const account of ['A','B']) assert.throws(() =>
@@ -50,8 +50,7 @@ test('restored interrupted checkout keeps original evidence and holds without se
   t.after(() => { if (db) db.close(); fs.rmSync(root,{recursive:true,force:true}); });
   seedTables(db); seedArraMenu(db);
   db.exec(`INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
-    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1);`);
+    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');`);
   const session = {currentUserId:()=>1,authenticatedUserId:()=>1,identityGeneration:()=>1};
   function handlersFor(database, adapter) {
     const handlers = {}, ipc = {handle:(channel, fn) => { handlers[channel] = fn; }};
@@ -108,8 +107,7 @@ for (const mode of ['legacy','sample','day']) test('v49 ' + mode + ' recovery co
     INSERT INTO user_permissions VALUES(2,'orders.view'),(2,'orders.change');`);
   seedTables(db); seedArraMenu(db);
   db.exec(`INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
-    INSERT INTO order_waiter_ownership VALUES(1,2,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1);`);
+    INSERT INTO order_waiter_ownership VALUES(1,2,1,1,'open');`);
   const session = {currentUserId:()=>2,authenticatedUserId:()=>2,identityGeneration:()=>2};
   const handlers = {}, ipc = {handle:(channel,fn)=>{handlers[channel]=fn;}};
   const adapter = createTrainingPf700(source);
@@ -140,7 +138,7 @@ for (const mode of ['legacy','sample','day']) test('v49 ' + mode + ' recovery co
   if (mode !== 'legacy') copies.push(copy);
   assert.equal(fs.existsSync(path.join(copy,'simulated-pf700.sqlite')),false);
   db=openDatabase(copy);
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,52);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,53);
   assert.deepEqual({...db.prepare('SELECT attempt_id,nonce,interruption FROM simulated_cash_attempts').get()},saved);
   assert.equal(readFiscalCheckout(db,bill.id).status,'uncertain');
   assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');
@@ -154,6 +152,6 @@ for (const mode of ['legacy','sample','day']) test('v49 ' + mode + ' recovery co
   db.close(); db=openDatabase(source);
   assert.deepEqual({...db.prepare('SELECT attempt_id,nonce,interruption FROM simulated_cash_attempts').get()},saved);
   assert.equal(readFiscalCheckout(db,bill.id).status,'uncertain');
-  db.exec('PRAGMA user_version=53'); db.close(); db=null;
+  db.exec('PRAGMA user_version=54'); db.close(); db=null;
   await assert.rejects(makeCopy(), /Unsupported|Expected version/);
 });

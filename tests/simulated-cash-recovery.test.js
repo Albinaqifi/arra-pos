@@ -18,8 +18,7 @@ function fixture(t) {
   let db=authorizedDatabase(openDatabase(dir)), adapter=createTrainingPf700(dir), actor=1;
   seedTables(db); seedArraMenu(db);
   db.exec(`INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
-    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1);`);
+    INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');`);
   const session={currentUserId:()=>actor,authenticatedUserId:()=>actor,identityGeneration:()=>actor};
   let handlers={};
   function register() {

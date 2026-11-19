@@ -41,7 +41,6 @@ function setup(t, register = accept) {
     INSERT INTO local_users(id,username,salt,password_hash) VALUES(3,'test-close',x'00',x'00');
     INSERT INTO financial_scopes VALUES(3,'combined');
     INSERT INTO user_permissions VALUES(3,'business_days.close');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0);
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
     INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open'),(2,1,1,1,'open');
     INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES

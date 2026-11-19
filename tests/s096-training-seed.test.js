@@ -33,7 +33,7 @@ function freshProfile(t) {
     ...Array.from({length:6}, (_, index) => 'Sample ' + index + ' ' + randomBytes(4).toString('hex'))
   ];
   const setup = spawnSync(process.execPath, [path.join(__dirname, '../src/desktop/setup-arra-sample.js'), directory], {
-    input:JSON.stringify(values), encoding:'utf8', windowsHide:true
+    input:JSON.stringify(values), encoding:'utf8', windowsHide:true, env:{...process.env, APPDATA:appData}
   });
   values.fill('');
   assert.equal(setup.status, 0, 'Fresh sample setup failed');
@@ -91,6 +91,24 @@ test('missing sample marker and wrong profile root leave the database untouched'
   assert.throws(() => seedFreshTrainingOrigins(f.directory,f.id,f.appData));
   assert.equal(originCount(f.dbPath),0);
   assert.equal(fs.existsSync(path.join(f.directory,'S096-TRAINING-READY')),false);
+});
+
+test('upgrading an existing S096 training profile keeps its fictional marks', t => {
+  const f = freshProfile(t);
+  seedFreshTrainingOrigins(f.directory, f.id, f.appData);
+  const db = new DatabaseSync(f.dbPath);
+  db.exec('PRAGMA user_version=52');
+  db.close();
+  const reopen = spawnSync(process.execPath, ['-e',
+    "require('./src/desktop/database').openDatabase(process.argv[1]).close()", f.directory], {
+    cwd:path.resolve(__dirname,'..'), env:{...process.env, APPDATA:f.appData}, windowsHide:true
+  });
+  assert.equal(reopen.status, 0);
+  const upgraded = new DatabaseSync(f.dbPath, { readOnly:true });
+  try {
+    assert.equal(upgraded.prepare('PRAGMA user_version').get().user_version, 53);
+    assert.equal(upgraded.prepare('SELECT count(*) AS n FROM menu_product_fiscal_origin WHERE domestic=0').get().n, 103);
+  } finally { upgraded.close(); }
 });
 
 test('commissioned, nonempty, and already classified profiles are refused without changes', t => {

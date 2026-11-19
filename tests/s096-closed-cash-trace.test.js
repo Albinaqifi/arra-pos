@@ -84,7 +84,6 @@ function fixture(t, change = {}) {
   enroll(sender.db); seedTables(sender.db); seedArraMenu(sender.db);
   sender.db.exec(`INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
     INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0);
     INSERT INTO modifier_groups(id,product_id,name,required,active) VALUES('extra','arra-product-11-0','Size',0,1);
     INSERT INTO modifier_options(id,group_id,name,adjustment,active) VALUES('large','extra','Large',10,1)`);
   assert.ok(sender.items({action:'add',orderId:1,productId:'arra-product-11-0',optionIds:['large']}).ok);
