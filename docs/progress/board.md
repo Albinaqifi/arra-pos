@@ -7,7 +7,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | Todo | [Print bar and kitchen tickets during fiscal checkout](../stories/backlog.md#s-098--print-bar-and-kitchen-tickets-during-fiscal-checkout) |
 | S-097 | Todo | [Register Card A after terminal approval](../stories/backlog.md#s-097--register-card-a-after-terminal-approval) |
-| S-096 | Todo | [Recover an interrupted fiscal checkout in Arra](../stories/backlog.md#s-096--recover-an-interrupted-fiscal-checkout-in-arra) |
+| S-096 | Blocked | Exact device receipt and tender evidence and safe inquiry behavior remain unverified. [Handoff](handoffs/S-096.md) |
 | S-095 | In progress | Routine Cash A checkout reviewed and automated tests passed; offline desktop and physical PF700 checks remain. [Handoff](handoffs/S-095.md) |
 | S-093 | In progress | Original story merged in PR #136; table PIN auto-submit follow-up reviewed and tested, PR pending. Owner-requested assigned waiter names added to entry grid; verification and delivery in progress. |
 | S-092 | Done | PR #132 merged as `f38e174`; review, full suite and sample desktop checks passed. Owner deferred full host-offline verification; it does not block other stories. |
