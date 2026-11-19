@@ -10,6 +10,8 @@ const errors = Object.freeze({
   submitted: 'The receipt was accepted. Retry the same selection to finish recording the payment.',
   profile: 'Reopen the original fiscal checkout profile for this bill.',
   scope: 'This bill is outside the commissioned checkout trial.',
+  cardDisabled: 'Card checkout on the physical fiscal printer is not available.',
+  approvalRequired: 'Confirm the simulated terminal approval first.',
   uncertain: 'The fiscal checkout outcome is unknown. Check the saved bill.',
   blocked: 'Another fiscal checkout has an unresolved result.',
   failed: 'Fiscal checkout stopped before registering the sale.'
@@ -100,6 +102,11 @@ function reserveSale(db, request, total, actor, prior, adapter) {
   if (!prior) db.prepare(`INSERT INTO fiscal_checkout_sales(bill_id,actor_id,mode,device_id,method,receipt,created_at)
     VALUES(?,?,?,?,?,?,?)`).run(request.billId, actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);
   const attemptId = db.prepare('INSERT INTO fiscal_checkout_attempts(bill_id,started_at) VALUES(?,?)').run(request.billId, now).lastInsertRowid;
+  if (adapter.mode === 'simulation' && request.method === 'card' &&
+      db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId)) {
+    db.prepare('INSERT INTO simulated_card_attempts(attempt_id,nonce) VALUES(?,?)')
+      .run(attemptId,require('node:crypto').randomBytes(32).toString('hex'));
+  }
   return { attemptId, receipt };
 }
 
@@ -126,6 +133,7 @@ async function submitSale(db, adapter, reservation) {
   pending.add(attemptId);
   try {
     const result = await adapter.registerSale(receipt, {
+      simulationAttempt: db.prepare('SELECT nonce FROM simulated_card_attempts WHERE attempt_id=?').get(attemptId)?.nonce,
       beforeOpen({previousDocumentNumber}) {
         if (adapter.mode !== 'device' || typeof previousDocumentNumber !== 'string' ||
             !/^[0-9]{7}$/.test(previousDocumentNumber) || previousDocumentNumber === '9999999') {

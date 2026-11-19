@@ -20,6 +20,20 @@ function historicalDatabase(version) {
 // Older test fixtures assemble prior schemas by removing later migrations.
 // Remove later fiscal objects before rebuilding their referenced tables.
 const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS simulated_card_daily_guard;
+  DROP TRIGGER IF EXISTS simulated_card_account_a_guard;
+  DROP TRIGGER IF EXISTS simulated_card_day_guard;
+  DROP TRIGGER IF EXISTS simulated_card_shift_guard;
+  DROP TRIGGER IF EXISTS simulated_card_order_guard;
+  DROP TRIGGER IF EXISTS simulated_card_payment_guard;
+  DROP TRIGGER IF EXISTS simulated_card_sale_guard;
+  DROP TRIGGER IF EXISTS simulated_card_intent_payment_guard;
+  DROP VIEW IF EXISTS simulated_card_open_intents;
+  DROP TABLE IF EXISTS simulated_card_intent_results;
+  DROP TABLE IF EXISTS simulated_card_intents;
+  DROP VIEW IF EXISTS simulated_card_open_approvals;
+  DROP TABLE IF EXISTS simulated_card_attempts;
+  DROP TABLE IF EXISTS simulated_card_approvals;
   DROP TRIGGER IF EXISTS order_item_snapshot_fiscal_origin;
   DROP TABLE IF EXISTS order_item_fiscal_origin;
   DROP TABLE IF EXISTS menu_product_fiscal_origin;

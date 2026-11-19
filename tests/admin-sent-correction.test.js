@@ -45,7 +45,7 @@ test('upgrade preserves a previously revoked Combined correction grant', t=>{
  db.prepare("DELETE FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").run(actor);
  db.exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; DROP TABLE order_cancellations; DROP TABLE restaurant_accounts; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=30');db.close();db=openDatabase(dir);
  t.after(()=>{db.close();fs.rmSync(dir,{recursive:true,force:true});});
- assert.equal(db.prepare('PRAGMA user_version').get().user_version,47);
+ assert.equal(db.prepare('PRAGMA user_version').get().user_version,48);
  assert.equal(db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(actor),undefined);
 });
 

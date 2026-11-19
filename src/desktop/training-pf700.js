@@ -21,6 +21,18 @@ function openMemory(file) {
       cash INTEGER NOT NULL, card INTEGER NOT NULL, taxA INTEGER NOT NULL, taxV INTEGER NOT NULL,
       CHECK ((bill IS NULL) != (z IS NULL))
     ) STRICT;
+    CREATE TABLE IF NOT EXISTS card_sale_evidence (
+      bill INTEGER PRIMARY KEY REFERENCES documents(bill),
+      attempt TEXT NOT NULL UNIQUE CHECK(length(attempt)=64 AND attempt NOT GLOB '*[^a-f0-9]*'),
+      snapshot TEXT NOT NULL CHECK(json_valid(snapshot))
+    ) STRICT;
+    CREATE TRIGGER IF NOT EXISTS card_sale_evidence_no_update BEFORE UPDATE ON card_sale_evidence
+      BEGIN SELECT RAISE(ABORT,'Simulated receipt evidence is retained'); END;
+    CREATE TRIGGER IF NOT EXISTS card_sale_evidence_no_delete BEFORE DELETE ON card_sale_evidence
+      BEGIN SELECT RAISE(ABORT,'Simulated receipt evidence is retained'); END;
+    CREATE TRIGGER IF NOT EXISTS card_sale_evidence_no_replace BEFORE INSERT ON card_sale_evidence
+      WHEN EXISTS(SELECT 1 FROM card_sale_evidence WHERE bill=NEW.bill OR attempt=NEW.attempt)
+      BEGIN SELECT RAISE(ABORT,'Simulated receipt evidence is retained'); END;
     INSERT OR IGNORE INTO documents VALUES (1,NULL,1,'010120',0,0,0,0);`);
     return db;
   } catch (error) {
@@ -29,7 +41,7 @@ function openMemory(file) {
   }
 }
 
-function recordSale(file, snapshot) {
+function recordSale(file, snapshot, attempt) {
   const cash = snapshot.method === 'cash' ? snapshot.total : 0;
   const card = snapshot.total - cash;
   const taxA = snapshot.lines.reduce((sum, line) =>
@@ -42,10 +54,33 @@ function recordSale(file, snapshot) {
     if (!prior) {
       db.prepare('INSERT INTO documents (bill,cash,card,taxA,taxV) VALUES (?,?,?,?,?)')
         .run(snapshot.billId, cash, card, taxA, taxV);
+      if (snapshot.method === 'card') db.prepare('INSERT INTO card_sale_evidence VALUES(?,?,?)')
+        .run(snapshot.billId, attempt, JSON.stringify(snapshot));
     } else if (prior.cash !== cash || prior.card !== card || prior.taxA !== taxA || prior.taxV !== taxV) {
       throw Error('Conflicting simulated receipt');
+    } else if (snapshot.method === 'card' &&
+      !db.prepare('SELECT 1 FROM card_sale_evidence WHERE bill=? AND attempt=? AND snapshot=?')
+        .get(snapshot.billId, attempt, JSON.stringify(snapshot))) {
+      // Old documents have no exact-item evidence and cannot be upgraded by a retry.
+      throw Error('Unverified simulated receipt');
     }
     db.exec('COMMIT');
+  } finally { db.close(); }
+}
+
+// A missing record or an old aggregate-only record is not proof of nonissuance.
+// Read without initializing or modifying the separate simulated printer store.
+function matchRecordedSale(file, snapshot, attempt) {
+  if (!fs.existsSync(file) || snapshot?.method !== 'card' || snapshot.account !== 'A' ||
+      typeof attempt !== 'string' || !/^[a-f0-9]{64}$/.test(attempt)) return false;
+  const db = new DatabaseSync(file, {readOnly:true});
+  try {
+    if (!db.prepare("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='card_sale_evidence'").get()) return false;
+    const row = db.prepare(`SELECT e.snapshot,e.attempt,d.cash,d.card,d.taxA,d.taxV FROM card_sale_evidence e
+      JOIN documents d ON d.bill=e.bill WHERE e.bill=?`).get(snapshot.billId);
+    if (!row || row.attempt !== attempt || row.snapshot !== JSON.stringify(snapshot)) return false;
+    const taxA = snapshot.lines.reduce((sum,line) => sum + (line.taxGroup === 'А' ? line.unitPrice * line.quantity : 0), 0);
+    return row.cash === 0 && row.card === snapshot.total && row.taxA === taxA && row.taxV === snapshot.total - taxA;
   } finally { db.close(); }
 }
 
@@ -103,9 +138,14 @@ function createTrainingPf700(directory, now = () => new Date()) {
     openPipe: operation => openTrainingPipe(file, operation, now) });
   return Object.freeze({
     mode: 'simulation', requireOrigins: true,
-    async registerSale(snapshot) {
+    matchRecordedSale(snapshot, attempt) { return matchRecordedSale(file, snapshot, attempt); },
+    async registerSale(snapshot, context = {}) {
+      if (snapshot?.method === 'card' &&
+          (typeof context.simulationAttempt !== 'string' || !/^[a-f0-9]{64}$/.test(context.simulationAttempt))) {
+        throw Error('Missing simulated checkout attempt');
+      }
       const result = await registerSimulatedPf700Sale(snapshot);
-      if (result.status === 'accepted') recordSale(file, snapshot);
+      if (result.status === 'accepted') recordSale(file, snapshot, context.simulationAttempt);
       return result;
     },
     dailyReport: Object.freeze({

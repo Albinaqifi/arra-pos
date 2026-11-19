@@ -1,0 +1,33 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { openDatabase } = require('../src/desktop/database');
+const { createBackup, restoreBackup } = require('../src/desktop/backup');
+
+test('restored simulated approval keeps its amount and blocks payment and closing', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-card-restore-'));
+  const live = path.join(root, 'live'), restored = path.join(root, 'restored');
+  fs.mkdirSync(live); fs.mkdirSync(restored);
+  let db = openDatabase(live);
+  t.after(() => { if (db) db.close(); fs.rmSync(root, {recursive:true, force:true}); });
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'sample',x'01',x'01');
+    INSERT INTO dining_tables(id,area) VALUES(1,'sample');
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'sample');
+    INSERT INTO simulated_card_intents VALUES(1,1,1,70,1);
+    INSERT INTO simulated_card_intent_results VALUES(1,'approved',2);
+    INSERT INTO simulated_card_approvals VALUES(1,1,70,2);`);
+  const file = path.join(root, 'backup.enc'), phrase = 'sample backup phrase';
+  await createBackup(live,file,phrase);
+  restoreBackup(file,restored,phrase);
+  db.close(); db = openDatabase(restored);
+  assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
+  assert.equal(db.prepare('SELECT amount FROM simulated_card_approvals WHERE bill_id=1').get().amount,70);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM simulated_card_open_approvals').get().n,1);
+  assert.throws(() => db.exec("INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,3,70,'cash','B')"));
+  assert.throws(() => db.exec("INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,3,70,'card','A')"));
+  assert.throws(() => db.exec("UPDATE business_days SET closed_at=3,closed_by=1,issues='' WHERE closed_at IS NULL"));
+});

@@ -48,6 +48,8 @@ function preparePayment(db, session, request, actor, printing, adapter) {
 
   const existing = db.prepare('SELECT id,method,account FROM payments WHERE bill_id=?').get(request.billId);
   const fiscal = readFiscalCheckout(db, request.billId);
+  const approval = db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId);
+  const intent = db.prepare('SELECT id,actor_id AS actorId FROM simulated_card_open_intents WHERE bill_id=?').get(request.billId);
   if (existing) {
     if (existing.method !== request.method || existing.account !== request.account) {
       return { response: { ok: false, error: 'Bill already paid with a different selection' } };
@@ -56,6 +58,13 @@ function preparePayment(db, session, request, actor, printing, adapter) {
     return { response: success(existing.id, fiscal) };
   }
   if (bill.status !== 'open' || bill.retired) return { response: { ok: false, error: 'Bill unavailable' } };
+  if ((approval || intent) && (request.method !== 'card' || request.account !== 'A')) return { response: failure('selection') };
+  // Card tender on a physical PF700 stays disabled until its interrupted-sale
+  // recovery has been verified. This guard is independent of adapter policy.
+  // An already acknowledged historical sale may still finish locally below.
+  if (request.method === 'card' && adapter?.mode === 'device' && fiscal?.status !== 'submitted') {
+    return { response: failure('cardDisabled') };
+  }
   if (fiscal) {
     if (request.method !== fiscal.method || request.account !== 'A') return { response: failure('selection') };
     if (fiscal.status === 'pending' || fiscal.status === 'uncertain') return { response: failure(fiscal.status) };
@@ -66,6 +75,7 @@ function preparePayment(db, session, request, actor, printing, adapter) {
       return { response: failure('profile') };
     }
   }
+  if ((approval || intent) && adapter?.mode !== 'simulation') return { response: failure('profile') };
   if (request.account === 'A' && !(fiscal?.mode === 'device' && fiscal.status === 'submitted')) {
     if (adapter?.mode !== 'device' && db.prepare('SELECT 1 FROM fiscal_checkout_open_device_sales LIMIT 1').get()) {
       return { response: failure('blocked') };
@@ -73,6 +83,12 @@ function preparePayment(db, session, request, actor, printing, adapter) {
     if (isCommissioned(db) && (adapter?.mode !== 'device' || (fiscal && fiscal.mode !== 'device'))) {
       return { response: failure('profile') };
     }
+  }
+  if (adapter?.mode === 'simulation' && request.method === 'card' && !approval && !fiscal) {
+    if (request.terminalApproved !== true || !intent || request.intentId !== intent.id) return { response: failure('approvalRequired') };
+    db.prepare('INSERT INTO simulated_card_intent_results(intent_id,status,recorded_at) VALUES(?,?,?)').run(intent.id,'approved',Date.now());
+    db.prepare('INSERT INTO simulated_card_approvals(bill_id,actor_id,amount,approved_at) VALUES(?,?,?,?)')
+      .run(request.billId, intent.actorId, bill.total, Date.now());
   }
   if (adapter && request.account === 'A' && fiscal?.status !== 'submitted') {
     const reserved = reserveSale(db, request, bill.total, actor, fiscal, adapter);
@@ -86,15 +102,62 @@ function preparePayment(db, session, request, actor, printing, adapter) {
   }
 }
 
+function simulatedTerminalIntent(db, session, request, actor, adapter) {
+  const bill=db.prepare(`SELECT b.order_id AS orderId,b.total,o.status,o.retired_empty AS retired
+    FROM bills b JOIN orders o ON o.id=b.order_id WHERE b.id=?`).get(request.billId);
+  if (!bill || !ownsOrder(db,session,bill.orderId)) return {ok:false,error:'Access denied'};
+  if (adapter?.mode !== 'simulation' || isCommissioned(db)) return failure('profile');
+  if (request.prepareSimulated) {
+    if (bill.status !== 'open' || bill.retired || db.prepare('SELECT 1 FROM payments WHERE bill_id=?').get(request.billId) ||
+        db.prepare('SELECT 1 FROM fiscal_checkout_sales WHERE bill_id=?').get(request.billId) ||
+        db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId)) return failure('selection');
+    const existing=db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(request.billId);
+    const id=existing?.id ?? db.prepare('INSERT INTO simulated_card_intents(bill_id,actor_id,amount,created_at) VALUES(?,?,?,?)')
+      .run(request.billId,actor,bill.total,Date.now()).lastInsertRowid;
+    return {ok:true,data:{intentId:id}};
+  }
+  return failure('selection');
+}
+
+// This read-only check is available only for the persistent training printer.
+// Missing or mismatched evidence never proves that a receipt did not start.
+function recoverSimulatedCard(db, session, request, adapter) {
+  const bill = db.prepare('SELECT order_id AS orderId FROM bills WHERE id=?').get(request.billId);
+  if (!bill || !ownsOrder(db, session, bill.orderId)) return {ok:false,error:'Access denied'};
+  const fiscal = readFiscalCheckout(db, request.billId);
+  if (!db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(request.billId) ||
+      !fiscal || fiscal.mode !== 'simulation' || fiscal.method !== 'card' || adapter?.mode !== 'simulation' ||
+      typeof adapter.matchRecordedSale !== 'function') return failure('profile');
+  if (fiscal.status === 'submitted' || fiscal.status === 'accepted') return {ok:true};
+  if (fiscal.status !== 'uncertain') return failure(fiscal.status);
+  const attempt = db.prepare(`SELECT a.id,n.nonce FROM fiscal_checkout_attempts a
+    JOIN simulated_card_attempts n ON n.attempt_id=a.id
+    LEFT JOIN fiscal_checkout_results r ON r.attempt_id=a.id
+    WHERE a.bill_id=? AND r.attempt_id IS NULL ORDER BY a.id DESC LIMIT 1`).get(request.billId);
+  if (!attempt) return failure('uncertain');
+  let match = false;
+  try { match = adapter.matchRecordedSale(fiscal.receipt,attempt.nonce) === true; } catch (_) { /* remain uncertain */ }
+  if (!match) return failure('uncertain');
+  db.prepare('INSERT INTO fiscal_checkout_results(attempt_id,status,source,reference,evidence,ended_at) VALUES(?,?,?,?,?,?)')
+    .run(attempt.id,'accepted','simulation','SIM-'+request.billId,null,Date.now());
+  return {ok:true};
+}
+
 function registerPayments(ipcMain, isAllowedSender, db, session, printing = null, fiscalCheckout = null) {
   if (fiscalCheckout && !validFiscalAdapter(fiscalCheckout)) {
     throw Error('Unsupported fiscal checkout adapter');
   }
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
-      Reflect.ownKeys(request).length !== 3 || !['billId', 'method', 'account'].every(k => Object.hasOwn(request, k)) ||
+      ![3,4,5].includes(Reflect.ownKeys(request).length) || !['billId', 'method', 'account'].every(k => Object.hasOwn(request, k)) ||
       !Number.isSafeInteger(request.billId) || request.billId <= 0 || !['cash', 'card'].includes(request.method) ||
-      !['A', 'B'].includes(request.account) || (request.method === 'card' && request.account !== 'A')) return { ok: false, error: 'Invalid request' };
+      !['A', 'B'].includes(request.account) || (request.method === 'card' && request.account !== 'A') ||
+      (Reflect.ownKeys(request).length === 4 && (request.method !== 'card' || !(
+        (Object.hasOwn(request,'prepareSimulated') && request.prepareSimulated === true) ||
+        (Object.hasOwn(request,'recoverSimulated') && request.recoverSimulated === true)))) ||
+      (Reflect.ownKeys(request).length === 5 && (request.method !== 'card' || !Object.hasOwn(request,'intentId') ||
+        !Number.isSafeInteger(request.intentId) || request.intentId <= 0 ||
+          !Object.hasOwn(request,'terminalApproved') || request.terminalApproved !== true))) return { ok: false, error: 'Invalid request' };
     const actor = session.currentUserId();
     const authenticated = session.authenticatedUserId();
     const generation = session.identityGeneration?.();
@@ -107,8 +170,14 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
         db.exec('BEGIN IMMEDIATE');
         let step;
         try {
-          step = authorized() ? preparePayment(db, session, request, actor, printing, fiscalCheckout) :
-            { response: { ok: false, error: 'Access denied' } };
+          if (!authorized()) step = { response: { ok: false, error: 'Access denied' } };
+          else if (request.prepareSimulated) {
+            step = {response:simulatedTerminalIntent(db,session,request,actor,fiscalCheckout)};
+          }
+          else {
+            const recovery = request.recoverSimulated ? recoverSimulatedCard(db, session, request, fiscalCheckout) : {ok:true};
+            step = recovery.ok ? preparePayment(db, session, request, actor, printing, fiscalCheckout) : {response:recovery};
+          }
           db.exec('COMMIT');
         } catch (error) {
           if (db.isTransaction) db.exec('ROLLBACK');

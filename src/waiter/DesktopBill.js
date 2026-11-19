@@ -10,6 +10,8 @@ const fiscalMessages = {
   unavailable: 'The PF700 cannot register the items or amounts on this bill.',
   blocked: 'Another PF700 receipt needs attention before this checkout.',
   scope: 'This supervised trial permits one cash receipt for one unit of one item.',
+  cardDisabled: 'Card checkout on the physical fiscal printer is not available.',
+  approvalRequired: 'Confirm the simulated terminal approval first.',
   profile: 'Reopen checkout with the original printer and payment method.',
   submitted: 'The receipt was acknowledged. Confirm the original payment to finish checkout.',
   selection: 'This bill already has a fiscal checkout. Check its original payment method.'
@@ -80,11 +82,12 @@ export class DesktopBill extends React.Component {
       (fiscal.mode === 'device' && fiscal.receipt.domesticProduct !== data.fiscalDomesticProduct &&
         !(data.fiscalRequiresOrigins && fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
           !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct'))));
-    const status = wrongProfile ? 'profile' : rejection || fiscal?.status;
+    const status = wrongProfile || ((data.simulatedCardApproval || data.simulatedCardIntent) && data.fiscalMode !== 'simulation') ? 'profile' : rejection || fiscal?.status;
     this.setState({
       data, loading: false, error: fiscalMessages[status] || '',
-      fiscalStatus: status, fiscalHold: !!fiscal && ['pending', 'uncertain', 'profile'].includes(status),
-      fiscalTenderFixed: !!fiscal, ...(fiscal ? { method: fiscal.method, account: 'A' } : {})
+      fiscalStatus: status, fiscalHold: (!!fiscal || data.simulatedCardApproval || data.simulatedCardIntent) && ['pending', 'uncertain', 'profile'].includes(status),
+      fiscalTenderFixed: !!fiscal || !!data.simulatedCardApproval || !!data.simulatedCardIntent,
+      ...(fiscal ? { method: fiscal.method, account: 'A' } : (data.simulatedCardApproval || data.simulatedCardIntent) ? { method:'card', account:'A' } : {})
     });
   }
   async review() {
@@ -114,10 +117,15 @@ export class DesktopBill extends React.Component {
     } catch (_) { if (this.current(operation)) this.setState({ error: 'Could not prepare bill' }); }
     finally { this.end(operation); }
   }
-  async pay() {
+  async pay(terminalApproved = false) {
     if (this.state.fiscalHold || (this.state.uncertain && this.paymentSelection?.account === 'A' && this.state.data?.fiscalMode === 'device') ||
         !this.state.data?.id || (!this.paymentSelection && (!this.state.method || !this.state.account))) return;
-    const selection = this.paymentSelection || Object.freeze({ billId: this.state.data.id, method: this.state.method, account: this.state.method === 'card' ? 'A' : this.state.account });
+    if (this.state.data.fiscalMode === 'simulation' && this.state.method === 'card' &&
+        !this.paymentSelection && !this.state.data.simulatedCardApproval &&
+        (!this.state.data.simulatedCardIntent || terminalApproved !== true)) return;
+    const selection = this.paymentSelection || Object.freeze({ billId: this.state.data.id, method: this.state.method, account: this.state.method === 'card' ? 'A' : this.state.account,
+      ...(this.state.data.fiscalMode === 'simulation' && this.state.method === 'card' && !this.state.data.simulatedCardApproval
+        ? {terminalApproved:true,intentId:this.state.data.simulatedCardIntent.id} : {}) });
     const operation = this.begin('payment'); if (!operation) return;
     this.setState({ error: '' });
     try {
@@ -143,17 +151,17 @@ export class DesktopBill extends React.Component {
           uncertain: false, error: fiscalMessages[result.fiscalStatus], fiscalStatus: result.fiscalStatus,
           fiscalHold: ['uncertain', 'pending', 'selection'].includes(result.fiscalStatus) ||
             (result.fiscalStatus === 'profile' && !!this.state.data?.fiscal),
-          fiscalTenderFixed: ['uncertain', 'pending', 'selection', 'submitted', 'failed'].includes(result.fiscalStatus) ||
+          fiscalTenderFixed: (selection.method === 'card' && this.state.data?.fiscalMode === 'simulation' && result.fiscalStatus !== 'approvalRequired') || ['uncertain', 'pending', 'selection', 'submitted', 'failed'].includes(result.fiscalStatus) ||
             (result.fiscalStatus === 'profile' && !!this.state.data?.fiscal)
         });
-        if (['pending', 'uncertain', 'selection', 'submitted', 'profile'].includes(result.fiscalStatus)) {
+        if (['pending', 'uncertain', 'selection', 'submitted', 'profile'].includes(result.fiscalStatus) || (selection.method === 'card' && this.state.data?.fiscalMode === 'simulation')) {
           // Read only. The journal can already contain a pre-open document or
           // a final acknowledgement even when the payment response was lost.
           const saved = await Promise.resolve().then(() => desktopBridge.bill({ action: 'review', orderId: this.props.orderId })).catch(() => null);
           if (!this.current(operation)) return;
           if (saved?.error === 'Access denied') this.setState({ data: null, error: 'Access denied' });
-          else if (saved?.ok && saved.data?.id === selection.billId && (saved.data.fiscal || result.fiscalStatus === 'profile')) {
-            this.presentBill(saved.data, result.fiscalStatus === 'profile' ? 'profile' : undefined);
+          else if (saved?.ok && saved.data?.id === selection.billId && (saved.data.fiscal || saved.data.simulatedCardApproval || result.fiscalStatus === 'profile')) {
+            this.presentBill(saved.data, result.fiscalStatus === 'profile' || !saved.data.fiscal ? result.fiscalStatus : undefined);
           }
         }
       } else {
@@ -162,6 +170,35 @@ export class DesktopBill extends React.Component {
         this.props.onUncertain?.(uncertain);
         this.setState({ uncertain, error: this.serviceError(result?.error, 'Could not record payment. Retry the same selection.') });
       }
+    } finally { this.end(operation); }
+  }
+  async terminalIntent() {
+    const data=this.state.data;
+    if (!data?.id || data.fiscalMode !== 'simulation' || this.state.method !== 'card' || this.state.uncertain ||
+        this.state.fiscalHold || data.simulatedCardApproval || data.simulatedCardIntent) return;
+    const operation=this.begin('payment'); if (!operation) return;
+    try {
+      const request={billId:data.id,method:'card',account:'A',prepareSimulated:true};
+      try { await desktopBridge.payment(request); } catch (_) { /* inspect the durable intent */ }
+      if (!this.current(operation)) return;
+      const saved=await Promise.resolve().then(()=>desktopBridge.bill({action:'review',orderId:this.props.orderId})).catch(()=>null);
+      if (!this.current(operation)) return;
+      if (saved?.ok && saved.data?.id === data.id) {
+        this.presentBill(saved.data);
+      } else this.setState({error:'Could not prepare bill',fiscalHold:true});
+    } finally { this.end(operation); }
+  }
+  async recoverSimulation() {
+    if (!this.state.data?.simulatedCardApproval || this.state.data?.fiscalMode !== 'simulation' ||
+        this.state.fiscalStatus !== 'uncertain') return;
+    const operation = this.begin('payment'); if (!operation) return;
+    try {
+      const result = await desktopBridge.payment({billId:this.state.data.id,method:'card',account:'A',recoverSimulated:true});
+      if (!this.current(operation)) return;
+      if (result?.ok && result.data?.fiscal?.status === 'accepted') this.showReceipt(result.data.fiscal,this.state.data);
+      else this.setState({error:fiscalMessages[result?.fiscalStatus] || 'Could not record payment. Retry the same selection.'});
+    } catch (_) {
+      if (this.current(operation)) this.setState({error:fiscalMessages.uncertain});
     } finally { this.end(operation); }
   }
   showReceipt(fiscal, data) {
@@ -204,12 +241,17 @@ export class DesktopBill extends React.Component {
           h('button', { type: 'button', className: 'bill-brand', 'aria-label': t('Select Cash B'), title: t('Select Cash B'), 'aria-pressed': this.state.method === 'cash' && this.state.account === 'B', disabled: !d?.id || locked, onClick: () => this.selectMethod('cash', 'B') }, h('span', { 'aria-hidden': 'true' }, 'A'), h('strong', null, 'Arra'))),
         h('div', { className: 'bill-body' },
           (this.state.loading || this.state.busy) && h('p', { role: 'status', className: 'bill-status' }, t(this.state.loading ? 'Loading bill…' : 'Working…')),
-          (this.state.fiscalStatus === 'uncertain' || unknownDevicePayment) && h('p', { role: 'alert', className: 'bill-error' }, t(fiscalMessages.uncertain)),
+          (this.state.fiscalStatus === 'uncertain' || unknownDevicePayment) && h('p', { role: 'alert', className: 'bill-error' }, t(d?.simulatedCardApproval && d?.fiscalMode === 'simulation'
+            ? 'The simulated receipt outcome is unknown. Check the simulated receipt; do not take another payment.' : fiscalMessages.uncertain)),
           this.state.error && !unknownDevicePayment && (this.state.fiscalStatus !== 'uncertain' || this.state.error !== fiscalMessages.uncertain) &&
             h('p', { role: 'alert', className: 'bill-error' }, t(this.state.error)),
           receipt && h('p', { role: 'status', className: 'bill-status' }, receipt.reference, ' · ', t(receipt.method === 'card' ? 'Card' : 'Cash')),
           !receipt && d?.fiscalMode === 'simulation' && this.state.account === 'A' &&
             h('p', { className: 'bill-status' }, t('Offline PF700 checkout. This payment uses a simulated printer.')),
+          !receipt && d?.fiscalMode === 'simulation' && this.state.method === 'card' &&
+            h('p', { className: 'bill-warning' }, t(this.state.fiscalTenderFixed || this.state.uncertain
+              ? d.simulatedCardIntent && !d.simulatedCardApproval ? 'Record the observed simulated terminal result. Do not take another payment.' : 'The simulated terminal payment was approved. Do not take another payment.'
+              : 'Simulate the separate terminal result for this full amount. No terminal charge is made.')),
           liveSelection && h('p', { className: 'bill-warning' }, t('Supervised PF700 checkout. Confirming Cash A will register a real sale.')),
           device && (!d?.fiscalRequiresOrigins || (fiscal && !fiscal.receipt.lines.some(l => typeof l.domesticProduct === 'boolean'))) && (liveSelection || fiscal) && typeof domestic === 'boolean' &&
             h('p', { className: 'bill-status' }, t(domestic ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')),
@@ -233,7 +275,13 @@ export class DesktopBill extends React.Component {
           receipt ? h('button', { className: 'bill-primary', onClick: () => this.finishReceipt() }, t('Continue')) :
             h('button', { onClick: () => this.close(), disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),
           this.state.error && !this.state.uncertain && h('button', { onClick: () => this.review(), disabled: this.state.busy }, t(this.state.fiscalHold ? 'Reload saved bill' : 'Review again')),
+          d?.simulatedCardApproval && d?.fiscalMode === 'simulation' && this.state.fiscalStatus === 'uncertain' &&
+            h('button', { disabled: this.state.busy, onClick: () => this.recoverSimulation() }, t('Check simulated receipt')),
           !d?.id && d && h('button', { className: 'bill-primary', onClick: () => this.generate(), disabled: this.state.busy }, t("Generate bill")),
-          d?.id && this.state.account && !receipt && !this.state.fiscalHold && !unknownDevicePayment && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t(submitted ? 'Finish recording payment' : liveSelection ? 'Register cash sale' : 'confirim bill')))));
+          d?.id && this.state.account && !receipt && !this.state.fiscalHold && !unknownDevicePayment && d.fiscalMode === 'simulation' && this.state.method === 'card' && !d.simulatedCardApproval && !this.state.uncertain && !d.simulatedCardIntent &&
+            h('button', { disabled: this.state.busy, onClick: () => this.setState({method:'',account:''}) }, t('Simulate decline or cancellation')),
+          d?.id && this.state.account && !receipt && !this.state.fiscalHold && !unknownDevicePayment && d.fiscalMode === 'simulation' && this.state.method === 'card' && !d.simulatedCardApproval && !this.state.uncertain && !d.simulatedCardIntent &&
+            h('button', { className:'bill-primary', disabled:this.state.busy, onClick:()=>this.terminalIntent() }, t('Prepare simulated terminal')),
+          d?.id && this.state.account && !receipt && !this.state.fiscalHold && !unknownDevicePayment && !(d.fiscalMode === 'simulation' && this.state.method === 'card' && !d.simulatedCardApproval && !this.state.uncertain && !d.simulatedCardIntent) && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay(true) }, t(submitted ? 'Finish recording payment' : liveSelection ? 'Register cash sale' : d.fiscalMode === 'simulation' && this.state.method === 'card' && !d.simulatedCardApproval && !this.state.uncertain ? 'Record observed simulated approval' : 'confirim bill')))));
   }
 }

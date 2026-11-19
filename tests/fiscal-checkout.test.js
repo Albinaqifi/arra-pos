@@ -52,7 +52,22 @@ function setup(t, adapter = createOfflineFiscalCheckout()) {
   t.after(() => { db.close(); fs.rmSync(directory,{recursive:true,force:true}); });
   return {
     get db() { return db; }, generate, bills, session, adapter, directory,
-    pay: req => call('arra:payment', req),
+    pay: req => {
+      if (req.terminalApproved && adapter?.mode === 'simulation') {
+        let intent = db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(req.billId);
+        if (!intent) {
+          intent = db.prepare(`SELECT i.id FROM simulated_card_intents i JOIN simulated_card_intent_results r ON r.intent_id=i.id
+            WHERE i.bill_id=? AND r.status='approved' ORDER BY i.id DESC LIMIT 1`).get(req.billId);
+        }
+        if (!intent) {
+          const prepared=call('arra:payment',{billId:req.billId,method:'card',account:'A',prepareSimulated:true});
+          if (prepared.ok) intent={id:prepared.data.intentId};
+        }
+        if (intent) req={...req,intentId:intent.id};
+      }
+      return call('arra:payment', req);
+    },
+    direct: req => call('arra:payment', req),
     untrusted: req => handlers['arra:payment']({},req),
     switchUser(id) { actor = id; generation++; },
     restart(nextAdapter = adapter) { db.close(); db = openDatabase(directory); adapter = nextAdapter; register(); }
@@ -60,7 +75,152 @@ function setup(t, adapter = createOfflineFiscalCheckout()) {
 }
 
 const count = (db, table) => db.prepare('SELECT count(*) AS n FROM ' + table).get().n;
-const payment = (billId, method = 'cash', account = 'A') => ({billId, method, account});
+const payment = (billId, method = 'cash', account = 'A') => ({billId, method, account,
+  ...(method === 'card' && account === 'A' ? {terminalApproved:true,intentId:1} : {})});
+
+test('prepared terminal intent survives a lost approval request and forbids alternate tender or decline', async t => {
+  const f=setup(t), id=f.generate();
+  const prepare={billId:id,method:'card',account:'A',prepareSimulated:true};
+  assert.equal(f.untrusted(prepare).ok,false);
+  const first=f.pay(prepare); assert.equal(first.ok,true);
+  assert.deepEqual(f.pay(prepare),first);
+  const intentId=first.data.intentId;
+  f.restart();
+  assert.equal(f.bills({action:'review',orderId:1}).data.simulatedCardIntent.id,intentId);
+  assert.equal(f.pay(payment(id,'cash','B')).fiscalStatus,'selection');
+  assert.equal(f.pay({billId:id,method:'card',account:'A',terminalDeclined:true,intentId}).ok,false);
+  assert.equal(f.direct({billId:id,method:'card',account:'A',terminalApproved:true,intentId:intentId+1}).fiscalStatus,'approvalRequired');
+  assert.equal(count(f.db,'payments'),0);
+  assert.equal(count(f.db,'fiscal_checkout_attempts'),0);
+  const accepted=await f.pay({billId:id,method:'card',account:'A',terminalApproved:true,intentId});
+  assert.equal(accepted.ok,true);
+  assert.equal(count(f.db,'payments'),1);
+});
+
+test('simulated approval survives preflight failure and restart without permitting a different payment', async t => {
+  const f = setup(t);
+  f.db.exec("DELETE FROM menu_product_fiscal_tax WHERE product_id='arra-product-11-0'");
+  const id = f.generate();
+  assert.equal(f.pay({billId:id,method:'card',account:'A'}).fiscalStatus,'approvalRequired');
+  assert.equal(count(f.db,'simulated_card_approvals'),0);
+  assert.equal(f.pay(payment(id,'card')).fiscalStatus,'unmapped');
+  assert.equal(count(f.db,'simulated_card_approvals'),1);
+  assert.equal(count(f.db,'fiscal_checkout_attempts'),0);
+  f.restart();
+  assert.equal(f.bills({action:'review',orderId:1}).data.simulatedCardApproval,true);
+  assert.equal(f.pay(payment(id,'cash','B')).fiscalStatus,'selection');
+  assert.equal(f.pay(payment(id,'cash')).fiscalStatus,'selection');
+  assert.equal(f.pay({billId:id,method:'card',account:'A'}).fiscalStatus,'unmapped');
+  f.restart(null);
+  assert.equal(f.pay({billId:id,method:'card',account:'A'}).fiscalStatus,'profile');
+  assert.equal(count(f.db,'payments'),0);
+});
+
+test('physical card requests are rejected before the adapter, including a permissive adapter', async t => {
+  let calls = 0;
+  const adapter = {mode:'device',deviceId:'sample-PF700',domesticProduct:false,
+    canRegister:()=>true, registerSale:()=>{ calls++; return {status:'failed'}; }};
+  const f = setup(t,adapter);
+  const id = f.generate();
+  assert.equal(f.untrusted(payment(id,'card')).ok,false);
+  assert.equal(f.pay(payment(id,'card','B')).ok,false);
+  assert.equal(f.pay(payment(id,'card')).fiscalStatus,'cardDisabled');
+  f.restart(adapter);
+  assert.equal(f.pay(payment(id,'card')).fiscalStatus,'cardDisabled');
+  assert.equal(calls,0);
+  assert.equal(count(f.db,'fiscal_checkout_sales'),0);
+  assert.equal(count(f.db,'payments'),0);
+  assert.equal((await f.pay(payment(id))).fiscalStatus,'failed');
+  assert.equal(calls,1);
+});
+
+test('training card tender and Account A total match one payment across replay and restart', async t => {
+  const f = setup(t);
+  const makeAdapter = () => require('../src/desktop/training-pf700').createTrainingPf700(f.directory);
+  f.db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
+  f.restart(makeAdapter());
+  const id = f.generate(), req = payment(id,'card');
+  const first = await f.pay(req);
+  assert.equal(first.ok,true);
+  assert.deepEqual(first.data.fiscal.receipt.lines.map(l => [l.taxGroup,l.taxRate]),[['В',10],['А',18]]);
+  assert.deepEqual(await f.pay(req),first);
+  f.restart(makeAdapter());
+  assert.deepEqual(await f.pay(req),first);
+  const { DatabaseSync } = require('node:sqlite');
+  const device = new DatabaseSync(path.join(f.directory,'simulated-pf700.sqlite'),{readOnly:true});
+  try {
+    const sales = device.prepare('SELECT bill,cash,card,taxA,taxV FROM documents WHERE bill IS NOT NULL').all();
+    assert.equal(sales.length,1);
+    assert.deepEqual({...sales[0]},{bill:id,cash:0,card:340,taxA:180,taxV:160});
+  } finally { device.close(); }
+  const day = f.db.prepare('SELECT business_day_id AS id FROM payment_business_days').get().id;
+  const total = require('../src/desktop/account-a-bills').report(f.db,day);
+  assert.deepEqual([total.cash,total.card,total.total,total.records.length],[0,340,340,1]);
+  assert.equal(count(f.db,'payments'),1);
+});
+
+test('lost training reply is recovered from exact simulated evidence after restart without another sale', async t => {
+  const f = setup(t);
+  const training = require('../src/desktop/training-pf700').createTrainingPf700(f.directory);
+  let calls = 0;
+  const lost = {...training, async registerSale(receipt,context) {
+    calls++; await training.registerSale(receipt,context); throw Error('Lost simulated reply');
+  }};
+  f.db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
+  f.restart(lost);
+  const id=f.generate(), req=payment(id,'card');
+  assert.equal((await f.pay(req)).fiscalStatus,'uncertain');
+  assert.equal(count(f.db,'payments'),0);
+  f.restart(training);
+  assert.equal(f.pay(req).fiscalStatus,'uncertain');
+  const recovery = {billId:id,method:'card',account:'A',recoverSimulated:true};
+  assert.equal(f.untrusted(recovery).ok,false);
+  const result = await f.pay(recovery);
+  assert.equal(result.ok,true);
+  assert.equal(result.data.fiscal.receipt.total,340);
+  assert.equal(result.data.fiscal.receipt.method,'card');
+  assert.deepEqual(await f.pay(recovery),result);
+  f.restart(training);
+  assert.deepEqual(await f.pay(req),result);
+  assert.equal(calls,1);
+  assert.equal(count(f.db,'fiscal_checkout_attempts'),1);
+  assert.equal(count(f.db,'payments'),1);
+  const { DatabaseSync } = require('node:sqlite');
+  const device = new DatabaseSync(path.join(f.directory,'simulated-pf700.sqlite'),{readOnly:true});
+  try { assert.equal(device.prepare('SELECT count(*) n FROM documents WHERE bill=?').get(id).n,1); }
+  finally { device.close(); }
+  const day=f.db.prepare('SELECT business_day_id AS id FROM payment_business_days').get().id;
+  assert.equal(require('../src/desktop/account-a-bills').report(f.db,day).card,340);
+});
+
+test('another connection can match an issued training receipt while the original reply is pending', async t => {
+  const f=setup(t);
+  const training=require('../src/desktop/training-pf700').createTrainingPf700(f.directory);
+  let release, issued, calls=0;
+  const issuedSignal=new Promise(resolve=>{ issued=resolve; });
+  const adapter={...training, async registerSale(receipt,context) {
+    calls++; const result=await training.registerSale(receipt,context); issued();
+    await new Promise(resolve=>{release=resolve;}); return result;
+  }};
+  f.db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
+  f.restart(adapter);
+  const id=f.generate(), req=payment(id,'card');
+  const pending=f.pay(req);
+  await issuedSignal;
+  const other=openDatabase(f.directory);
+  try {
+    let pay;
+    registerPayments({handle:(_,fn)=>{pay=fn;}},()=>true,other,f.session,null,training);
+    const recovered=pay({}, {billId:id,method:'card',account:'A',recoverSimulated:true});
+    assert.equal(recovered.ok,true);
+    release();
+    assert.equal((await pending).fiscalStatus,'uncertain');
+    assert.deepEqual(await f.pay(req),recovered);
+    assert.equal(count(f.db,'payments'),1);
+    assert.equal(count(f.db,'fiscal_checkout_attempts'),1);
+    assert.equal(calls,1);
+  } finally { if (release) release(); other.close(); }
+});
 
 test('ordinary checkout connects generated cash/card A bills to the in-memory PF700 and preserves cash B', async t => {
   const f = setup(t);
@@ -280,7 +440,7 @@ test('invalid or simulated receipts from a device adapter remain uncertain and c
   const f = setup(t,{mode:'device',deviceId:'sample-PF700',domesticProduct:false,registerSale:() => ({
     status:'accepted',reference:'SIM-1',evidence:{documentNumber:'0000012',fiscalReceiptCount:5,reversalCount:1}
   })});
-  const req = payment(f.generate(),'card');
+  const req = payment(f.generate(),'cash');
   assert.equal((await f.pay(req)).fiscalStatus,'uncertain');
   assert.equal(f.pay(req).fiscalStatus,'uncertain');
   assert.equal(count(f.db,'fiscal_checkout_results'),0);
@@ -300,7 +460,7 @@ test('commissioning policy rejects an unsupported trial before freezing tender o
     VALUES(2,'arra-product-11-0','Espresso',70,1,'sent')`);
   const review = f.bills({action:'review',orderId:2});
   const bill = f.bills({action:'generate',orderId:2,fingerprint:review.data.fingerprint}).data.id;
-  assert.equal(f.pay(payment(bill,'card')).fiscalStatus,'scope');
+  assert.equal(f.pay(payment(bill,'card')).fiscalStatus,'cardDisabled');
   assert.equal(count(f.db,'fiscal_checkout_sales'),0);
   assert.equal(count(f.db,'fiscal_checkout_attempts'),0);
   assert.equal(calls,0);
