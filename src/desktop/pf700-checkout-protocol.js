@@ -46,6 +46,10 @@ function prepare(snapshot, domesticProduct, maxTotal) {
   return { items, sums, total: snapshot.total, method: snapshot.method };
 }
 
+function onsiteReceiptItems(snapshot) {
+  return prepare(snapshot, snapshot.domesticProduct, MAX_ONSITE_TOTAL).items;
+}
+
 function canEncodePf700Receipt(snapshot) {
   try {
     // Checkout reserves the payment selection before the device is identified.
@@ -250,4 +254,4 @@ async function registerSimulatedPf700Sale(snapshot) {
   return result.status === 'accepted' ? { status: 'accepted', reference: 'SIM-' + billId } : result;
 }
 
-module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt, simulatedResponse };
+module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt, onsiteReceiptItems, simulatedResponse };

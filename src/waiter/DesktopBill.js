@@ -32,6 +32,11 @@ const simulatedStages = Object.freeze({
   closed: 'The simulated receipt is closed. Finish recording the original payment.'
 });
 
+function submittedPhysicalCash(fiscal) {
+  return fiscal?.mode === 'device' && fiscal.method === 'cash' && fiscal.status === 'submitted' &&
+    typeof fiscal.reference === 'string' && /^[0-9]{7}$/.test(fiscal.reference);
+}
+
 function validPhysicalObservation(observation) {
   return !!observation && typeof observation.open === 'boolean' &&
     Number.isSafeInteger(observation.items) && observation.items >= 0 && observation.items <= 512 &&
@@ -114,7 +119,7 @@ export class DesktopBill extends React.Component {
     const physicalIntent = data.physicalCashIntent;
     const validPhysicalIntent = Number.isSafeInteger(physicalIntent?.id) && physicalIntent.id > 0 && physicalIntent.profileMatches === true &&
       data.fiscalMode === 'device' && data.physicalCashControls === true;
-    const physicalProfile = !!physicalIntent && !validPhysicalIntent;
+    const physicalProfile = !!physicalIntent && !validPhysicalIntent && !submittedPhysicalCash(fiscal);
     const status = wrongProfile || cashProfile || physicalProfile || ((data.simulatedCardApproval || data.simulatedCardIntent) && data.fiscalMode !== 'simulation') ? 'profile' : rejection || fiscal?.status;
     this.setState({
       data, loading: false, error: fiscalMessages[status] || '', simulatedRecoveryStage: null, physicalCheckAcknowledged:false, physicalObservation:null,
@@ -152,7 +157,7 @@ export class DesktopBill extends React.Component {
     finally { this.end(operation); }
   }
   async pay(terminalApproved = false) {
-    if (this.canCheckSimulatedCash() || this.state.fiscalHold || (this.state.uncertain && this.paymentSelection?.account === 'A' && this.state.data?.fiscalMode === 'device') ||
+    if (this.canCheckSimulatedCash() || this.state.fiscalHold || (this.state.uncertain && this.paymentSelection?.account === 'A' && !this.paymentSelection.acknowledgedDocument && this.state.data?.fiscalMode === 'device') ||
         !this.state.data?.id || (!this.paymentSelection && (!this.state.method || !this.state.account))) return;
     if (this.state.data.fiscalMode === 'simulation' && this.state.method === 'card' &&
         !this.paymentSelection && !this.state.data.simulatedCardApproval &&
@@ -161,6 +166,7 @@ export class DesktopBill extends React.Component {
     if (!this.paymentSelection && this.state.data.simulationRecoveryControls === true && this.state.data.fiscalMode === 'simulation' &&
         this.state.method === 'cash' && this.state.account === 'A' && !this.state.data.fiscal && this.state.simulationInterrupt && !cashIntent) return;
     let selection = this.paymentSelection || Object.freeze({ billId: this.state.data.id, method: this.state.method, account: this.state.method === 'card' ? 'A' : this.state.account,
+      ...(submittedPhysicalCash(this.state.data.fiscal) ? {acknowledgedDocument:this.state.data.fiscal.reference} : {}),
       ...(this.state.data.simulationRecoveryControls === true && this.state.data.fiscalMode === 'simulation' && !this.state.data.fiscal &&
           this.state.method === 'cash' && this.state.account === 'A' && cashIntent &&
           Number.isSafeInteger(cashIntent.id) && cashIntent.id > 0 && simulatedInterruptions.some(([stage]) => stage && stage === cashIntent.interruption)
@@ -203,6 +209,17 @@ export class DesktopBill extends React.Component {
       try { result = await desktopBridge.payment(selection); }
       catch (_) { result = { ok: false, uncertain: true, error: 'Payment result unknown. Retry the same selection.' }; }
       if (!this.current(operation)) return;
+      if (selection.acknowledgedDocument) {
+        if (result?.error === 'Access denied') {
+          this.paymentSelection = null;
+          this.props.onUncertain?.(false);
+          this.setState({data:null,uncertain:false,error:'Access denied'});
+          return;
+        }
+        const saved = result?.data?.fiscal;
+        if (result?.ok && (saved?.status !== 'accepted' || saved.mode !== 'device' || saved.method !== 'cash' ||
+            saved.reference !== selection.acknowledgedDocument)) result = {ok:false,uncertain:true};
+      }
       if (result?.ok) {
         if (result.data?.fiscal?.status === 'accepted') {
           this.showReceipt(result.data.fiscal, this.state.data);
@@ -238,7 +255,8 @@ export class DesktopBill extends React.Component {
         const uncertain = !!this.paymentSelection || this.state.uncertain || !!result?.uncertain;
         this.paymentSelection = uncertain ? selection : null;
         this.props.onUncertain?.(uncertain);
-        this.setState({ uncertain, error: this.serviceError(result?.error, 'Could not record payment. Retry the same selection.') });
+        this.setState({ uncertain, error: uncertain && selection.acknowledgedDocument ? fiscalMessages.submitted :
+          this.serviceError(result?.error, 'Could not record payment. Retry the same selection.') });
       }
     } finally { this.end(operation); }
   }
@@ -350,7 +368,7 @@ export class DesktopBill extends React.Component {
   }
   canCheckSimulatedCash() {
     const d = this.state.data;
-    return d?.id && d.fiscalMode === 'simulation' && d.simulationRecoveryControls === true &&
+    return d?.id && d.fiscalMode === 'simulation' && d.fiscal?.mode !== 'device' && d.simulationRecoveryControls === true &&
       this.state.method === 'cash' && this.state.account === 'A' &&
       (this.state.fiscalStatus === 'uncertain' || (this.state.uncertain && !!d.fiscal));
   }
@@ -410,7 +428,7 @@ export class DesktopBill extends React.Component {
     const fiscal = receipt || d?.fiscal;
     const device = (fiscal?.mode || d?.fiscalMode) === 'device';
     const submitted = this.state.fiscalStatus === 'submitted';
-    const unknownDevicePayment = this.state.uncertain && this.paymentSelection?.account === 'A' && d?.fiscalMode === 'device';
+    const unknownDevicePayment = this.state.uncertain && this.paymentSelection?.account === 'A' && !this.paymentSelection.acknowledgedDocument && d?.fiscalMode === 'device';
     const physicalControlsUnavailable = d?.fiscalMode === 'device' && this.state.method === 'cash' && this.state.account === 'A' &&
       !receipt && !submitted && d.physicalCashControls !== true;
     const canReloadPhysical = unknownDevicePayment && Number.isSafeInteger(this.paymentSelection?.physicalIntentId);
@@ -447,7 +465,7 @@ export class DesktopBill extends React.Component {
             h('p', { role: 'alert', className: 'bill-error' }, t(this.state.error)),
           physicalControlsUnavailable && h('p', {role:'alert',className:'bill-error'}, t('Cash checkout is unavailable. Reopen the original printer profile.')),
           receipt && h('p', { role: 'status', className: 'bill-status' }, receipt.reference, ' · ', t(receipt.method === 'card' ? 'Card' : 'Cash')),
-          !receipt && d?.fiscalMode === 'simulation' && this.state.account === 'A' &&
+          !receipt && !device && d?.fiscalMode === 'simulation' && this.state.account === 'A' &&
             h('p', { className: 'bill-status' }, t('Offline PF700 checkout. This payment uses a simulated printer.')),
           !receipt && d?.fiscalMode === 'simulation' && this.state.method === 'card' &&
             h('p', { className: 'bill-warning' }, t(this.state.fiscalTenderFixed || this.state.uncertain
@@ -473,7 +491,7 @@ export class DesktopBill extends React.Component {
               h('p', null, t('Amount reported: {amount}', {amount:moneyMinor(observed.amountMinor)})),
               h('p', null, t('Amount paid reported: {amount}', {amount:moneyMinor(observed.tenderMinor)})),
               h('p', null, t('Last document reported: {number}', {number:observed.lastDocumentNumber})))),
-          this.state.uncertain && !unknownDevicePayment && !simulatedCashCheck && !this.state.physicalPreparationUncertain && h('p', { className: 'bill-warning' }, t("The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.")),
+          this.state.uncertain && !unknownDevicePayment && !this.paymentSelection?.acknowledgedDocument && !simulatedCashCheck && !this.state.physicalPreparationUncertain && h('p', { className: 'bill-warning' }, t("The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.")),
           simulatedCashCheck && this.state.simulatedRecoveryStage && h('p', { role:'status', className:'bill-status' }, t(simulatedStages[this.state.simulatedRecoveryStage])),
           !receipt && !legacyTrial && d?.fiscalRequiresOrigins && this.state.account === 'A' && d.lines.some(l => !l.taxGroup || typeof l.domesticProduct !== 'boolean') &&
             h('p', { role: 'alert', className: 'bill-warning' }, t('A bill item is missing its saved VAT group or Macedonian-product mark. Ask Combined to check Menu management.')),

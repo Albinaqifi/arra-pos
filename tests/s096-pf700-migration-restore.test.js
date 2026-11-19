@@ -102,6 +102,45 @@ test('v49 legacy physical unknown remains held and retains its journal after upg
   db.close();
 });
 
+test('settlement attributes a historical verified Cash A snapshot to its saved payer and audits its authorized finisher', t => {
+  const root=tempRoot(t), directory=path.join(root,'data');
+  let db=authorizedDatabase(historicalDatabase(49).openDatabase(directory));
+  try {
+    require('../src/desktop/arra-menu').seedArraMenu(db);
+    // Distinct IDs exercise the accounting boundary using synthetic history.
+    // Normal waiter checkout keeps a single immutable owner for an order.
+    db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(2,'sample-original',x'00',x'00');
+      INSERT INTO financial_scopes VALUES(2,'waiter');
+      INSERT INTO user_permissions VALUES(2,'orders.view'),(2,'orders.change');
+      INSERT INTO dining_tables(id,area) VALUES(1,'sample');
+      INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+      INSERT INTO order_waiter_ownership VALUES(1,1,1,1,'open');
+      INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Sample',70,1,'sent');
+      INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,2,1,70,'sample');
+      INSERT INTO bill_lines(bill_id,item_id,name,unit_price,quantity,modifiers) VALUES(1,1,'Sample',70,1,'[]');`);
+    const snapshot={billId:1,account:'A',method:'cash',currency:'MKD',total:70,domesticProduct:false,
+      lines:[{itemId:1,name:'Sample',unitPrice:70,quantity:1,modifiers:[],taxGroup:'В',taxRate:10}]};
+    db.prepare("INSERT INTO fiscal_checkout_sales VALUES(1,2,'device',?,'cash',?,1)").run(serial,JSON.stringify(snapshot));
+    db.exec(`INSERT INTO fiscal_checkout_attempts VALUES(1,1,1);
+      INSERT INTO fiscal_checkout_baselines VALUES(1,'SYNTHETIC01','0000001');`);
+    const proof={documentNumber:'0000002',fiscalReceiptCount:1,reversalCount:0};
+    db.prepare("INSERT INTO fiscal_checkout_results VALUES(1,'accepted',?, ?, ?,2)").run('device-'+serial,proof.documentNumber,JSON.stringify(proof));
+    db.close();db=openDatabase(directory);
+    let actor=2, pay;
+    const session={currentUserId:()=>actor,authenticatedUserId:()=>actor,identityGeneration:()=>actor};
+    registerPayments({handle:(_,fn)=>{pay=fn;}},()=>true,db,session);
+    const request={billId:1,method:'cash',account:'A',acknowledgedDocument:proof.documentNumber};
+    assert.equal(pay({},request).error,'Access denied');
+    actor=1;
+    const first=pay({},request);
+    assert.equal(first.ok,true);
+    assert.deepEqual(pay({},request),first);
+    assert.equal(db.prepare('SELECT actor_id FROM payments').get().actor_id,2);
+    assert.deepEqual(db.prepare("SELECT actor_id FROM application_audit WHERE action='recover' AND entity_type='fiscal_checkout'").all().map(row=>row.actor_id),[1]);
+    assert.equal(db.prepare('SELECT count(*) n FROM pf700_cash_intents').get().n,0);
+  } finally {db.close();}
+});
+
 test('backup and isolated restore preserve outstanding physical intent and unacknowledged command', async t => {
   const root=tempRoot(t), source=path.join(root,'source'), restored=path.join(root,'restored');
   fs.mkdirSync(source);fs.mkdirSync(restored);

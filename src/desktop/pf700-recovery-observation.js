@@ -24,6 +24,9 @@ function candidate(db,billId,adapter) {
   let identity;
   try { identity=JSON.parse(commands[0].summary); } catch { return null; }
   if (identity?.identityMatched!==true || identity.onsiteFirmware!==true) return null;
+  // A complete receipt already has its final document acknowledgement. The
+  // saved result can be finished locally without replacing the printer reply.
+  if (require('./pf700-closed-cash-trace').readClosedCashTrace(db,billId)) return null;
   return row;
 }
 

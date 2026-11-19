@@ -110,6 +110,7 @@ for (const [command,mode] of [[48,'before'],[48,'after'],[49,'before'],[49,'afte
     assert.ok(ledger.every(row=>row.command === 48 ? row.requestHash === null : /^[a-f0-9]{64}$/.test(row.requestHash)));
     f.restart();
     assert.equal(f.pay({...f.req,releasePhysicalCash:true}).fiscalStatus,'uncertain');
+    assert.equal(f.pay({...f.req,acknowledgedDocument:'0000002'}).fiscalStatus,'uncertain');
     assert.equal((await f.pay(start)).fiscalStatus,'uncertain');
     assert.equal(f.pay({...f.req,account:'B'}).fiscalStatus,'selection');
     assert.equal(f.pay({...f.req,method:'card'}).fiscalStatus,'selection');
@@ -133,6 +134,57 @@ test('released pre-dispatch intent cannot be revived by a delayed start request'
   assert.equal((await f.pay({...f.req,physicalIntentId:prepared.data.intentId})).ok,false);
   assert.equal(f.device.transcript.length,0);
   assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,0);
+});
+
+test('two sessions settle the same saved Cash A document once after restart with no printer output', windows, async t => {
+  const f=fixture(t);
+  const finish={...f.req,acknowledgedDocument:'0000002'};
+  assert.equal(f.pay(finish).fiscalStatus,'uncertain');
+  assert.equal(f.device.transcript.length,0);
+  const prepared=f.pay({...f.req,preparePhysicalCash:true});
+  assert.equal(prepared.ok,true);
+  assert.equal(f.pay(finish).fiscalStatus,'uncertain');
+  assert.equal(f.device.transcript.length,0);
+  f.db.exec("CREATE TEMP TRIGGER interrupt_settlement BEFORE INSERT ON payments BEGIN SELECT RAISE(ABORT,'interrupted'); END");
+  assert.equal((await f.pay({...f.req,physicalIntentId:prepared.data.intentId})).fiscalStatus,'submitted');
+  const commands=f.device.transcript.length;
+  f.restart(); // The connection-local trigger also disappears.
+  const review=f.bills({action:'review',orderId:1}).data;
+  assert.equal(review.fiscal.status,'submitted');
+  assert.equal(review.fiscal.reference,finish.acknowledgedDocument);
+  assert.equal(f.device.state.closes,1);
+  assert.equal(f.device.state.tenders,1);
+  assert.equal(f.untrusted(finish).ok,false);
+  f.switchActor(2);
+  assert.equal(f.pay(finish).error,'Access denied');
+  f.switchActor(1);
+  assert.equal(f.pay({...finish,acknowledgedDocument:'0000001'}).fiscalStatus,'uncertain');
+  for (const wrong of [{...finish,acknowledgedDocument:2},{...finish,account:'B'},{...finish,method:'card'}]) {
+    assert.equal(f.pay(wrong).error,'Invalid request');
+  }
+  assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,0);
+  const second=f.openOtherConnection();
+  try {
+    let pay, paperCalls=0;
+    second.prepare("UPDATE bill_printer_queues SET queue='Sample paper printer' WHERE account='A'").run();
+    const session={currentUserId:()=>1,authenticatedUserId:()=>1,identityGeneration:()=>1};
+    registerPayments({handle:(_,fn)=>{pay=fn;}},()=>true,second,session,()=>{paperCalls++;return 'accepted';},null);
+    const first=await pay({},finish);
+    assert.equal(first.ok,true);
+    assert.equal(first.data.fiscal.reference,finish.acknowledgedDocument);
+    assert.deepEqual(await f.pay(finish),first);
+    assert.deepEqual(await pay({},finish),first);
+    assert.equal(f.pay({...finish,acknowledgedDocument:'0000003'}).fiscalStatus,'uncertain');
+    assert.equal(paperCalls,0);
+    assert.deepEqual(f.db.prepare('SELECT actor_id,method,account FROM payments').all().map(row=>({...row})),[{actor_id:1,method:'cash',account:'A'}]);
+    assert.deepEqual(f.db.prepare('SELECT actor_id,status FROM pf700_cash_intent_results').all().map(row=>({...row})),[{actor_id:1,status:'paid'}]);
+    assert.deepEqual(f.db.prepare("SELECT actor_id FROM application_audit WHERE action='recover' AND entity_type='fiscal_checkout'").all().map(row=>row.actor_id),[1]);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM test_print_attempts').get().n,0);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_checkout_attempts').get().n,1);
+    assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_checkout_verified_results').get().n,1);
+    assert.equal(f.db.prepare('SELECT status FROM orders WHERE id=1').get().status,'completed');
+    assert.equal(f.device.transcript.length,commands);
+  } finally {second.close();}
 });
 
 test('supported legacy printer completes once with a semantically checked subtotal in the ledger', windows, async t => {

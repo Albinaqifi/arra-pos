@@ -52,11 +52,16 @@ function readFiscalCheckout(db, billId) {
     WHERE s.bill_id=? ORDER BY a.id DESC LIMIT 1`).get(billId);
   if (!row) return null;
   let status = row.status || (active.get(db)?.has(row.attemptId) ? 'pending' : 'uncertain');
+  // A crash can leave the final, validated document ACK in the journal before
+  // the sender saves its result. Bill review projects the evidence read-only.
+  const trace = status === 'uncertain' && row.mode === 'device' && row.method === 'cash'
+    ? require('./pf700-closed-cash-trace').readClosedCashTrace(db, billId) : null;
+  if (trace) status = 'submitted';
   if (status === 'accepted' && !row.paid) status = 'submitted';
   const baseline = row.previousDocumentNumber ? {deviceId:row.deviceId,previousDocumentNumber:row.previousDocumentNumber,
     expectedDocumentNumber:String(Number(row.previousDocumentNumber)+1).padStart(7,'0')} : null;
-  const proof = row.evidence && JSON.parse(row.evidence);
-  return { mode: row.mode, status, reference: row.reference, method: row.method, receipt: JSON.parse(row.receipt),
+  const proof = trace?.evidence || (row.evidence && JSON.parse(row.evidence));
+  return { mode: row.mode, status, reference: trace?.reference ?? row.reference, method: row.method, receipt: JSON.parse(row.receipt),
     ...(row.deviceId ? { deviceId: row.deviceId } : {}), ...(baseline ? {baseline} : {}),
     ...(proof ? {evidence:{documentNumber:proof.documentNumber,fiscalReceiptCount:proof.fiscalReceiptCount,reversalCount:proof.reversalCount}} : {}) };
 }
@@ -175,6 +180,13 @@ async function submitSale(db, adapter, reservation) {
     const source = adapter.mode === 'simulation' ? 'simulation' : 'device-' + adapter.deviceId;
     if (physicalTrace) db.exec('BEGIN IMMEDIATE');
     try {
+      // Another authorized session can finish the same complete trace while
+      // this sender is releasing its port after the last ACK.
+      if (physicalTrace && accepted && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
+        WHERE attempt_id=? AND status='accepted' AND source=? AND reference=? AND evidence=?`)
+        .get(attemptId,source,accepted.reference,accepted.evidence)) {
+        db.exec('COMMIT'); return { ok:true };
+      }
       if (physicalTrace && db.prepare('SELECT 1 FROM pf700_command_seals WHERE attempt_id=?').get(attemptId)) {
         db.exec('ROLLBACK'); return failure('uncertain');
       }

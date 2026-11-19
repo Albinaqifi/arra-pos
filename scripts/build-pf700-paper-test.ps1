@@ -4,7 +4,8 @@ param(
     [Parameter(ParameterSetName = 'Reply')][switch]$CheckReplyOnly,
     [Parameter(ParameterSetName = 'Vat')][switch]$CheckVatRates,
     [Parameter(ParameterSetName = 'Identity')][switch]$CompareIdentity,
-    [Parameter(ParameterSetName = 'Journal')][switch]$CheckJournal
+    [Parameter(ParameterSetName = 'Journal', Mandatory)][switch]$CheckJournal,
+    [Parameter(ParameterSetName = 'Journal')][string]$JournalRuntimeDirectory
 )
 $ErrorActionPreference = 'Stop'
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot '..\build\sample-installer' }
@@ -16,7 +17,7 @@ $sources = @(
     'src/desktop/pf700-frame.js'
 )
 if ($CheckJournal) {
-    $filename = 'Arra-PF700-Journal-Check.zip'
+    $filename = if ($JournalRuntimeDirectory) { 'Arra-S096-USB-Test-v5.zip' } else { 'Arra-PF700-Journal-Check-v5.zip' }
     $sources = @('scripts/pf700-journal-check/PF700-Journal-Check.cmd', 'scripts/pf700-journal-check/README.txt', 'scripts/pf700-journal-check/journal-check.js',
         'scripts/pf700-journal-check/journal-exchange.ps1', 'src/desktop/pf700-frame.js', 'src/desktop/pf700-windows-checkout.js',
         'src/desktop/pf700-checkout-protocol.js')
@@ -42,6 +43,11 @@ try {
         foreach ($source in $sources) {
             $entry = if ($CompareIdentity -or $source.EndsWith('.cmd') -or ($CheckJournal -and $source.EndsWith('/README.txt'))) { [IO.Path]::GetFileName($source) } else { $source }
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $repo $source), $entry)
+        }
+        if ($CheckJournal -and $JournalRuntimeDirectory) {
+            foreach ($file in @('node.exe', 'NODE-LICENSE.txt')) {
+                [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $JournalRuntimeDirectory $file), ('runtime/' + $file))
+            }
         }
     } finally {
         $archive.Dispose()
