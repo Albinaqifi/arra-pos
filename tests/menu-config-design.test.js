@@ -1,12 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-function setup(api) {
+function setup(api, language = 'en') {
   class Component { constructor(props) { this.props = props; } setState(update) { Object.assign(this.state, update); } }
   const React = { Component, createElement(type, props, ...children) { return { type, props: props || {}, children }; } };
   const context = { React, window: { arra: { menuConfig: api } } };
   vm.runInNewContext(require('./support/admin-bundle')(), context);
-  return new context.ArraComponents.MenuConfig({ onBack() {} });
+  return new context.ArraComponents.MenuConfig({ onBack() {}, language });
 }
 function find(node, predicate) {
   if (!node || typeof node !== 'object') return null;
@@ -15,6 +15,25 @@ function find(node, predicate) {
   return null;
 }
 const sample = { categories: [{ id: 'c', name: 'Food', parentId: null, sortOrder: 0, active: 1 }, { id: 'sub', name: 'Grill', parentId: 'c', sortOrder: 1, active: 1 }], products: [{ id: 'p', categoryId: 'sub', name: 'Dish', price: 100, sortOrder: 1, destination: 'bar', active: 1 }], groups: [{ id: 'g', productId: 'p', name: 'Size', required: 1, active: 1 }], options: [{ id: 'o', groupId: 'g', name: 'Large', adjustment: 20, active: 1 }] };
+test('product editor saves the explicitly selected dine-in VAT group in either language', async () => {
+  for (const [language, label, unknown] of [
+    ['en', 'Dine-in VAT group', 'Unclassified'], ['sq', 'Grupi i TVSH-se per shitjet ne lokal', 'Pa klasifikim']
+  ]) {
+    const writes = [];
+    const page = setup(async request => {
+      if (request.action === 'list') return { ok: true, data: sample };
+      writes.push(request); return { ok: true };
+    }, language);
+    await page.load(); page.edit('product', sample.products[0]);
+    const field = find(page.render(), node => node.type === 'label' && node.children[0]?.children?.[0] === label);
+    const select = find(field, node => node.type === 'select');
+    assert.equal(select.props.value, '');
+    assert.ok(select.children[0].children[0].startsWith(unknown));
+    assert.deepEqual([...select.children.map(option => option.props.value)], ['', 'В', 'А']);
+    select.props.onChange({ target: { value: 'А' } });
+    await page.save(); assert.equal(writes[0].taxGroup, 'А');
+  }
+});
 test('menu hierarchy provides contextual editors, validation and save feedback', async () => {
   const calls = []; let fail = false;
   const page = setup(async request => { calls.push(request); return request.action === 'list' ? { ok: true, data: sample } : fail ? { ok: false, error: 'Rejected' } : { ok: true }; });

@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { randomBytes, randomInt } = require('node:crypto');
@@ -29,7 +30,7 @@ function setup(t) {
   register();
   const call=(channel,req,sender=event)=>handlers['arra:'+channel](sender,req);
   t.after(()=>{ db.close(); fs.rmSync(dir,{recursive:true,force:true}); });
-  return { get db(){return db;}, call, actor:id=>actor=id, reopen:()=>{db.close();db=openDatabase(dir);register();}, downgrade:()=>{db.exec('DROP TABLE legacy_unassigned_orders; DROP TABLE order_waiter_ownership; PRAGMA user_version=42');db.close();db=openDatabase(dir);register();} };
+  return { get db(){return db;}, call, actor:id=>actor=id, reopen:()=>{db.close();db=openDatabase(dir);register();}, downgrade:()=>{db.exec(removeFiscalSchemaSql + 'DROP TABLE legacy_unassigned_orders; DROP TABLE order_waiter_ownership; PRAGMA user_version=42');db.close();db=openDatabase(dir);register();} };
 }
 
 test('owners are enforced for direct access, printing, moves and payment retries', t=>{

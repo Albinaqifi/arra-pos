@@ -17,4 +17,20 @@ function historicalDatabase(version) {
   return module.exports;
 }
 
-module.exports = { historicalDatabase };
+// Older test fixtures assemble prior schemas by removing later migrations.
+// Remove v45 and v44 objects before rebuilding their referenced tables.
+const removeFiscalSchemaSql = `
+  DROP TRIGGER IF EXISTS fiscal_checkout_day_guard;
+  DROP TRIGGER IF EXISTS fiscal_checkout_shift_guard;
+  DROP TRIGGER IF EXISTS fiscal_checkout_payment_guard;
+  DROP VIEW IF EXISTS fiscal_checkout_open_device_sales;
+  DROP VIEW IF EXISTS fiscal_checkout_verified_results;
+  DROP TABLE IF EXISTS fiscal_checkout_baselines;
+  DROP TABLE IF EXISTS fiscal_checkout_results;
+  DROP TABLE IF EXISTS fiscal_checkout_attempts;
+  DROP TABLE IF EXISTS fiscal_checkout_sales;
+  DROP TRIGGER IF EXISTS order_item_snapshot_fiscal_tax;
+  DROP TABLE IF EXISTS order_item_fiscal_tax;
+  DROP TABLE IF EXISTS menu_product_fiscal_tax;
+`;
+module.exports = { historicalDatabase, removeFiscalSchemaSql };

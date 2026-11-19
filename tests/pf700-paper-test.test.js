@@ -1,0 +1,365 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
+const { runSequence, runDiagnostic } = require('../scripts/pf700-paper-test/paper-test');
+const { runReplyCheck, runReplySequence } = require('../scripts/pf700-paper-test/check-reply');
+const { runVatCheck, runVatSequence } = require('../scripts/pf700-paper-test/check-vat');
+
+const baseline = Buffer.from('888080e1809a', 'hex');
+const closed = Buffer.from('0,0000,000000000');
+const exampleReplies = [
+  '0131204a888080e1809a04888080e1809a0530373a3a03',
+  '013b214c302c303030302c30303030303030303004888080e1809a053037323c03',
+  '012b224704888080e1809a053034323003'
+];
+
+function reply(step, { data, status = baseline, sequence = step.sequence, command = step.command } = {}) {
+  const payload = data ?? ({ status: baseline, document: closed, print: Buffer.alloc(0) })[step.name];
+  const body = Buffer.from([0x2b + payload.length, sequence, command, ...payload, 0x04, ...status, 0x05]);
+  const sum = body.reduce((total, byte) => total + byte, 0);
+  const bcc = sum.toString(16).padStart(4, '0').split('').map(digit => 0x30 + parseInt(digit, 16));
+  return Buffer.from([1, ...body, ...bcc, 3]);
+}
+
+test('VAT check rehearses offline and accepts only its exact hardware option', async () => {
+  let calls = 0;
+  const live = () => { calls++; return 'sample result'; };
+  assert.match(await runVatCheck([], live), /Offline.*simulated/);
+  for (const args of [['--read'], ['--READ-VAT-RATES'], ['--read-vat-rates', 'COM3'], ['--check-reply'], ['--print-diagnostic-slip']]) {
+    await assert.rejects(runVatCheck(args, live), /Use no arguments/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(await runVatCheck(['--read-vat-rates'], live), 'sample result');
+  assert.equal(calls, 1);
+});
+
+test('VAT check sends only status X and one empty command 97 and labels rates in printer order', async () => {
+  const requests = [];
+  const result = await runVatSequence(0x20, step => {
+    requests.push(step.request.toString('hex'));
+    return reply(step, step.name === 'vatRates' ? { data: Buffer.from(' 18.0,05 , 010.00 ,0') } : {});
+  });
+  assert.deepEqual(requests, ['0125204a580530303e3c03', '012421610530303a3b03']);
+  assert.match(result, /A = 18\.0%, B = 05%, V = 010\.00%, G = 0%/);
+  assert.match(result, /Group V \(third group\) is configured at 10%\./);
+});
+
+test('VAT check compares literal percentages only in the third field', async () => {
+  for (const third of ['10', '10.0', '10.00', '0', '0.10', '1.00', '9.99', '10.01', '99.00']) {
+    const sent = [];
+    const result = await runVatSequence(0x7f, step => {
+      sent.push([step.sequence, step.command]);
+      return reply(step, step.name === 'vatRates' ? { data: Buffer.from(`10,5,${third},10`) } : {});
+    });
+    assert.deepEqual(sent, [[0x7f, 74], [0x20, 97]]);
+    if (Number(third) === 10) {
+      assert.match(result, /Group V \(third group\) is configured at 10%\./);
+    } else {
+      assert.ok(result.endsWith(`Group V (third group) is configured at ${third}%. The expected rate is 10%.`));
+    }
+  }
+});
+
+test('unrecognized VAT data cannot confirm any group and only exposes short numeric values or a masked layout', async () => {
+  for (const [data, evidence] of [
+    ['', '(empty)'], ['18,5,10', '##,#,##'], ['18,5,10,0,0', '##,#,##,#,#'],
+    ['18,DT,10,0', '18,??,10,0'], ['18,,10,0', '18,,10,0'], ['100,5,10,0', '100,5,10,0'],
+    ['99.01,5,10,0', '99.01,5,10,0'], ['1800,500,1000,0', '1800,500,1000,0'],
+    ['18,5,10.000,0', '18,5,10.000,0'], ['18,5,1e1,0', '18,5,#?#,0'],
+    ['18,5,10%,0', '18,5,##%,0'], ['18,5,1 0,0', '18,5,#_#,0'],
+    ['18,5,-10,0', '18,5,-##,0'], ['18,5,10.,0', '18,5,10.,0'],
+    ['ABC,5,10,12345678', '???,5,10,########'],
+    [Buffer.from([0x31, 0x38, 0x2c, 0x35, 0x2c, 0xb1, 0xb0, 0x2c, 0x30]), '18,5,??,0']
+  ]) {
+    const sent = [];
+    await assert.rejects(runVatSequence(0x20, step => {
+      sent.push(step.name);
+      return reply(step, step.name === 'vatRates' ? { data: Buffer.from(data) } : {});
+    }), error => {
+      assert.ok(error.message.includes('Group V is unconfirmed.'));
+      assert.ok(error.message.endsWith(' = ' + evidence), error.message);
+      return true;
+    });
+    assert.deepEqual(sent, ['status', 'vatRates']);
+  }
+});
+
+test('rejected, stale, corrupt, missing or error-bearing responses stop the VAT check without retry', async () => {
+  const unsafe = Buffer.from(baseline);
+  unsafe[0] |= 2;
+  for (const phase of ['status', 'vatRates']) {
+    for (const failure of [
+      () => { throw new Error('Timeout'); },
+      () => Buffer.from([0x15]),
+      () => Buffer.alloc(0),
+      (step, data) => reply(step, { data, sequence: step.sequence + 1 }),
+      (step, data) => reply(step, { data, command: 0x53 }),
+      (step, data) => reply(step, { data, status: unsafe }),
+      (step, data) => { const frame = reply(step, { data }); frame[frame.length - 3] ^= 1; return frame; }
+    ]) {
+      const sent = [];
+      await assert.rejects(runVatSequence(0x20, step => {
+        sent.push(step.command);
+        const data = step.name === 'vatRates' ? Buffer.from('18,5,10,0') : baseline;
+        return step.name === phase ? failure(step, data) : reply(step, { data });
+      }));
+      assert.deepEqual(sent, phase === 'status' ? [74] : [74, 97]);
+    }
+  }
+});
+
+test('reply check defaults to simulation and accepts only its explicit read option', async () => {
+  let calls = 0;
+  const live = () => { calls++; return 'read only'; };
+  assert.equal(await runReplyCheck([], live), 'Reply format: 13 bytes | 0,_##,+###.## (offline rehearsal)');
+  for (const args of [['--print-diagnostic-slip'], ['--CHECK-REPLY'], ['--check'], ['--check-reply', '71']]) {
+    await assert.rejects(runReplyCheck(args, live), /Use no arguments/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(await runReplyCheck(['--check-reply'], live), 'read only');
+  assert.equal(calls, 1);
+});
+
+test('read-only check sends only status X and a fresh command 76, even for an unfamiliar layout', async () => {
+  const sent = [];
+  const unfamiliar = Buffer.from('0,+15.79');
+  const result = await runReplySequence(0x7f, step => {
+    sent.push([step.sequence, step.command, step.request.subarray(4, -6).toString('ascii')]);
+    return reply(step, step.name === 'document' ? { data: unfamiliar } : {});
+  });
+  assert.deepEqual(sent, [[0x7f, 74, 'X'], [0x20, 76, '']]);
+  assert.equal(result, 'Reply format: 8 bytes | 0,+##.##');
+  const paperCommands = [];
+  await assert.rejects(runSequence(0x7f, step => {
+    paperCommands.push(step.command);
+    return reply(step, step.name === 'document' ? { data: unfamiliar } : {});
+  }), /No print command was sent. Invalid receipt-state reply/);
+  assert.deepEqual(paperCommands, [74, 76]);
+});
+
+test('layout masks each private byte and retains only an isolated initial flag and safe punctuation', async () => {
+  for (const [data, layout] of [
+    [Buffer.from([0x31, 0x2c, 0x20, 0x41, 0x62, 0xff, 0x3b, 0x2d, 0x35, 0x2e, 0x31, 0x7c, 0x30]), '1,_???;-#.#|#'],
+    [Buffer.from('001,00,1,+1'), '###,##,#,+#'],
+    [Buffer.from('1.00'), '#.##'],
+    [Buffer.from('2'), '#'],
+    [Buffer.from('0'), '0'],
+    [Buffer.from('1'), '1'],
+    [Buffer.alloc(0), '(empty)'],
+    [Buffer.alloc(84, 0xab), '?'.repeat(84)]
+  ]) {
+    const result = await runReplySequence(0x20, step => reply(step, step.name === 'document' ? { data } : {}));
+    assert.equal(result, `Reply format: ${data.length} ${data.length === 1 ? 'byte' : 'bytes'} | ${layout}`);
+    assert.ok(result.length <= 110);
+  }
+});
+
+test('reply check rejects stale, unrelated, damaged and error-bearing packets before reporting a layout', async () => {
+  const coverOpen = Buffer.from(baseline);
+  coverOpen[1] |= 0x20;
+  for (const phase of ['status', 'document']) {
+    for (const invalid of [
+      step => reply(step, { sequence: step.sequence + 1 }),
+      step => reply(step, { command: 0x47 }),
+      step => reply(step, { status: coverOpen }),
+      step => reply(step, { data: Buffer.from([0x0d]) }),
+      step => { const frame = reply(step); frame[frame.length - 4] ^= 1; return frame; },
+      () => Buffer.from([0x15]),
+      () => Buffer.alloc(0)
+    ]) {
+      const sent = [];
+      await assert.rejects(runReplySequence(0x20, step => {
+        sent.push(step.command);
+        return step.name === phase ? invalid(step) : reply(step);
+      }), /Invalid|Unexpected|rejected|open/);
+      assert.deepEqual(sent, phase === 'status' ? [74] : [74, 76]);
+    }
+  }
+});
+
+test('paper-test CLI defaults to rehearsal and accepts just the exact explicit live option', async () => {
+  let calls = 0;
+  const live = () => { calls++; return 'stub'; };
+  assert.match(await runDiagnostic([], live), /Offline.*simulated/);
+  for (const args of [['--print'], ['--PRINT-DIAGNOSTIC-SLIP'], ['--print-diagnostic-slip', 'COM3'], ['0x47']]) {
+    await assert.rejects(runDiagnostic(args, live), /Use no arguments/);
+  }
+  assert.equal(calls, 0);
+  assert.equal(await runDiagnostic(['--print-diagnostic-slip'], live), 'stub');
+  assert.equal(calls, 1);
+});
+
+test('status, fresh document query and a single empty diagnostic use the expected wire vectors', async () => {
+  const requests = [];
+  await runSequence(0x20, step => {
+    requests.push(step.request.toString('hex'));
+    return Buffer.from(exampleReplies[requests.length - 1], 'hex');
+  });
+  assert.deepEqual(requests, ['0125204a580530303e3c03', '0124214c053030393603', '01242247053030393203']);
+  const sequences = [];
+  await runSequence(0x7e, step => {
+    sequences.push(step.sequence);
+    return reply(step);
+  });
+  assert.deepEqual(sequences, [0x7e, 0x7f, 0x20]);
+});
+
+test('stale, malformed or missing preflight replies stop before the print command', async () => {
+  for (const name of ['status', 'document']) {
+    for (const invalid of [
+      step => reply(step, { sequence: step.sequence + 1 }),
+      step => reply(step, { command: 0x47 }),
+      step => reply(step, { data: Buffer.alloc(0) }),
+      step => { const damaged = reply(step); damaged[damaged.length - 4] ^= 1; return damaged; },
+      () => Buffer.from([0x15]),
+      () => { throw new Error('Timeout'); }
+    ]) {
+      const sent = [];
+      await assert.rejects(runSequence(0x20, step => {
+        sent.push(step.name);
+        return step.name === name ? invalid(step) : reply(step);
+      }), /No print command was sent/);
+      assert.deepEqual(sent, name === 'status' ? ['status'] : ['status', 'document']);
+    }
+  }
+});
+
+test('only a valid closed receipt-state tuple permits the diagnostic', async () => {
+  for (const data of ['1,0000,000000000', '2,0000,000000000', '0,000,000000000', '0,0000,12',
+    '0,0000,_________', '0,xxxx,000000000', '0,0000,000000000,', '0,0000,000000000,000000000,extra']) {
+    const sent = [];
+    await assert.rejects(runSequence(0x20, step => {
+      sent.push(step.name);
+      return reply(step, step.name === 'document' ? { data: Buffer.from(data) } : {});
+    }), /No print command was sent/);
+    assert.deepEqual(sent, ['status', 'document']);
+  }
+  await runSequence(0x20, step => reply(step, step.name === 'document'
+    ? { data: Buffer.from('0,   0,+00000000,-00000000') } : {}));
+});
+
+test('a sign followed by nine digits in the PF700 amount permits one diagnostic only for a closed receipt', async () => {
+  for (const [payload, expected] of [
+    ['0,0000,+000000123', 'print'],
+    ['0,0042,-000000123', 'print'],
+    ['1,0000,+000000123', /open document/],
+    ['0,0000,0000000123', /Invalid receipt-state/],
+    ['0,0000,+0000000123', /Invalid receipt-state/],
+    ['0,0000,+0000001.3', /Invalid receipt-state/],
+    ['0,0000,+ 00000123', /Invalid receipt-state/],
+    ['0,0000,++00000123', /Invalid receipt-state/],
+  ]) {
+    const commands = [];
+    const exchange = step => {
+      commands.push(step.command);
+      return reply(step, step.name === 'document' ? { data: Buffer.from(payload) } : {});
+    };
+    if (expected === 'print') {
+      await runSequence(0x20, exchange);
+      assert.deepEqual(commands, [74, 76, 71]);
+    } else {
+      await assert.rejects(runSequence(0x20, exchange), expected);
+      assert.deepEqual(commands, [74, 76]);
+    }
+  }
+});
+
+test('checks status data and frame trailers for device errors, open receipts and paper out', async () => {
+  for (const [byte, mask] of [[0, 0x01], [0, 0x02], [0, 0x10], [0, 0x20],
+    [1, 0x02], [1, 0x08], [1, 0x20], [2, 0x01], [2, 0x04], [2, 0x08], [4, 0x20], [5, 1]]) {
+    const unsafe = Buffer.from(baseline);
+    unsafe[byte] |= mask;
+    for (const [phase, field] of [['status', 'data'], ['status', 'status'], ['document', 'status']]) {
+      let last;
+      await assert.rejects(runSequence(0x20, step => {
+        last = step.name;
+        return reply(step, step.name === phase ? { [field]: unsafe } : {});
+      }), /No print command was sent/);
+      assert.equal(last, phase);
+    }
+  }
+  const lowPaper = Buffer.from(baseline);
+  lowPaper[2] |= 0x12;
+  await runSequence(0x20, step => reply(step, { status: lowPaper }));
+});
+
+test('timeout, NAK, invalid, error-bearing or stale print reply is uncertain and never retried', async () => {
+  const paperOut = Buffer.from(baseline);
+  paperOut[2] |= 1;
+  for (const result of [
+    () => { throw new Error('Timeout'); },
+    () => Buffer.from([0x15]),
+    step => reply(step, { sequence: step.sequence - 1 }),
+    step => reply(step, { command: 0x4c }),
+    step => reply(step, { status: paperOut }),
+    step => reply(step, { data: Buffer.from('X') }),
+    step => reply(step).subarray(0, 8),
+    step => { const frame = reply(step); frame[12] ^= 1; return frame; }
+  ]) {
+    const sent = [];
+    await assert.rejects(runSequence(0x20, step => {
+      sent.push(step.name);
+      return step.name === 'print' ? result(step) : reply(step);
+    }), /uncertain.*Check the printer and paper/);
+    assert.deepEqual(sent, ['status', 'document', 'print']);
+  }
+});
+
+test('Windows paper exchange uses one handle, strips busy bytes and respects withdrawn permission', {
+  skip: process.platform !== 'win32'
+}, () => {
+  const helper = readFileSync(path.join(__dirname, '../scripts/pf700-paper-test/paper-exchange.ps1'), 'utf8');
+  // In-memory port, with no serial enumeration or IO.Ports.SerialPort instance.
+  const script = `
+$ErrorActionPreference = 'Stop'
+${helper}
+class FakePort {
+    [int]$Opened
+    [int]$Disposed
+    [int]$BytesToRead
+    [Collections.Generic.List[byte]]$Written = [Collections.Generic.List[byte]]::new()
+    [Collections.Generic.Queue[byte]]$Reply = [Collections.Generic.Queue[byte]]::new()
+    [void]Open() { $this.Opened++ }
+    [void]Dispose() { $this.Disposed++ }
+    [void]Write([byte[]]$value, [int]$offset, [int]$length) {
+        $this.Written.Add($value[$offset])
+        foreach ($b in @(22, 22, 1, 3)) { $this.Reply.Enqueue($b) }
+    }
+    [int]ReadByte() { return $this.Reply.Dequeue() }
+}
+$requests = @{status = @(74); document = @(76); print = @(71)}
+function Check-Fake($markers, $wantWrites) {
+    $port = [FakePort]::new()
+    [Console]::SetIn([IO.StringReader]::new($markers))
+    $capture = [IO.StringWriter]::new()
+    [Console]::SetOut($capture)
+    Invoke-Pf700PaperExchange $port $requests
+    if ($port.Opened -ne 1 -or $port.Disposed -ne 1 -or ($port.Written -join ',') -cne $wantWrites) {
+        throw 'Unexpected port lifecycle or command sequence.'
+    }
+    $actual = $capture.ToString().Trim().Split([Environment]::NewLine, [StringSplitOptions]::RemoveEmptyEntries)
+    if ($actual.Count -ne $port.Written.Count -or @($actual | Where-Object { $_ -cne '0103' }).Count) {
+        throw 'Unexpected mock reply.'
+    }
+}
+Check-Fake ("status" + [Environment]::NewLine + "document" + [Environment]::NewLine + "print") '74,76,71'
+Check-Fake ("status" + [Environment]::NewLine + "document") '74,76'
+Check-Fake ("status" + [Environment]::NewLine + "print") '74'
+$requests.Remove('print')
+Check-Fake ("status" + [Environment]::NewLine + "document" + [Environment]::NewLine + "print") '74,76'
+if ([Console]::ReadLine() -cne 'print') { throw 'Read-only plan waited for an extra operation.' }
+$requests = @{status = @(74); vatRates = @(97)}
+Check-Fake ("status" + [Environment]::NewLine + "vatRates" + [Environment]::NewLine + "print") '74,97'
+if ([Console]::ReadLine() -cne 'print') { throw 'VAT plan waited for an extra operation.' }
+Check-Fake ("status" + [Environment]::NewLine + "print") '74'
+$requests.Add('print', @(71))
+$port = [FakePort]::new()
+Invoke-Pf700PaperExchange $port $requests
+if ($port.Opened -ne 0 -or $port.Written.Count -ne 0) { throw 'Accepted mixed VAT/print plan.' }
+exit 0`;
+  execFileSync(path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { windowsHide: true, timeout: 12000, stdio: ['ignore', 'pipe', 'pipe'] });
+});

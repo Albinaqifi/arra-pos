@@ -1,4 +1,8 @@
 {
+  "Dine-in VAT group": "Grupi i TVSH-se per shitjet ne lokal",
+  "В · 10% · Food and nonalcoholic drinks": "В · 10% · Ushqime dhe pije pa alkool",
+  "А · 18% · Alcoholic drinks": "А · 18% · Pije alkoolike",
+  "Unclassified · Account A fiscal receipt unavailable": "Pa klasifikim · Kuponi fiskal i llogarise A nuk mund te leshohet",
   "Assign existing orders": "Cakto porosite ekzistuese",
   "Existing open orders have no reliable assigned waiter. Confirm the waiter with staff before assigning. Each order can be assigned only once; this does not transfer an assigned order.": "Porosite ekzistuese te hapura nuk kane kamerier te caktuar ne menyre te besueshme. Konfirmoni kamerierin me stafin para caktimit. Çdo porosi mund te caktohet vetem nje here; kjo nuk transferon nje porosi te caktuar.",
   "Legacy orders unavailable or access denied.": "Porosite ekzistuese nuk jane te disponueshme ose qasja u refuzua.",

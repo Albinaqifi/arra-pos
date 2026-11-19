@@ -59,9 +59,10 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         (req.action === 'retryStatus' && (Reflect.ownKeys(req).length === 3 || (Reflect.ownKeys(req).length === 4 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'retry' && (Reflect.ownKeys(req).length === 4 || (Reflect.ownKeys(req).length === 5 && ['A','B','combined'].includes(req.scope))) && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
         (req.action === 'configure' && Reflect.ownKeys(req).length === 2 && typeof req.queue === 'string' && req.queue === req.queue.trim() && req.queue.length > 0 && req.queue.length <= 255 && !/[\x00-\x1f\x7f]/.test(req.queue)))) return { ok: false };
+    let scope;
     try {
       const actor = session.currentUserId();
-      const scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope;
+      scope = db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope;
       if (!actor || actor !== session.authenticatedUserId() || !['A','B','combined'].includes(scope) ||
           !hasPermissions(db, session, scope === 'combined' ? 'business_days.close' : 'employees.view')) return { ok: false };
       if (req.action.startsWith('wallet') && scope !== 'combined') return {ok:false};
@@ -135,7 +136,12 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         dispatch(db,adapter,attempt);
         return { ok: true, data: result };
       } catch (error) { db.exec('ROLLBACK'); throw error; }
-    } catch (_) { return { ok: false }; }
+    } catch (error) {
+      if (error.message === 'Resolve current checkout before closing') {
+        return {ok:false,error:scope === 'B' ? 'period-blocked' : 'checkout-unresolved'};
+      }
+      return { ok: false };
+    }
   });
 }
 module.exports = { CHANNEL, registerBusinessDays };

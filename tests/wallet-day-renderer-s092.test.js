@@ -10,6 +10,14 @@ function harness(scope='combined') {
   return {page:()=>new context.Days.BusinessDays({language:'en'}),state,calls,setWallet:x=>wallet=x,setClose:x=>closing=x};
 }
 const render=p=>JSON.stringify(p.render());
+test('a fiscal hold keeps the day open with a definite explanation across remount',async()=>{
+ const h=harness(),p=h.page();
+ h.setClose(async()=>({ok:false,error:'checkout-unresolved'}));
+ await p.load();await p.review(8);p.setState({walletCount:'100'});await p.close(8,true);
+ assert.match(render(p),/Resolve the open PF700 checkout/);assert.equal(p.state.unknownId,null);
+ p.componentWillUnmount();
+ const next=h.page();await next.load();assert.equal(next.state.unknownId,null);next.componentWillUnmount();
+});
 test('tracked Combined count shows variance and submits explicit zero with revision',async()=>{
  const h=harness(),p=h.page();await p.load();await p.review(8);assert.match(render(p),/Final wallet count/);p.setState({walletCount:'0'});assert.match(render(p),/Short/);await p.close(8,true);let r=h.calls.find(x=>x.action==='walletDayClose');assert.equal(r.counted,0);assert.equal(r.revision,'revision');assert.equal(r.dayId,8);assert.equal(r.shiftId,3);p.componentWillUnmount();
 });

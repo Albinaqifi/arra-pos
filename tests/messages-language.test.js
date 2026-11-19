@@ -31,7 +31,7 @@ test('bill service errors use known messages and safe fallback', () => {
 
 test('configuration and finance text references exist and retain placeholders', () => {
   const config = require('../src/admin/config-sq.json');
-  const financeSource = fs.readFileSync('src/admin/finance-i18n.js', 'utf8').replace(/export function financeText[\s\S]*/, 'this.dictionary = sq;');
+  const financeSource = fs.readFileSync('src/admin/finance-i18n.js', 'utf8').replace(/^export (?=function )/gm, '') + '\nthis.dictionary = sq;';
   const financeContext = {}; vm.runInNewContext(financeSource, financeContext);
   const placeholders = s => [...s.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort();
   for (const [dictionary, files] of [[config, ['EmployeeConfig','MenuConfig','TableConfig','FinancialDetails','SalesReports','AdminSentCorrections']], [financeContext.dictionary, ['BusinessDays','FinancialVisibility']]]) {

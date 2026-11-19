@@ -28,7 +28,7 @@ export class MenuConfig extends React.Component {
     if (!this.leaveEditor()) return;
     const defaults = {
       category: { name: '', parentId: parentId || null, sortOrder: String(this.state.categories.length), active: true },
-      product: { name: '', categoryId: parentId || '', price: '0', sortOrder: String(this.state.products.length), destination: 'kitchen', active: true },
+      product: { name: '', categoryId: parentId || '', price: '0', sortOrder: String(this.state.products.length), destination: 'kitchen', taxGroup: null, active: true },
       group: { name: '', productId: parentId || '', required: false, active: true },
       option: { name: '', groupId: parentId || '', adjustment: '0', active: true }
     };
@@ -71,7 +71,7 @@ export class MenuConfig extends React.Component {
     if (e.kind === 'option' && !whole(e.adjustment)) { this.setState({ errorField: 'adjustment', error: this.t('Price adjustment must be a whole number.') }); return; }
     const request = { action: e.kind, id: e.id, name, active: e.active };
     if (e.kind === 'category') Object.assign(request, { parentId: e.parentId || null, sortOrder: Number(e.sortOrder) });
-    if (e.kind === 'product') Object.assign(request, { categoryId: e.categoryId, price: Number(e.price), sortOrder: Number(e.sortOrder), destination: e.destination });
+    if (e.kind === 'product') Object.assign(request, { categoryId: e.categoryId, price: Number(e.price), sortOrder: Number(e.sortOrder), destination: e.destination, taxGroup: e.taxGroup });
     if (e.kind === 'group') Object.assign(request, { productId: e.productId, required: e.required });
     if (e.kind === 'option') Object.assign(request, { groupId: e.groupId, adjustment: Number(e.adjustment) });
     this.setState({ busy: true, error: '', notice: '' });
@@ -119,6 +119,10 @@ export class MenuConfig extends React.Component {
           e.kind === 'category' && e.isSubcategory && select(this.t('Parent category'), 'parentId', s.categories.filter(c => c.id !== e.id && !c.parentId), this.t('Choose a category')),
           e.kind === 'product' && select(this.t('Category'), 'categoryId', s.categories, this.t('Choose a category')),
           e.kind === 'product' && select(this.t('Preparation destination'), 'destination', [{ id: 'kitchen', name: this.t('Kitchen 1') }, { id: 'kitchen2', name: this.t('Kitchen 2') }, { id: 'bar', name: this.t('Bar') }]),
+          e.kind === 'product' && select(this.t('Dine-in VAT group'), 'taxGroup', [
+            { id: 'В', name: this.t('В · 10% · Food and nonalcoholic drinks') },
+            { id: 'А', name: this.t('А · 18% · Alcoholic drinks') }
+          ], this.t('Unclassified · Account A fiscal receipt unavailable')),
           e.kind === 'product' && field(this.t('Price'), 'price', { type: 'number', min: 0, step: 1 }),
           (e.kind === 'category' || e.kind === 'product') && field(this.t('Display order'), 'sortOrder', { type: 'number', min: 0, step: 1 }),
           e.kind === 'option' && field(this.t('Price adjustment'), 'adjustment', { type: 'number', step: 1 })),

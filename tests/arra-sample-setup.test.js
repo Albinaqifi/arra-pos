@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const { openDatabase } = require('../src/desktop/database');
 const { createSession } = require('../src/desktop/session');
 const { registerOrderItems } = require('../src/desktop/order-items');
+const { registerTables } = require('../src/desktop/tables');
 
 test('Arra setup creates scoped identities, menu choices, and preserves existing data', {skip:process.platform !== 'win32'}, () => {
  const parent = fs.mkdtempSync(path.join(os.tmpdir(),'arra-menu-setup-'));
@@ -16,13 +17,26 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
  const script = path.join(__dirname,'../src/desktop/setup-arra-sample.js');
  const passwords = Array.from({length:3},()=>crypto.randomBytes(16).toString('hex'));
  const values = [passwords[0],passwords[1],passwords[1],passwords[2],String(crypto.randomInt(1000,10000)),String(crypto.randomInt(100000,1000000)), 'restaurant-arra','admin','adminB','dardan-admin','Waiter','Dardan'];
- const run = (input,target=directory) => spawnSync(electron,[script,target],{input:JSON.stringify(input),encoding:'utf8',env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});
+ const run = (input,target=directory,...options) => spawnSync(electron,[script,target,...options],{input:JSON.stringify(input),encoding:'utf8',env:{...process.env,ELECTRON_RUN_AS_NODE:'1'}});
  try {
   assert.notEqual(run(['invalid']).status,0); assert.equal(fs.existsSync(directory),false);
   const duplicate = values.slice(); duplicate[7] = duplicate[6];
   assert.notEqual(run(duplicate).status,0); assert.equal(fs.existsSync(directory),false);
   const custom = values.slice(); custom.splice(6,6,'entry-x','owner-x','owner-y','owner-z','staff-x','manager-x');
   const customDirectory = path.join(parent,'custom'); assert.equal(run(custom,customDirectory).status,0);
+  const supervised = path.join(parent,'supervised');
+  assert.equal(run(custom,supervised,'--new-pf700-commissioning-profile').status,0);
+  assert.equal(fs.existsSync(path.join(supervised,'SAMPLE-DATA-ONLY')),false);
+  assert.ok(require('../src/desktop/pf700-commissioning').isCommissionedDirectory(supervised));
+  const prepared = openDatabase(supervised);
+  try {
+   for (const table of ['orders','bills','payments','fiscal_checkout_sales','account_a_closes']) {
+    assert.equal(prepared.prepare('SELECT count(*) AS n FROM ' + table).get().n,0,table);
+   }
+   assert.equal(prepared.prepare('SELECT count(*) AS n FROM menu_product_fiscal_tax').get().n,105);
+  } finally { prepared.close(); }
+  assert.notEqual(run(custom,customDirectory,'--new-pf700-commissioning-profile').status,0);
+  assert.equal(require('../src/desktop/pf700-commissioning').isCommissionedDirectory(customDirectory),false);
   const customDb = openDatabase(customDirectory);
   try { const customSession = createSession(customDb); assert.equal(customSession.signIn({username:'entry-x',password:values[0]}).ok,true); assert.ok(customSession.listWaiters().data.some(user=>user.name==='staff-x')); }
   finally { customDb.close(); }
@@ -52,6 +66,15 @@ test('Arra setup creates scoped identities, menu choices, and preserves existing
     for (const group of groups) assert.equal(db.prepare('SELECT COUNT(*) AS n FROM modifier_options WHERE group_id=? AND adjustment=0').get(group.id).n,5);
    }
    session.selectWaiter({id:staff.find(x=>x.name==='Waiter').id,pin:values[4]});
+   let listTables;
+   registerTables({handle(_channel,fn){listTables=fn;}}, () => true, db, session);
+   const floor = listTables({}, {});
+   assert.equal(floor.ok, true);
+   assert.equal(floor.data.length, 16);
+   assert.ok(floor.data.every(table => table.occupied === 0 && table.orderId === null));
+   for (const table of ['orders','order_items','bills','payments','preparation_tickets','print_jobs','test_print_jobs','account_a_closes']) {
+    assert.equal(db.prepare('SELECT count(*) AS n FROM ' + table).get().n, 0, table);
+   }
    db.prepare("INSERT INTO orders(table_id,opened_at,status) VALUES(1,1,'open')").run();
    db.prepare("INSERT INTO order_waiter_ownership(order_id,waiter_id,assigned_by,assigned_at,source) VALUES(1,?,?,1,'open')").run(session.currentUserId(),session.currentUserId());
    let handler; const trusted = {};

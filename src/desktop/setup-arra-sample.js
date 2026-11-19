@@ -1,4 +1,4 @@
-// One-time, sample-only setup. Credentials are supplied through stdin, never arguments.
+// One-time setup of a fresh empty restaurant. Credentials arrive through stdin.
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
@@ -9,14 +9,15 @@ const { seedArraMenu } = require('./arra-menu');
 let db, values;
 try {
  const directory = process.argv[2];
- if (process.argv.length !== 3 || !directory || !path.isAbsolute(directory) || process.stdin.isTTY) throw Error('Invalid invocation');
+ const commissioning = process.argv.length === 4 && process.argv[3] === '--new-pf700-commissioning-profile';
+ if ((!commissioning && process.argv.length !== 3) || !directory || !path.isAbsolute(directory) || process.stdin.isTTY) throw Error('Invalid invocation');
  const input = fs.readFileSync(0, 'utf8');
  if (Buffer.byteLength(input) > 8192) throw Error('Invalid input');
  values = JSON.parse(input);
  if (!Array.isArray(values) || values.length !== 12 || !values.slice(0,4).every(validPassword) || !/^\d{4}$/.test(values[4]) || !/^\d{6}$/.test(values[5]) ||
      values.slice(6).some(name => typeof name !== 'string' || name !== name.trim() || name.length === 0 || name.length > 128) || new Set(values.slice(6)).size !== 6) throw Error('Invalid input');
  fs.mkdirSync(directory);
- fs.writeFileSync(path.join(directory,'SAMPLE-DATA-ONLY'), 'Sample data only. No real sales.\n', {flag:'wx'});
+ if (!commissioning) fs.writeFileSync(path.join(directory,'SAMPLE-DATA-ONLY'), 'Sample data only. No real sales.\n', {flag:'wx'});
  db = openDatabase(directory);
  db.exec('BEGIN IMMEDIATE');
  try {
@@ -37,8 +38,9 @@ try {
   db.exec('COMMIT');
  } catch (error) { db.exec('ROLLBACK'); throw error; }
  seedTables(db); seedArraMenu(db);
- fs.writeFileSync(path.join(directory,'ARRA-SETUP-COMPLETE'), 'Arra sample setup complete.\n', {flag:'wx'});
- console.log('Arra sample setup complete. Open Arra POS Sample from the Start menu.');
+ if (commissioning) require('./pf700-commissioning').enroll(db);
+ fs.writeFileSync(path.join(directory,'ARRA-SETUP-COMPLETE'), 'Arra setup complete.\n', {flag:'wx'});
+ console.log('Arra setup complete. The menu is ready and all tables are available.');
 } catch (_) {
  console.error('Setup failed. Existing data was not overwritten. If a new incomplete directory was created, move it aside before retrying.'); process.exitCode = 1;
 } finally { if (Array.isArray(values)) values.fill(''); if (db) db.close(); }

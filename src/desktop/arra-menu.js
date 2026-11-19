@@ -1,3 +1,4 @@
+const { seedFiscalTax } = require('./fiscal-tax-v44');
 // Menu transcribed from the supplied Arra menus; prices are whole denars.
 const sections = [
  ['Sallata', [['Sallatë Arra',490],['Sallatë Caesar',390],['Sallatë Caprese',330],['Sallatë e Gjelbër',320],['Sallatë Greke',280],['Sallatë Panxhar',240],['Taratur',200],['Domate me Qepë',170]]],
@@ -27,6 +28,7 @@ function seedArraMenu(db) {
    const categoryId = `arra-category-${i}`; category.run(categoryId,name,i >= 10 ? 'arra-drinks' : 'arra-food',i >= 10 ? i - 10 : i);
    items.forEach(([label,price], j) => {
     const id = `arra-product-${i}-${j}`; product.run(id,categoryId,label,price,j,i >= 10 ? 'bar' : 'kitchen');
+    seedFiscalTax(db, id);
     if (i === 2) {
       const groupId = `${id}-pasta`; group.run(groupId,id,'Lloji i pastës');
       ['Shpageti','Taljatele'].forEach((choice,k) => option.run(`${groupId}-${k}`,groupId,choice));

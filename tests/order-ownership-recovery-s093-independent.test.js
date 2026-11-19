@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -47,7 +48,7 @@ function fixture(t) {
     call: (name, req, sender = event) => handlers['arra:' + name](sender, req),
     as: (id, auth = id) => { actor = id; authenticated = auth; },
     use: dir => { db.close(); db = openDatabase(dir); register(); },
-    upgrade: () => { db.exec('DROP TABLE legacy_unassigned_orders; DROP TABLE order_waiter_ownership; PRAGMA user_version=42'); db.close(); db = openDatabase(live); register(); }
+    upgrade: () => { db.exec(removeFiscalSchemaSql + 'DROP TABLE legacy_unassigned_orders; DROP TABLE order_waiter_ownership; PRAGMA user_version=42'); db.close(); db = openDatabase(live); register(); }
   };
 }
 

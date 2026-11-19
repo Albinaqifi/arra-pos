@@ -1,3 +1,4 @@
+const { removeFiscalSchemaSql } = require('./support/historical-database');
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
@@ -47,7 +48,7 @@ test('upgrade excludes earlier closed days and preserves the existing printer se
   const session={currentUserId:()=>1,authenticatedUserId:()=>1};
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session,()=> 'failed');
   const old=handler({},{action:'list'}).data.days[0].id; assert.equal(handler({},{action:'close',dayId:old}).ok,true);
-  await new Promise(resolve=>setImmediate(resolve)); db.exec('DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; '); db.close(); db=openDatabase(dir);
+  await new Promise(resolve=>setImmediate(resolve)); db.exec(removeFiscalSchemaSql + 'DROP TABLE IF EXISTS order_waiter_ownership; DROP TABLE IF EXISTS legacy_unassigned_orders; DROP TABLE IF EXISTS wallet_cancellations; DROP TABLE IF EXISTS wallet_prepared; DROP TABLE IF EXISTS wallet_requests; DROP TABLE IF EXISTS wallet_closings; DROP TABLE IF EXISTS wallet_movements; DROP TABLE IF EXISTS wallet_baselines; DROP TABLE IF EXISTS shift_print_results; DROP TABLE IF EXISTS shift_print_attempts; DROP TABLE IF EXISTS payment_shifts; DROP TABLE IF EXISTS shift_closes; DROP TABLE IF EXISTS restaurant_shifts; DROP TABLE IF EXISTS shift_coverage_unavailable; '); db.close(); db=openDatabase(dir);
   registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,session,()=> 'failed');
   let state=handler({},{action:'accountAList'}).data; assert.equal(state.queue,'sample A'); assert.equal(state.days.length,0);
   assert.equal(handler({},{action:'accountAClose',dayId:old,language:'en'}).ok,false);

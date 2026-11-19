@@ -1,5 +1,6 @@
 const { hasPermissions } = require('./permissions');
 const { recordAudit } = require('./audit');
+const { PF700_PROFILE, rehearseStatus } = require('./pf700-status');
 const flights = new WeakMap();
 function active(db) { if (!flights.has(db)) flights.set(db, new Set()); return flights.get(db); }
 function summarize(snapshot) {
@@ -29,13 +30,21 @@ function dispatch(db,adapter,job) {
 function handleAccountA(event, req, allowed, db, session, adapter) {
   if (!allowed(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype) return {ok:false};
   const keys = Reflect.ownKeys(req).length;
-  const valid = (req.action === 'accountAList' && keys === 1) || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||
+  const readOnly = keys === 1 && Object.hasOwn(req, 'action') &&
+    ['accountAList', 'accountAPf700Profile', 'accountAPf700Simulate'].includes(req.action);
+  const valid = readOnly || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||
     (req.action === 'accountARetry' && keys === 4 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
     (req.action === 'accountAConfigure' && keys === 2 && typeof req.queue === 'string' && req.queue === req.queue.trim() && req.queue.length > 0 && req.queue.length <= 255 && !/[\x00-\x1f\x7f]/.test(req.queue));
   if (!valid) return {ok:false};
   try {
     const actor = session.currentUserId();
     if (!actor || actor !== session.authenticatedUserId() || db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope !== 'combined' || !hasPermissions(db,session,'business_days.close')) return {ok:false,denied:true};
+    if (req.action === 'accountAPf700Profile') {
+      return { ok: true, data: { profile: PF700_PROFILE, hardwareVerified: false } };
+    }
+    if (req.action === 'accountAPf700Simulate') {
+      return { ok: true, data: { ...rehearseStatus(), hardwareVerified: false } };
+    }
     if (req.action === 'accountAConfigure') { db.prepare('UPDATE account_a_settings SET queue=? WHERE id=1').run(req.queue); return {ok:true}; }
     if (req.action === 'accountAList') {
       const settings=db.prepare('SELECT boundary,queue FROM account_a_settings WHERE id=1').get();
