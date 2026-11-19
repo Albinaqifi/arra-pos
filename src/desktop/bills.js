@@ -64,6 +64,9 @@ function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = n
           attachFiscalPreview(db, bill, fiscalCheckout);
           const fiscal = readFiscalCheckout(db, bill.id);
           if (fiscal) bill.fiscal = fiscal;
+          if (db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(bill.id)) bill.simulatedCardApproval = true;
+          const intent = db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(bill.id);
+          if (intent) bill.simulatedCardIntent = {id:intent.id};
           db.exec('COMMIT'); return { ok: true, data: bill };
         }
         const data = snapshot(db, request.orderId);

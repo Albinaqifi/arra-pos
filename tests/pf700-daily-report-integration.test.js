@@ -75,7 +75,9 @@ function trainingRestaurant(t) {
     assert.equal(review.ok, true);
     const bill = call('bill', { action: 'generate', orderId, fingerprint: review.data.fingerprint });
     assert.equal(bill.ok, true);
-    const request = { billId: bill.data.id, method, account };
+    const prepared = method === 'card' ? await call('payment', {billId:bill.data.id,method,account,prepareSimulated:true}) : null;
+    if (prepared) assert.equal(prepared.ok,true);
+    const request = { billId: bill.data.id, method, account, ...(prepared ? {terminalApproved:true,intentId:prepared.data.intentId} : {}) };
     const payment = await call('payment', request);
     assert.equal(payment.ok, true);
     assert.deepEqual(await call('payment', request), payment);

@@ -142,7 +142,7 @@ test('sample close-grant upgrade accepts a normally migrated v23 copy and reject
     INSERT INTO payments(id,bill_id,actor_id,paid_at,amount,method,account) VALUES(1,1,1,2,10,'cash','B');
     DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TRIGGER payment_assign_business_day; DROP TABLE IF EXISTS payment_account_corrections; DROP TABLE IF EXISTS transfer_managers; DROP TABLE payment_business_days; DROP TABLE business_days;
     DELETE FROM user_permissions WHERE permission='business_days.close'; DROP INDEX one_open_order_per_table; ALTER TABLE orders DROP COLUMN retired_empty; CREATE UNIQUE INDEX one_open_order_per_table ON orders(table_id) WHERE status=char(111,112,101,110); DROP TABLE IF EXISTS test_print_results; DROP TABLE IF EXISTS test_print_attempts; DROP TABLE IF EXISTS test_print_jobs; DROP TABLE IF EXISTS test_printer_queues; DROP TABLE IF EXISTS day_print_settings; DROP TABLE IF EXISTS day_print_results; DROP TABLE IF EXISTS day_print_attempts; DROP TABLE IF EXISTS day_print_jobs; DROP TABLE IF EXISTS pending_staff; DROP TABLE IF EXISTS verified_waiter_pins; PRAGMA user_version=22;`);
-  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,47);
+  db.close(); db=openDatabase(dir); assert.equal(db.prepare('PRAGMA user_version').get().user_version,48);
   const assigned=db.prepare('SELECT business_day_id FROM payment_business_days WHERE payment_id=1').get().business_day_id;
   db.close(); db=null; fs.writeFileSync(path.join(dir,'SAMPLE-DATA-ONLY'),'sample');
   upgraded=await upgradeSampleBusinessDays(path.join(dir,'arra.sqlite'),'sample-combined',passwords[3]);

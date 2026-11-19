@@ -19,6 +19,76 @@ const line = { itemId: 3, name: 'Coffee', unitPrice: 70, quantity: 1, modifiers:
 const bill = { id: 1, lines: [line], total: 70, fiscalMode: 'device', fiscalDomesticProduct: true };
 const fiscal = { mode: 'device', status: 'accepted', reference: '0001235', method: 'cash', receipt: { lines: [line], domesticProduct: true } };
 
+test('training card requires an explicit simulated approval and a decline leaves the bill payable', async () => {
+  let payments = 0;
+  let training = { ...bill, fiscalMode: 'simulation' };
+  const view = dialog({ bill: async () => ({ok:true,data:training}), payment: async selection => {
+    if (selection.prepareSimulated) { training={...training,simulatedCardIntent:{id:42}}; return {ok:true,data:{intentId:42}}; }
+    payments++;
+    assert.equal(selection.method,'card'); assert.equal(selection.account,'A');
+    assert.equal(selection.terminalApproved,true);
+    assert.equal(selection.intentId,42);
+    return {ok:true,data:{fiscal:{...fiscal,mode:'simulation',method:'card',reference:'SIM-1'}}};
+  }});
+  const button = (node, label) => {
+    if (!node || typeof node !== 'object') return null;
+    if (node.type === 'button' && node.children.includes(label)) return node;
+    for (const child of node.children || []) for (const item of Array.isArray(child) ? child : [child]) {
+      const found = button(item,label); if (found) return found;
+    }
+    return null;
+  };
+  await view.review();
+  view.selectMethod('card');
+  await view.pay();
+  assert.equal(payments,0);
+  assert.match(JSON.stringify(view.render()), /No terminal charge is made/);
+  button(view.render(),'Simulate decline or cancellation').props.onClick();
+  assert.equal(view.state.method,'');
+  assert.equal(payments,0);
+  view.selectMethod('card');
+  await button(view.render(),'Prepare simulated terminal').props.onClick();
+  await button(view.render(),'Record observed simulated approval').props.onClick();
+  assert.equal(payments,1);
+  assert.equal(view.state.receipt.method,'card');
+});
+
+test('lost approval bridge request preserves the prepared intent after remount', async () => {
+  let data={...bill,fiscalMode:'simulation'}, approvalCalls=0;
+  const api={bill:async()=>({ok:true,data}),payment:async req=>{
+    if (req.prepareSimulated) {data={...data,simulatedCardIntent:{id:71}};return {ok:true};}
+    if (req.terminalApproved) {approvalCalls++;throw Error('Rejected before delivery');}
+  }};
+  const first=dialog(api); await first.review(); first.selectMethod('card');
+  await first.terminalIntent();
+  await first.pay(true);
+  assert.equal(first.state.uncertain,true);
+  const reopened=dialog(api); await reopened.review();
+  assert.equal(reopened.state.method,'card');
+  assert.equal(reopened.state.fiscalTenderFixed,true);
+  reopened.selectMethod('cash','B'); assert.equal(reopened.state.method,'card');
+  assert.match(JSON.stringify(reopened.render()),/Record the observed simulated terminal result/);
+  assert.match(JSON.stringify(reopened.render()),/Record observed simulated approval/);
+  assert.doesNotMatch(JSON.stringify(reopened.render()),/Simulate decline or cancellation/);
+  assert.equal(approvalCalls,1);
+});
+
+test('reloaded simulated approval keeps the original tender without asking for approval again', async () => {
+  let calls = 0;
+  const view = dialog({ bill: async () => ({ok:true,data:{...bill,fiscalMode:'simulation',simulatedCardApproval:true}}),
+    payment: async selection => { calls++; assert.equal(selection.method,'card'); assert.equal(selection.account,'A');
+      assert.equal(Object.hasOwn(selection,'terminalApproved'),false); return {ok:false,fiscalStatus:'unmapped'}; } });
+  await view.review();
+  assert.equal(view.state.fiscalTenderFixed,true);
+  view.selectMethod('cash','B');
+  assert.equal(view.state.method,'card');
+  const output = JSON.stringify(view.render());
+  assert.match(output,/simulated terminal payment was approved/);
+  assert.doesNotMatch(output,/Simulate terminal approval|Simulate decline or cancellation/);
+  await view.pay();
+  assert.equal(calls,1);
+});
+
 test('an ordinary launch keeps a previously failed device receipt bound to the original profile', async () => {
   const data = { ...bill, fiscalMode: undefined, fiscal: { ...fiscal, status: 'failed', reference: null } };
   const view = dialog({ bill: async () => ({ ok: true, data }), payment: () => assert.fail('No sale outside the original profile') });
