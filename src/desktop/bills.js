@@ -4,6 +4,7 @@ const { ownsOrder } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const { markService } = require('./shifts');
 const { readFiscalCheckout } = require('./fiscal-checkout');
+const { isCommissioned } = require('./pf700-commissioning');
 const CHANNEL = 'arra:bill';
 
 function snapshot(db, orderId) {
@@ -32,6 +33,7 @@ function snapshot(db, orderId) {
 function attachFiscalPreview(db, bill, adapter) {
   if (!adapter) return;
   bill.fiscalMode = adapter.mode;
+  if (adapter.mode === 'simulation' && adapter.simulationRecoveryControls === true && !isCommissioned(db)) bill.simulationRecoveryControls = true;
   if (adapter.mode === 'device') bill.fiscalDomesticProduct = adapter.domesticProduct;
   if (adapter.requireOrigins) bill.fiscalRequiresOrigins = true;
   const groups = new Map(db.prepare(`SELECT t.item_id, t.tax_group FROM order_item_fiscal_tax t
@@ -67,6 +69,8 @@ function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = n
           if (db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(bill.id)) bill.simulatedCardApproval = true;
           const intent = db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(bill.id);
           if (intent) bill.simulatedCardIntent = {id:intent.id};
+          const cashIntent = db.prepare('SELECT id,interruption FROM simulated_cash_open_intents WHERE bill_id=?').get(bill.id);
+          if (cashIntent) bill.simulatedCashIntent = cashIntent;
           db.exec('COMMIT'); return { ok: true, data: bill };
         }
         const data = snapshot(db, request.orderId);

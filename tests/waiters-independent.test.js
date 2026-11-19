@@ -52,7 +52,7 @@ test('version 9 database upgrades with existing user and grants intact', t => {
   db.close();
   db = openDatabase(dir);
   t.after(() => { db.close(); fs.rmSync(dir, { recursive: true, force: true }); });
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version,48);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version,49);
   assert.equal(db.prepare('SELECT count(*) AS count FROM user_permissions WHERE user_id = 1').get().count, 9);
   const handlers = {}, trusted = {};
   registerSession({ handle(c, f) { handlers[c] = f; } }, e => e === trusted, db);
