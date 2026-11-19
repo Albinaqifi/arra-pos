@@ -4,6 +4,11 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
+| S-098 | Todo | [Print bar and kitchen tickets during fiscal checkout](../stories/backlog.md#s-098--print-bar-and-kitchen-tickets-during-fiscal-checkout) |
+| S-097 | Todo | [Register Card A after terminal approval](../stories/backlog.md#s-097--register-card-a-after-terminal-approval) |
+| S-096 | Todo | [Recover an interrupted fiscal checkout in Arra](../stories/backlog.md#s-096--recover-an-interrupted-fiscal-checkout-in-arra) |
+| S-095 | Todo | [Take routine Cash A payments on the PF700](../stories/backlog.md#s-095--take-routine-cash-a-payments-on-the-pf700) |
 | S-093 | In progress | Original story merged in PR #136; table PIN auto-submit follow-up reviewed and tested, PR pending. Owner-requested assigned waiter names added to entry grid; verification and delivery in progress. |
 | S-092 | Done | PR #132 merged as `f38e174`; review, full suite and sample desktop checks passed. Owner deferred full host-offline verification; it does not block other stories. |
 | S-090 | In progress | PR #130 merged as `0ba16b2`; independent review and focused tests passed; baseline full-suite failures, desktop, offline and physical-paper verification outstanding. |
@@ -12,7 +17,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
 | S-085 | In progress | PR #122 merged; independent review and focused tests passed; desktop verification outstanding. |
-| S-084 | In progress | One real Cash A receipt recorded. Version 1.0.7 connects Close Account A to the PF700 daily Z report and adds offline recovery tests. Physical Z output, routine checkout and card verification remain open. [PF700 release handoff](handoffs/S-084.md#pf700-release-handoff) |
+| S-084 | In progress | PF700 daily Z integration merged in PR #142. On-site register, paper and reset checks remain open. [Release handoff](handoffs/S-084.md#pf700-release-handoff) · [Go-live stories](../stories/backlog.md#pf700-restaurant-go-live) |
 | S-083 | In progress | Independent review and focused tests passed; desktop, offline and physical paper verification outstanding. |
 
 | S-082 | Done | Independent review and automated tests passed; owner reports all checks passed; PR #119 merged as `9cb9f72`. |
