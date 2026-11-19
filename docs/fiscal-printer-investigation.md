@@ -14,13 +14,15 @@ The operator ran the read-only VAT checker on the POS and reported **В (V) = 10
 
 In the packaged 105-item Arra menu this rule maps 89 items to В and 16 alcoholic drinks to А. The latter comprise 2 beers, 8 wines, 2 rakis and 4 other spirits. The product's stored group now follows the item into the bill, even if the menu changes before payment.
 
-### Checkout in version 1.0.4
+### Checkout and the 1.0.5 identity check
 
-On site, command 90 with option 0 returned a valid frame on COM3 with six comma-separated fields, of lengths 11, 19, 4, 8, 1 and 11. The published v1.40 command description has five fields. The app stopped before confirming the unit. To compare the final field directly with the case label, extract `Arra-PF700-Compare-Identity-1.0.4.zip` in the existing `payload` directory and open `PF700-Compare-Identity.cmd`. It uses the extracted 1.0.4 runtime for one identity query. Enter the label serial locally and keep the comparison result for follow-up.
+On site, command 90 with option 0 returned a valid frame on COM3 with six comma-separated fields, of lengths 11, 19, 4, 8, 1 and 11. The published v1.40 command description has five fields. The separate 1.0.4 comparison tool confirmed that only the sixth field exactly matches the case label and that the firmware and date agree with the diagnostic slip. Version 1.0.5 recognizes this layout in the same identity check used before checkout.
+
+For the next on-site check, extract `Arra-POS-1.0.5-Offline-Test.zip` into its own folder and open **PF700-Check-Identity.cmd** there. The first launch extracts the runtime automatically. With the printer idle and earlier transactions reconciled, enter the case-label serial at the masked prompt. The result should say that the PF700 on COM3 matches the serial entered. Stop at the result. This operation only requests the device identity.
 
 Extract the complete offline ZIP and run `test-arra.cmd`. Its version-specific training database starts with the restaurant menu, 16 available tables and zero sales. Use the ordinary waiter checkout. Cash A and Card A use a simulated PF700 and show a receipt prefixed `SIM-`. Cash B follows the existing local payment path. The versioned launcher uses no serial or Windows print transport. A separate card terminal remains responsible for collecting card payments.
 
-For the future attended check, use Windows PowerShell in the installed program folder, `%LOCALAPPDATA%\Arra POS Offline Test\1.0.4`. Run each step separately on the POS.
+For a later supervised cash sale, use Windows PowerShell in the installed program folder, `%LOCALAPPDATA%\Arra POS Offline Test\1.0.5`. Run each step separately on the POS.
 
 1. With the printer idle and earlier sales reconciled, run `.\start-supervised-pf700.ps1 -CheckIdentityOnly`. Enter the device serial from the diagnostic slip or label locally. It compares the PF700 identity on COM3. If the reply layout differs, the tool gives field widths for diagnosis.
 2. Run `.\start-supervised-pf700.ps1 -PrepareData` once. Choose local logins for the new, persistent restaurant profile. Its database is under `%APPDATA%\Arra POS PF700 Commissioning`. Preserve this folder and its backups.

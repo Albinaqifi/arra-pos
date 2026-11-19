@@ -19,15 +19,42 @@ if ($PrepareData) {
     return
 }
 if ($CheckIdentityOnly) {
-    $serial = (Read-Host 'Read-only identity check. Enter the serial number from the PF700').Trim()
+    Write-Host 'Read-only PF700 identity check on COM3. Enter the label serial or press Enter to cancel.'
+    if ([Console]::IsInputRedirected) {
+        $serial = [Console]::In.ReadLine()
+    } else {
+        $secure = Read-Host 'Printer serial number' -AsSecureString
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        try { $serial = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer) }
+        finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+            $secure.Dispose()
+        }
+    }
+    if ([string]::IsNullOrEmpty($serial)) { return }
     if ($serial -cnotmatch '^[A-Za-z0-9]{11}$') { throw 'Check the serial number from the printer.' }
-    $previousNodeMode = $env:ELECTRON_RUN_AS_NODE
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $electron
+    $info.WorkingDirectory = $PSScriptRoot
+    $info.Arguments = '"{0}" --check-identity' -f (Join-Path $app 'src\desktop\pf700-identity-cli.js')
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.RedirectStandardInput = $true
+    $info.RedirectStandardOutput = $true
+    $info.RedirectStandardError = $true
+    $info.EnvironmentVariables['ELECTRON_RUN_AS_NODE'] = '1'
+    $child = [Diagnostics.Process]::Start($info)
     try {
-        $env:ELECTRON_RUN_AS_NODE = '1'
-        $serial | & $electron (Join-Path $app 'src\desktop\pf700-identity-cli.js') --check-identity | Out-Host
-        if ($LASTEXITCODE -ne 0) { throw 'The identity check did not confirm the printer.' }
-    } finally { $env:ELECTRON_RUN_AS_NODE = $previousNodeMode }
-    return
+        $stdout = $child.StandardOutput.ReadToEndAsync()
+        $stderr = $child.StandardError.ReadToEndAsync()
+        $child.StandardInput.WriteLine($serial)
+        $child.StandardInput.Close()
+        $child.WaitForExit()
+        [Console]::Write($stdout.GetAwaiter().GetResult())
+        if ($child.ExitCode -ne 0) { [Console]::Error.Write($stderr.GetAwaiter().GetResult()) }
+        $result = $child.ExitCode
+    } finally { $child.Dispose(); $serial = $null }
+    exit $result
 }
 $data = Join-Path $env:APPDATA 'Arra POS PF700 Commissioning'
 if (!(Test-Path -LiteralPath (Join-Path $data 'arra.sqlite') -PathType Leaf) -or

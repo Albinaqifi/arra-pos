@@ -1,3 +1,4 @@
+param([switch]$CheckIdentityOnly)
 $ErrorActionPreference = 'Stop'
 try {
     $version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'version.txt') -Raw).Trim()
@@ -31,6 +32,10 @@ try {
     if (!(Test-Path -LiteralPath $electron) -or !(Test-Path -LiteralPath $setup) -or !(Test-Path -LiteralPath $app)) { throw 'The separate test program folder is incomplete. Move it aside before trying again.' }
     $installed = Get-Content -LiteralPath (Join-Path $app 'package.json') -Raw | ConvertFrom-Json
     if ($installed.version -cne $version) { throw 'The installed test application has a different version.' }
+    if ($CheckIdentityOnly) {
+        & (Join-Path $program 'start-supervised-pf700.ps1') -CheckIdentityOnly
+        exit $LASTEXITCODE
+    }
     if (!(Test-Path -LiteralPath $data)) {
         New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
         Write-Host 'First-time setup creates the Arra menu and free tables. Enter sample passwords, PINs, and usernames.'

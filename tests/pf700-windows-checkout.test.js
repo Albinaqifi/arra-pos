@@ -10,6 +10,7 @@ const { encodeRequest } = require('../src/desktop/pf700-frame');
 
 const windows = { skip: process.platform !== 'win32' };
 const serial = 'SYNTHETIC01';
+const sixFields = ['QA-700DEMOX', '1.00MK 23OCT14 1230', 'BEEF', '01001101', '7', serial];
 const profile = () => ({ expectedSerial: serial, operatorNumber: 2, tillNumber: 1,
   operatorPassword: String(randomInt(100000, 1000000)), domesticProduct: true });
 const snapshot = { account: 'A', currency: 'MKD', billId: 1, total: 70, method: 'cash', domesticProduct: true,
@@ -24,7 +25,7 @@ function wrapped(sequence, command, open, data) {
   return Buffer.concat([Buffer.from([1]), body, Buffer.from([12, 8, 4, 0].map(shift => 48 + (sum >> shift & 15))), Buffer.from([3])]);
 }
 
-function mockPipe({ identity = '1.00 231014 1230,ABCD,0011,1,' + serial, breakAt, mutate } = {}) {
+function mockPipe({ identity = '1.00 231014 1230,ABCD,0011,1,' + serial, identityOpen = false, breakAt, mutate } = {}) {
   const log = { calls: [], launches: 0, closes: 0 };
   return { log, start(_executable, args, options) {
     log.launches++; log.args = args; log.options = options;
@@ -52,7 +53,7 @@ function mockPipe({ identity = '1.00 231014 1230,ABCD,0011,1,' + serial, breakAt
           case 56: closed = true; open = false; reply = '0001,0000'; break;
           default: throw Error('Unexpected command');
         }
-        const line = wrapped(frame[2], cmd, open, reply).toString('hex').toUpperCase() + '\r\n';
+        const line = wrapped(frame[2], cmd, cmd === 90 ? identityOpen : open, reply).toString('hex').toUpperCase() + '\r\n';
         const response = mutate ? mutate(line) : line;
         child.stdout.write(response.slice(0, 7));
         child.stdout.write(response.slice(7));
@@ -119,6 +120,65 @@ test('standalone read-only 90/0 reports mismatches without echoing any device fi
   }
   const unreachable = mockPipe({ breakAt: 90 });
   assert.deepEqual(await checkWindowsPf700Identity(serial, unreachable.start), { ok: false, reason: 'transport' });
+});
+
+test('confirmed six-field identity works in both the read-only check and the guarded checkout', windows, async () => {
+  for (const firmware of ['1.00MK 23OCT14 0000', '1.00MK 23OCT14 2359']) {
+    const identity = sixFields.with(1, firmware).join(',');
+    const probe = mockPipe({ identity });
+    assert.deepEqual(await checkWindowsPf700Identity(serial, probe.start), { ok: true });
+    assert.deepEqual(probe.log.calls, [90]);
+    assert.equal(probe.log.closes, 1);
+
+    const mock = mockPipe({ identity });
+    let journaled = false;
+    const config = { ...profile(), beforeOpen() { assert.deepEqual(mock.log.calls, [90,74,76,97,113]); } };
+    const result = await createWindowsPf700Checkout(config, mock.start).registerSale(snapshot, {
+      beforeOpen(baseline) { journal.beforeOpen(baseline); journaled = true; }
+    });
+    assert.equal(journaled, true);
+    assert.equal(result.status, 'accepted');
+    assert.deepEqual(mock.log.calls, [90,74,76,97,113,48,49,51,103,53,76,56,76,113]);
+    assert.equal(mock.log.closes, 1);
+  }
+});
+
+test('wrong serial, other six-field layouts and a non-idle status stop both entry points at 90/0', windows, async () => {
+  const cases = [
+    [sixFields.with(5, serial.toLowerCase()), 'serial'],
+    [sixFields.with(0, serial).with(5, 'SYNTHETIC02'), 'layout'],
+    [sixFields.with(0, serial), 'layout'],
+    [sixFields.with(0, 'QA-70XDEMOX'), 'layout'],
+    [sixFields.with(0, 'QA-700demox'), 'layout'],
+    [sixFields.with(1, '1.01MK 23OCT14 1230'), 'layout'],
+    [sixFields.with(1, '1.00mk 23OCT14 1230'), 'layout'],
+    [sixFields.with(1, '1.00MK 23oct14 1230'), 'layout'],
+    [sixFields.with(1, '1.00MK 23Oct14 1230'), 'layout'],
+    [sixFields.with(1, '1.00MK 23NOV14 1230'), 'layout'],
+    [sixFields.with(1, '1.00MK 31FEB14 1230'), 'layout'],
+    [sixFields.with(1, '1.00MK 23OCT14 2400'), 'layout'],
+    [sixFields.with(1, '1.00MK 23OCT14 1260'), 'layout'],
+    [sixFields.with(2, 'EFGX'), 'layout'],
+    [sixFields.with(3, '00010012'), 'layout'],
+    [sixFields.with(4, 'A'), 'layout'],
+    [sixFields.with(5, 'SYNTHETIC0-'), 'layout'],
+    [[...sixFields, ''], 'layout'],
+    [sixFields, 'status']
+  ];
+  for (const [fields, reason] of cases) {
+    const identity = fields.join(',');
+    const options = { identity, identityOpen: reason === 'status' };
+    const probe = mockPipe(options);
+    const checked = await checkWindowsPf700Identity(serial, probe.start);
+    assert.equal(checked.ok, false);
+    assert.equal(checked.reason, reason);
+    assert.deepEqual(probe.log.calls, [90]);
+    assert.equal(probe.log.closes, 1);
+    const mock = mockPipe(options);
+    assert.equal((await createWindowsPf700Checkout(profile(), mock.start).registerSale(snapshot, journal)).status, 'failed');
+    assert.deepEqual(mock.log.calls, [90]);
+    assert.equal(mock.log.closes, 1);
+  }
 });
 
 test('a rejected release stops before open and a lost open, tender or close reply is uncertain', windows, async () => {

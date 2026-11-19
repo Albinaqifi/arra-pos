@@ -4,9 +4,8 @@ const path = require('node:path');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
 const { executePf700Checkout } = require('./pf700-checkout-protocol');
 
-// Accent v1.40, command 90/0. The device serial is the fifth field, after
-// the four switches and country digit. v1.36 ends with a separate 8-byte FM
-// number; never search for the serial elsewhere in a reply.
+const validSerial = serial => typeof serial === 'string' && /^[A-Za-z0-9]{11}$/.test(serial);
+
 function inspectIdentity(frame, sequence, expectedSerial) {
   const { data, status } = decodeResponse(frame, { command: 90, sequence });
   if ((status[0] & 0x37) || (status[1] & 0x3f) ||
@@ -14,13 +13,16 @@ function inspectIdentity(frame, sequence, expectedSerial) {
     return { ok: false, reason: 'status' };
   }
   const fields = data.toString('latin1').split(',');
-  const [header, checksum, switches, country, serial] = fields;
-  // The printed diagnostic identified version 1.00MK, 23 October 2014.
-  // Accept that exact expanded version/date as well as the fixed v1.40
-  // header. Neither form changes the documented serial field or its bounds.
-  const versionAndDate = /^(?:[A-Za-z0-9.]{4} [0-9]{6}|1\.00MK (?:231014|23-OCT-2014)) (?:[01][0-9]|2[0-3])[0-5][0-9]$/;
-  if (fields.length !== 5 || !versionAndDate.test(header) || !/^[0-9A-Fa-f]{4}$/.test(checksum) ||
-      !/^[01]{4}$/.test(switches) || !/^[0-9]$/.test(country) || !/^[A-Za-z0-9]{11}$/.test(serial)) {
+  const [header, firmware] = fields;
+  const [checksum, switches, country, serial] = fields.slice(-4);
+  // The five-field v1.40 layout has four switch bits. The on-site unit
+  // returned a separate identifier, its printed firmware/date and eight bits.
+  const legacyFirmware = /^(?:[A-Za-z0-9.]{4} [0-9]{6}|1\.00MK (?:231014|23-OCT-2014)) (?:[01][0-9]|2[0-3])[0-5][0-9]$/;
+  const onsiteFirmware = /^1\.00MK 23OCT14 (?:[01][0-9]|2[0-3])[0-5][0-9]$/;
+  const legacy = fields.length === 5 && legacyFirmware.test(header) && /^[01]{4}$/.test(switches);
+  const onsite = fields.length === 6 && /^[A-Z]{2}-[0-9]{3}[A-Z]{5}$/.test(header) &&
+    onsiteFirmware.test(firmware) && /^[01]{8}$/.test(switches);
+  if ((!legacy && !onsite) || !/^[0-9A-Fa-f]{4}$/.test(checksum) || !/^[0-9]$/.test(country) || !validSerial(serial)) {
     const widths = values => values.map(value => value.length).join('/');
     return { ok: false, reason: 'layout', layout: 'header widths ' + widths(header.split(' ')) +
       ', remaining field widths ' + widths(fields.slice(1)) };
@@ -84,8 +86,6 @@ function windowsPipe(startProcess) {
     }
   };
 }
-
-const validSerial = serial => typeof serial === 'string' && /^[A-Za-z0-9]{11}$/.test(serial);
 
 async function checkWindowsPf700Identity(expectedSerial, startProcess = spawn) {
   if (!validSerial(expectedSerial)) return { ok: false, reason: 'serial' };
