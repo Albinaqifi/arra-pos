@@ -9,14 +9,13 @@ const { isCommissioned } = require('./pf700-commissioning');
 // trusted sender's append-only record made after its command-specific checks.
 // Match the actual request for every item and the cash tender, not just their
 // totals. The credential-bearing OPEN frame is deliberately never hashed.
-function matchClosedCashCommands(rows, receipt, previousDocument) {
-  if (!rows.length || receipt?.method !== 'cash' || !/^[0-9]{7}$/.test(previousDocument) ||
-      Number(previousDocument) >= 9999999) return null;
+function cashCommandReader(rows) {
   let index = 0;
   let sequence = rows[0].sequence;
-  function take(command, data) {
+  if (!Number.isInteger(sequence) || sequence < 0x20 || sequence > 0x7f) throw Error('Invalid PF700 sequence');
+  function request(command, data) {
     const row = rows[index++];
-    if (!row || row.command !== command || row.sequence !== sequence || !row.summary || !row.responseHash) {
+    if (!row || row.command !== command || row.sequence !== sequence) {
       throw Error('Incomplete PF700 checkout trace');
     }
     if (command === 48) {
@@ -27,36 +26,65 @@ function matchClosedCashCommands(rows, receipt, previousDocument) {
       if (row.requestHash !== hash) throw Error('Unexpected PF700 request');
     }
     sequence = sequence === 0x7f ? 0x20 : sequence + 1;
+    return row;
+  }
+  function take(command, data) {
+    const row = request(command, data);
+    if (!row.summary || !/^[a-f0-9]{64}$/.test(row.responseHash)) throw Error('Missing PF700 acknowledgement');
     return JSON.parse(row.summary);
   }
   function expect(command, data, summary) {
     if (!isDeepStrictEqual(take(command, data), summary)) throw Error('Unexpected PF700 acknowledgement');
   }
+  return { request, take, expect, done:() => index === rows.length };
+}
+
+function readCashPrefix(trace, receipt, previousDocument) {
+  if (receipt?.method !== 'cash' || !/^[0-9]{7}$/.test(previousDocument) ||
+      Number(previousDocument) >= 9999999) throw Error('Invalid PF700 cash selection');
+  const items = onsiteReceiptItems(receipt);
+  const state = name => ({state:name, items:items.length, total:receipt.total});
+  const query = Buffer.from('T');
+  trace.expect(90, Buffer.from('0'), {identityMatched:true, onsiteFirmware:true});
+  trace.expect(74, Buffer.from('X'), {});
+  trace.expect(76, query, {stateChecked:true});
+  trace.expect(97, undefined, {ratesChecked:true});
+  trace.expect(113, undefined, {documentNumber:previousDocument});
+  const opening = trace.take(48);
+  const { fiscalReceiptCount, reversalCount } = opening;
+  const counter = n => Number.isInteger(n) && n >= 0 && n <= 9999;
+  if (!counter(fiscalReceiptCount) || fiscalReceiptCount === 9999 || !counter(reversalCount) ||
+      !isDeepStrictEqual(opening, {fiscalReceiptCount, reversalCount})) throw Error('Invalid PF700 opening counters');
+  for (const item of items) trace.expect(49, item, {itemAccepted:true});
+  trace.expect(76, query, state('open_unpaid'));
+  trace.expect(103, undefined, {taxTotalsMatched:true});
+  trace.expect(53, Buffer.from([9]), {tenderAccepted:true});
+  trace.expect(76, query, state('open_paid'));
+  return opening;
+}
+
+// Used by the offline evidence collector. The pending request must be the
+// last actual row. Its counters and any later results remain unknown.
+function matchPendingCashClose(rows, receipt, previousDocument) {
   try {
-    const items = onsiteReceiptItems(receipt);
-    const total = receipt.total;
-    const state = name => ({state:name, items:items.length, total});
-    const query = Buffer.from('T');
-    expect(90, Buffer.from('0'), {identityMatched:true, onsiteFirmware:true});
-    expect(74, Buffer.from('X'), {});
-    expect(76, query, {stateChecked:true});
-    expect(97, undefined, {ratesChecked:true});
-    expect(113, undefined, {documentNumber:previousDocument});
-    const opening = take(48);
-    const { fiscalReceiptCount, reversalCount } = opening;
-    const counter = n => Number.isInteger(n) && n >= 0 && n <= 9999;
-    if (!counter(fiscalReceiptCount) || fiscalReceiptCount === 9999 || !counter(reversalCount) ||
-        !isDeepStrictEqual(opening, {fiscalReceiptCount, reversalCount})) return null;
-    for (const item of items) expect(49, item, {itemAccepted:true});
-    expect(76, query, state('open_unpaid'));
-    expect(103, undefined, {taxTotalsMatched:true});
-    expect(53, Buffer.from([9]), {tenderAccepted:true});
-    expect(76, query, state('open_paid'));
-    expect(56, undefined, {fiscalReceiptCount:fiscalReceiptCount + 1, reversalCount});
-    expect(76, query, state('closed'));
+    const trace = cashCommandReader(rows);
+    const opening = readCashPrefix(trace, receipt, previousDocument);
+    const close = trace.request(56);
+    return trace.done() && close.summary === null && close.responseHash === null ? opening : null;
+  } catch {
+    return null;
+  }
+}
+
+function matchClosedCashCommands(rows, receipt, previousDocument) {
+  try {
+    const trace = cashCommandReader(rows);
+    const { fiscalReceiptCount, reversalCount } = readCashPrefix(trace, receipt, previousDocument);
+    trace.expect(56, undefined, {fiscalReceiptCount:fiscalReceiptCount + 1, reversalCount});
+    trace.expect(76, Buffer.from('T'), {state:'closed', items:receipt.lines.length, total:receipt.total});
     const reference = String(Number(previousDocument) + 1).padStart(7, '0');
-    expect(113, undefined, {documentNumber:reference});
-    return index === rows.length
+    trace.expect(113, undefined, {documentNumber:reference});
+    return trace.done()
       ? {documentNumber:reference, fiscalReceiptCount:fiscalReceiptCount + 1, reversalCount} : null;
   } catch {
     return null;
@@ -110,4 +138,4 @@ function persistClosedCashTrace(db, billId) {
   }
 }
 
-module.exports = { readClosedCashTrace, persistClosedCashTrace };
+module.exports = { matchPendingCashClose, readClosedCashTrace, persistClosedCashTrace };
