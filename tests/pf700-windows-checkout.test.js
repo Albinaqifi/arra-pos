@@ -3,10 +3,21 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const { PassThrough, Writable } = require('node:stream');
 const { randomInt } = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { createWindowsPf700Checkout, checkWindowsPf700Identity } = require('../src/desktop/pf700-windows-checkout');
 const { encodeRequest } = require('../src/desktop/pf700-frame');
+const { openDatabase } = require('../src/desktop/database');
+const { authorizedDatabase } = require('./support/authorized-database');
+const { seedTables } = require('../src/desktop/tables');
+const { seedArraMenu } = require('../src/desktop/arra-menu');
+const { registerOrderItems } = require('../src/desktop/order-items');
+const { registerBills } = require('../src/desktop/bills');
+const { registerPayments } = require('../src/desktop/payments');
+const { enroll } = require('../src/desktop/pf700-commissioning');
+const { selectPf700Checkout } = require('../src/desktop/pf700-checkout-mode');
 
 const windows = { skip: process.platform !== 'win32' };
 const serial = 'SYNTHETIC01';
@@ -31,7 +42,8 @@ function mockPipe({ identity = '1.00 231014 1230,ABCD,0011,1,' + serial, identit
     log.launches++; log.args = args; log.options = options;
     const child = new EventEmitter();
     child.stdout = new PassThrough();
-    let open = false, closed = false, sold = false;
+    let open = false, closed = false, sold = false, registered = false;
+    const onsite = identity.split(',').length === 6;
     child.stdin = new Writable({
       write(bytes, _encoding, callback) {
         const frame = Buffer.from(bytes.toString().trim(), 'hex'), cmd = frame[3];
@@ -42,14 +54,26 @@ function mockPipe({ identity = '1.00 231014 1230,ABCD,0011,1,' + serial, identit
         switch (cmd) {
           case 90: assert.equal(data.toString(), '0'); reply = identity; break;
           case 74: break;
-          case 76: reply = [Number(open), sold ? '0001' : '0000', sold ? '+000000070' : '+000000000', sold ? '+000000070' : '+000000000'].join(','); break;
+          case 76: {
+            const amount = onsite ? '+000007000' : '+000000070';
+            reply = [Number(open), registered ? '0001' : '0000', registered ? amount : '+000000000',
+              sold ? amount : '+000000000'].join(',');
+            break;
+          }
           case 97: reply = '18,5,10,0'; break;
           case 113: reply = closed ? '0000002' : '0000001'; break;
           case 48: open = true; reply = '0000,0000'; break;
-          case 49: log.domestic = data.includes(Buffer.from([9, 64, 0xc2])); break;
+          case 49:
+            registered = true;
+            log.item = data;
+            log.domestic = data.includes(Buffer.from([9, 64, 0xc2]));
+            break;
           case 51: reply = '70,0,0,70,0'; break;
-          case 103: reply = '0,0,0,70,0'; break;
-          case 53: sold = true; reply = 'R+000000000'; break;
+          case 103: reply = onsite ? '1,+000000000,+000000000,+000007000,+000000000' : '0,0,0,70,0'; break;
+          case 53:
+            assert.equal(data.toString(), onsite ? '\t' : '\tP70');
+            assert.equal(sold, false);
+            sold = true; reply = 'R+000000000'; break;
           case 56: closed = true; open = false; reply = '0001,0000'; break;
           default: throw Error('Unexpected command');
         }
@@ -76,6 +100,8 @@ test('Windows adapter pins the serial and runs the full checkout over one privat
   assert.deepEqual(Object.keys(device).sort(), ['deviceId','domesticProduct','mode','registerSale']);
   assert.equal((await device.registerSale(snapshot)).status, 'failed');
   assert.equal((await device.registerSale({ ...snapshot, domesticProduct: false }, journal)).status, 'failed');
+  const oversized = { ...snapshot, total: 10_000_000, lines: [{ ...snapshot.lines[0], unitPrice: 10_000_000 }] };
+  assert.equal((await device.registerSale(oversized, journal)).status, 'failed');
   const consumed = createWindowsPf700Checkout({ ...config, mayProbe: () => false }, mock.start);
   assert.equal((await consumed.registerSale(snapshot, journal)).status, 'failed');
   assert.equal(mock.log.launches, 0);
@@ -138,7 +164,7 @@ test('confirmed six-field identity works in both the read-only check and the gua
     });
     assert.equal(journaled, true);
     assert.equal(result.status, 'accepted');
-    assert.deepEqual(mock.log.calls, [90,74,76,97,113,48,49,51,103,53,76,56,76,113]);
+    assert.deepEqual(mock.log.calls, [90,74,76,97,113,48,49,76,103,53,76,56,76,113]);
     assert.equal(mock.log.closes, 1);
   }
 });
@@ -253,4 +279,99 @@ test('PowerShell helper reads framed replies and disposes a synthetic port on su
   const result = spawnSync(shell, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
     { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
+});
+
+function commissionedCheckout(t, port) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-pf700-payment-'));
+  const previous = process.env.LOCALAPPDATA;
+  process.env.LOCALAPPDATA = path.join(directory, 'local');
+  let db = authorizedDatabase(openDatabase(directory));
+  t.after(() => {
+    if (previous === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = previous;
+    db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+  enroll(db);
+  seedTables(db);
+  seedArraMenu(db);
+  db.exec(`INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,1,'open');
+    INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders;`);
+  const event = {}, allowed = sender => sender === event;
+  const session = { currentUserId: () => 1, authenticatedUserId: () => 1 };
+  const handlers = {}, ipc = { handle: (channel, fn) => { handlers[channel] = fn; } };
+  function register() {
+    const adapter = selectPf700Checkout(['--pf700-supervised-checkout'], directory,
+      () => ({ ...profile(), dataDirectory: directory }), settings => createWindowsPf700Checkout(settings, port.start));
+    registerOrderItems(ipc, allowed, db, session);
+    registerBills(ipc, allowed, db, session, adapter);
+    registerPayments(ipc, allowed, db, session, null, adapter);
+  }
+  register();
+  return {
+    get db() { return db; },
+    espresso(orderId) {
+      const items = req => handlers['arra:order-items'](event, { ...req, orderId });
+      const bill = req => handlers['arra:bill'](event, { ...req, orderId });
+      assert.equal(items({ action: 'add', productId: 'arra-product-11-0' }).ok, true);
+      assert.equal(items({ action: 'send', requestId: 'send-' + orderId }).ok, true);
+      const { fingerprint } = bill({ action: 'review' }).data;
+      const generated = bill({ action: 'generate', fingerprint });
+      assert.equal(generated.data.total, 70);
+      return generated.data.id;
+    },
+    pay: billId => handlers['arra:payment'](event, { billId, method: 'cash', account: 'A' }),
+    restart() { db.close(); db = openDatabase(directory); register(); }
+  };
+}
+
+const espressoCommands = [90,74,76,97,113,48,49,76,103,53,76,56,76,113];
+
+test('supervised waiter checkout records one 70 MKD espresso and its six-field receipt across restart', windows, async t => {
+  const port = mockPipe({ identity: sixFields.join(',') });
+  const pos = commissionedCheckout(t, port);
+  const billId = pos.espresso(1), secondBill = pos.espresso(2);
+  const paid = await pos.pay(billId);
+  assert.equal(paid.ok, true);
+  assert.equal(paid.data.fiscal.status, 'accepted');
+  assert.deepEqual(paid.data.fiscal.evidence, { documentNumber: '0000002', fiscalReceiptCount: 1, reversalCount: 0 });
+  const [line] = paid.data.fiscal.receipt.lines;
+  assert.deepEqual([line.name, line.unitPrice, line.quantity, line.taxGroup, line.taxRate], ['Espresso',70,1,'В',10]);
+  assert.deepEqual(port.log.item, Buffer.concat([Buffer.from('Espresso'), Buffer.from([9,64,0xc2]), Buffer.from('70*1')]));
+  assert.deepEqual(await pos.pay(billId), paid);
+  pos.restart();
+  assert.deepEqual(await pos.pay(billId), paid);
+  assert.equal((await pos.pay(secondBill)).fiscalStatus, 'scope');
+  const payments = pos.db.prepare('SELECT bill_id, amount, account, method FROM payments').all();
+  assert.deepEqual(payments.map(row => ({ ...row })), [{ bill_id: billId, amount: 70, account: 'A', method: 'cash' }]);
+  assert.equal(pos.db.prepare('SELECT status FROM orders WHERE id=1').get().status, 'completed');
+  assert.equal(pos.db.prepare('SELECT count(*) AS n FROM fiscal_checkout_attempts').get().n, 1);
+  assert.equal(port.log.launches, 1);
+  assert.deepEqual(port.log.calls, espressoCommands);
+});
+
+test('interrupted six-field waiter checkout preserves an unpaid bill and never resends on restart', windows, async t => {
+  function wrongVat(line) {
+    const frame = Buffer.from(line.trim(), 'hex');
+    if (frame[3] !== 103) return line;
+    return wrapped(frame[2], 103, true, '1,+000000000,+000000000,+000000070,+000000000').toString('hex').toUpperCase() + '\r\n';
+  }
+  for (const [name, change, last] of [
+    ['unverified VAT amount', { mutate: wrongVat }, 103],
+    ['lost tender reply', { breakAt: 53 }, 53],
+    ['lost close reply', { breakAt: 56 }, 56]
+  ]) await t.test(name, async t => {
+    const port = mockPipe({ identity: sixFields.join(','), ...change });
+    const pos = commissionedCheckout(t, port);
+    const billId = pos.espresso(1);
+    assert.equal((await pos.pay(billId)).fiscalStatus, 'uncertain');
+    pos.restart();
+    assert.equal((await pos.pay(billId)).fiscalStatus, 'uncertain');
+    assert.equal(pos.db.prepare('SELECT count(*) AS n FROM payments').get().n, 0);
+    assert.equal(pos.db.prepare('SELECT status FROM orders WHERE id=1').get().status, 'open');
+    assert.equal(pos.db.prepare('SELECT count(*) AS n FROM fiscal_checkout_attempts').get().n, 1);
+    assert.equal(pos.db.prepare('SELECT previous_document FROM fiscal_checkout_baselines').get().previous_document, '0000001');
+    assert.equal(port.log.launches, 1);
+    assert.deepEqual(port.log.calls, espressoCommands.slice(0, espressoCommands.indexOf(last) + 1));
+  });
 });

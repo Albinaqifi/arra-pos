@@ -4,6 +4,8 @@ const { randomInt } = require('node:crypto');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
 
 const MAX_AMOUNT = 99999999;
+// The on-site receipt-state field holds nine digits in hundredths of MKD.
+const MAX_ONSITE_TOTAL = 9_999_999;
 const GROUPS = new Map([['А', { byte: 0xc0, index: 0, rate: 18 }], ['В', { byte: 0xc2, index: 2, rate: 10 }]]);
 const ascii = value => Buffer.from(value, 'ascii');
 
@@ -26,11 +28,11 @@ function saleData(line, domesticProduct) {
   return Buffer.concat([ascii(label), prefix, ascii(line.unitPrice + '*' + line.quantity)]);
 }
 
-function prepare(snapshot, domesticProduct) {
+function prepare(snapshot, domesticProduct, maxTotal) {
   requireMatch(snapshot.account === 'A' && snapshot.currency === 'MKD' &&
     Number.isSafeInteger(snapshot.billId) && snapshot.billId > 0 &&
     ['cash', 'card'].includes(snapshot.method) && Number.isSafeInteger(snapshot.total) &&
-    snapshot.total > 0 && snapshot.total <= MAX_AMOUNT && Array.isArray(snapshot.lines) &&
+    snapshot.total > 0 && snapshot.total <= maxTotal && Array.isArray(snapshot.lines) &&
     snapshot.lines.length > 0 && snapshot.lines.length <= 512 && typeof domesticProduct === 'boolean' &&
     (!domesticProduct || snapshot.lines.length === 1));
   const sums = [0, 0, 0, 0];
@@ -45,7 +47,8 @@ function prepare(snapshot, domesticProduct) {
 
 function canEncodePf700Receipt(snapshot) {
   try {
-    prepare(snapshot, false);
+    // Checkout reserves the payment selection before the device is identified.
+    prepare(snapshot, false, MAX_ONSITE_TOTAL);
     return true;
   } catch {
     return false;
@@ -70,16 +73,26 @@ function documentNumber(data) {
   return text;
 }
 
-function checkState(data, open, items, amount) {
+// On the identified 1.00MK unit, 76/T and 103 report signed nine-digit
+// hundredths. Sale prices and explicit tenders are still entered in MKD.
+function onsiteAmount(mkd) {
+  return '+' + String(100 * mkd).padStart(9, '0');
+}
+
+function checkState(data, open, onsiteFirmware, items, amount, tendered = amount) {
   const fields = data.toString('latin1').split(',');
   requireMatch(fields.length === 4 && fields[0] === (open ? '1' : '0') &&
     fields[1].length === 4 && /^ *[0-9]+$/.test(fields[1]));
-  // The POS reports sign plus nine digits. Older v1.40 fields occupy nine
-  // bytes including sign/padding. Amount comparisons use whole MKD exactly.
+  // Older v1.40 fields can occupy nine bytes including sign/padding.
   requireMatch(fields.slice(2).every(n => /^[+-][0-9]{9}$/.test(n) ||
-    (n.length === 9 && /^ *[+-]?[0-9]+$/.test(n))));
+    (!onsiteFirmware && n.length === 9 && /^ *[+-]?[0-9]+$/.test(n))));
   if (items !== undefined) {
-    requireMatch(Number(fields[1]) === items && Number(fields[2]) === amount && Number(fields[3]) === amount);
+    requireMatch(Number(fields[1]) === items);
+    if (onsiteFirmware) {
+      requireMatch(fields[2] === onsiteAmount(amount) && fields[3] === onsiteAmount(tendered));
+    } else {
+      requireMatch(Number(fields[2]) === amount && Number(fields[3]) === tendered);
+    }
   }
 }
 
@@ -99,8 +112,9 @@ function checkAmounts(fields, expected) {
 async function executePf700Checkout(snapshot, operator, exchange) {
   let openAttempted = false;
   try {
-    const { domesticProduct = false } = operator;
-    const { items, sums, total, method } = prepare(snapshot, domesticProduct);
+    const { domesticProduct = false, onsiteFirmware = false } = operator;
+    requireMatch(typeof onsiteFirmware === 'boolean');
+    const { items, sums, total, method } = prepare(snapshot, domesticProduct, onsiteFirmware ? MAX_ONSITE_TOTAL : MAX_AMOUNT);
     const { firstSequence, operatorNumber, operatorPassword, tillNumber } = operator;
     requireMatch(Number.isInteger(firstSequence) && firstSequence >= 0x20 && firstSequence <= 0x7f &&
       ['string', 'number'].includes(typeof operatorNumber) && /^[1-8]$/.test(String(operatorNumber)) &&
@@ -122,7 +136,7 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     }
 
     await send(74, ascii('X'), false);
-    checkState(await send(76, ascii('T'), false), false);
+    checkState(await send(76, ascii('T'), false), false, onsiteFirmware);
     checkRates(await send(97, undefined, false));
     const priorDocument = documentNumber(await send(113, undefined, false));
     requireMatch(Number(priorDocument) < 9999999);
@@ -134,23 +148,28 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     for (const item of items) {
       requireMatch((await send(49, item, true, [9, 10])).length === 0);
     }
-    const totals = (await send(51, ascii('00'), true)).toString('latin1').split(',');
-    checkAmounts(totals, [total, ...sums]);
-    const current = (await send(103, undefined, true)).toString('latin1').split(',');
-    requireMatch(['0', '1'].includes(current[0]));
-    checkAmounts(current.slice(1), sums);
-    // D is the device's debit register. Accent's card example uses D. A site
-    // must confirm that its terminal's card tenders all use this register.
-    const tender = ascii('\t' + (method === 'card' ? 'D' : 'P') + total);
+    if (onsiteFirmware) {
+      // These two inquiries were verified together before the on-site cash
+      // tender. Require the exact receipt, an unpaid balance and each VAT sum.
+      checkState(await send(76, ascii('T'), true), true, true, items.length, total, 0);
+      const current = (await send(103, undefined, true)).toString('latin1');
+      requireMatch(current === ['1', ...sums.map(onsiteAmount)].join(','));
+    } else {
+      const totals = (await send(51, ascii('00'), true)).toString('latin1').split(',');
+      checkAmounts(totals, [total, ...sums]);
+      const current = (await send(103, undefined, true)).toString('latin1').split(',');
+      requireMatch(['0', '1'].includes(current[0]));
+      checkAmounts(current.slice(1), sums);
+    }
+    // A lone TAB tenders the full balance in cash on the on-site unit.
+    // D remains the explicit debit register in the card rehearsal.
+    const tender = onsiteFirmware && method === 'cash' ? ascii('\t') : ascii('\t' + (method === 'card' ? 'D' : 'P') + total);
     const paid = (await send(53, tender, true, [9])).toString('latin1');
-    // v1.40 specifies R for change, but omits the equal-tender case. The
-    // commissioning candidate is zero change, independently corroborated by
-    // 76/T below. Any other reply, partial tender or disagreement stops here.
-    requireMatch(/^R\+0{1,9}$/.test(paid));
-    checkState(await send(76, ascii('T'), true), true, items.length, total);
+    requireMatch(onsiteFirmware ? paid.length <= 14 && /^[RD] *\+?0{1,10}(?:\.0{1,2})?$/.test(paid) : /^R\+0{1,9}$/.test(paid));
+    checkState(await send(76, ascii('T'), true), true, onsiteFirmware, items.length, total);
     const after = counters(await send(56, undefined, false));
     requireMatch(after[0] === before[0] + 1 && after[1] === before[1]);
-    checkState(await send(76, ascii('T'), false), false, items.length, total);
+    checkState(await send(76, ascii('T'), false), false, onsiteFirmware, items.length, total);
     const reference = documentNumber(await send(113, undefined, false));
     requireMatch(Number(reference) === Number(priorDocument) + 1);
     return { status: 'accepted', reference, evidence: {
@@ -185,8 +204,7 @@ function simulatedDevice() {
       case 74: requireMatch(text === 'X'); break;
       case 76:
         requireMatch(text === 'T');
-        reply = [Number(open), String(count).padStart(4, '0'), '+' + String(total).padStart(9, '0'),
-          '+' + String(paid).padStart(9, '0')].join(',');
+        reply = [Number(open), String(count).padStart(4, '0'), onsiteAmount(total), onsiteAmount(paid)].join(',');
         break;
       case 97: requireMatch(!text); reply = '18.00,5.00,10.00,0.00'; break;
       case 113: requireMatch(!text); reply = closed ? '0000001' : '0000000'; break;
@@ -200,10 +218,9 @@ function simulatedDevice() {
         count++;
         break;
       }
-      case 51: requireMatch(open && text === '00'); reply = [total, ...sums].join(','); break;
-      case 103: requireMatch(open && !text); reply = [0, ...sums].join(','); break;
+      case 103: requireMatch(open && !text); reply = [1, ...sums.map(onsiteAmount)].join(','); break;
       case 53:
-        requireMatch(open && !paid && /^\t[PD][0-9]{1,8}$/.test(text) && Number(text.slice(2)) === total);
+        requireMatch(open && !paid && (text === '\t' || text === '\tD' + total));
         paid = total; reply = 'R+000000000'; break;
       case 56:
         requireMatch(open && !text && paid === total && paid > 0);
@@ -216,7 +233,7 @@ function simulatedDevice() {
 
 async function registerSimulatedPf700Sale(snapshot) {
   const billId = snapshot?.billId;
-  const operator = { firstSequence: 0x20, operatorNumber: 1, tillNumber: 1, domesticProduct: false,
+  const operator = { firstSequence: 0x20, operatorNumber: 1, tillNumber: 1, domesticProduct: false, onsiteFirmware: true,
     operatorPassword: String(randomInt(100000, 1000000)) };
   const result = await executePf700Checkout(snapshot, operator, simulatedDevice());
   return result.status === 'accepted' ? { status: 'accepted', reference: 'SIM-' + billId } : result;

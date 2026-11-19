@@ -392,6 +392,27 @@ test('unsupported PF700 descriptions are rejected before reserving or freezing t
   assert.equal(f.pay(payment(billId,'cash','B')).ok,true);
 });
 
+test('a bill exceeding the PF700 limit leaves the fiscal journal empty and the cash selection open', async t => {
+  for (const mode of ['device', 'simulation']) {
+    let calls = 0;
+    const f = setup(t, {
+      mode, ...(mode === 'device' ? { deviceId: 'sample-PF700', domesticProduct: false } : {}),
+      registerSale() { calls++; return { status: 'failed' }; }
+    });
+    f.db.exec("INSERT INTO order_items(order_id,product_id,name,unit_price,quantity,status) VALUES(1,'arra-product-11-0','Sample item',10000000,1,'sent')");
+    const review = f.bills({ action: 'review', orderId: 1 });
+    const bill = f.bills({ action: 'generate', orderId: 1, fingerprint: review.data.fingerprint }).data;
+    assert.equal(bill.total, 10_000_000);
+    assert.equal((await f.pay(payment(bill.id))).fiscalStatus, 'unavailable');
+    for (const table of ['fiscal_checkout_sales','fiscal_checkout_attempts','fiscal_checkout_results','fiscal_checkout_baselines','payments']) {
+      assert.equal(count(f.db, table), 0);
+    }
+    assert.equal((await f.pay(payment(bill.id, 'cash', 'B'))).ok, true);
+    assert.equal(count(f.db, 'payments'), 1);
+    assert.equal(calls, 0);
+  }
+});
+
 test('device attempt holds its original financial period until settled and pre-open failure releases it', async t => {
   let finish;
   const f = setup(t,{mode:'device',deviceId:'sample-PF700',domesticProduct:false,registerSale:(_receipt,context) =>

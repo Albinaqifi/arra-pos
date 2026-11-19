@@ -2,7 +2,7 @@ const { spawn } = require('node:child_process');
 const { randomInt } = require('node:crypto');
 const path = require('node:path');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
-const { executePf700Checkout } = require('./pf700-checkout-protocol');
+const { canEncodePf700Receipt, executePf700Checkout } = require('./pf700-checkout-protocol');
 
 const validSerial = serial => typeof serial === 'string' && /^[A-Za-z0-9]{11}$/.test(serial);
 
@@ -27,7 +27,7 @@ function inspectIdentity(frame, sequence, expectedSerial) {
     return { ok: false, reason: 'layout', layout: 'header widths ' + widths(header.split(' ')) +
       ', remaining field widths ' + widths(fields.slice(1)) };
   }
-  return serial === expectedSerial ? { ok: true } : { ok: false, reason: 'serial' };
+  return serial === expectedSerial ? { ok: true, onsiteFirmware: onsite } : { ok: false, reason: 'serial' };
 }
 
 async function probeIdentity(pipe, sequence, expectedSerial) {
@@ -92,7 +92,8 @@ async function checkWindowsPf700Identity(expectedSerial, startProcess = spawn) {
   let pipe;
   try {
     pipe = windowsPipe(startProcess);
-    return await probeIdentity(pipe, randomInt(0x20, 0x80), expectedSerial);
+    const result = await probeIdentity(pipe, randomInt(0x20, 0x80), expectedSerial);
+    return result.ok ? { ok: true } : result;
   } catch {
     return { ok: false, reason: 'transport' };
   } finally {
@@ -112,7 +113,8 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
   return Object.freeze({
     mode: 'device', deviceId: expectedSerial, domesticProduct,
     async registerSale(snapshot, context) {
-      if (busy || typeof context?.beforeOpen !== 'function' || snapshot.domesticProduct !== domesticProduct) return { status: 'failed' };
+      if (busy || typeof context?.beforeOpen !== 'function' || snapshot?.domesticProduct !== domesticProduct ||
+          !canEncodePf700Receipt(snapshot)) return { status: 'failed' };
       busy = true;
       let pipe, opening = false;
       try {
@@ -124,6 +126,7 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
         return await executePf700Checkout(snapshot, {
           firstSequence: sequence === 0x7f ? 0x20 : sequence + 1,
           operatorNumber, operatorPassword, tillNumber, domesticProduct: snapshot.domesticProduct,
+          onsiteFirmware: identity.onsiteFirmware,
           async beforeOpen(baseline) {
             if (beforeOpen) await beforeOpen(baseline);
             await context.beforeOpen(baseline);

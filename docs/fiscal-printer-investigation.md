@@ -6,7 +6,7 @@ The owner identified the fiscal printer in a photograph as a Synergy PF700 and c
 
 ### POS connection prepared for S-084
 
-The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. The owner subsequently ran paper test v2 on that POS and confirmed the PF700 printed the diagnostic slip. Fiscal sale registration and the official daily report still need verification.
+The Windows 10 POS showed the Prolific USB-to-serial adapter on **COM3**. The owner ran Arra 1.0.3's live status diagnostic on that POS and supplied the resulting screen. The PF700 answered at **9600 baud, 8 data bits, no parity, one stop bit**, with handshake disabled. Both status fields were `888080e1809a`. The owner subsequently ran paper test v2 on that POS and confirmed the PF700 printed the diagnostic slip.
 
 The resulting diagnostic slip identifies the printer as **SYNERGY FP-700CRX**, with firmware **1.00MK** dated **23 October 2014**, and lists **RS232 at 9600 bps**. The slip does not identify the tax group assigned to coffee in the restaurant's menu.
 
@@ -18,16 +18,13 @@ In the packaged 105-item Arra menu this rule maps 89 items to В and 16 alcoholi
 
 On site, command 90 with option 0 returned a valid frame on COM3 with six comma-separated fields, of lengths 11, 19, 4, 8, 1 and 11. The published v1.40 command description has five fields. The separate 1.0.4 comparison tool confirmed that only the sixth field exactly matches the case label and that the firmware and date agree with the diagnostic slip. Version 1.0.5 recognizes this layout in the same identity check used before checkout.
 
-For the next on-site check, extract `Arra-POS-1.0.5-Offline-Test.zip` into its own folder and open **PF700-Check-Identity.cmd** there. The first launch extracts the runtime automatically. With the printer idle and earlier transactions reconciled, enter the case-label serial at the masked prompt. The result should say that the PF700 on COM3 matches the serial entered. Stop at the result. This operation only requests the device identity.
+The operator ran **PF700-Check-Identity.cmd** from the 1.0.5 package and confirmed that the PF700 on COM3 matched the serial on the case.
 
 Extract the complete offline ZIP and run `test-arra.cmd`. Its version-specific training database starts with the restaurant menu, 16 available tables and zero sales. Use the ordinary waiter checkout. Cash A and Card A use a simulated PF700 and show a receipt prefixed `SIM-`. Cash B follows the existing local payment path. The versioned launcher uses no serial or Windows print transport. A separate card terminal remains responsible for collecting card payments.
 
-For a later supervised cash sale, use Windows PowerShell in the installed program folder, `%LOCALAPPDATA%\Arra POS Offline Test\1.0.5`. Run each step separately on the POS.
+The 1.0.5 supervised Cash A trial is complete. An espresso priced at 70 MKD reached the printer in group В. Checkout stopped with the receipt open. Commands 76/T and 103 reported one item, zero tender and `+000007000` in the receipt amount and group В. This firmware reports hundredths of a denar in those fields. Version 1.0.5 compared them to whole MKD. The original exchange did not capture the first failing command.
 
-1. With the printer idle and earlier sales reconciled, run `.\start-supervised-pf700.ps1 -CheckIdentityOnly`. Enter the device serial from the diagnostic slip or label locally. It compares the PF700 identity on COM3. If the reply layout differs, the tool gives field widths for diagnosis.
-2. Run `.\start-supervised-pf700.ps1 -PrepareData` once. Choose local logins for the new, persistent restaurant profile. Its database is under `%APPDATA%\Arra POS PF700 Commissioning`. Preserve this folder and its backups.
-3. When ready to register an actual sale, run `.\start-supervised-pf700.ps1 -StartSale`. The launcher asks for the serial, fiscal operator number, printer operator password, till number and whether the chosen item carries the Macedonian-product mark. Enter these settings privately on the POS. Select one unit of the intended item, inspect the payment screen and use Cash A. This version permits one attended fiscal receipt.
-4. Compare the paper with Arra's saved receipt, including item, VAT group, amount, tender and printed document number. The firmware's exact-tender reply, amount scale, final state and document counters still require physical confirmation. An unknown result keeps the sale unresolved. Keep the paper, note the display and the bill's candidate document number, and preserve the database. The candidate number alone does not establish that a sale was accepted. Reconcile the original transaction before running further printer commands.
+The operator matched the open receipt to the saved bill, tendered its full balance in cash and closed it once. The recovery checked the amount paid, closed state and next document number. Arra acknowledged the receipt and recorded the original payment. The operator subsequently confirmed that paper feeds correctly. The existing trial has been used. Keep its database under `%APPDATA%\Arra POS PF700 Commissioning` and its device marker intact.
 
 Physical card checkout, changes that would turn a past B sale into a fiscal A sale, and the official fiscal daily report each require additional work. The current Account A close continues to create Arra's internal summary. [Accent PF550/PF700 protocol v1.40](https://www.accent.com.mk/downloads/Kontrolni_kodovi_PF550_PF700_v140.doc)
 

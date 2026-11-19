@@ -23,7 +23,7 @@ function reply(sequence, command, payload, status) {
   return Buffer.concat([Buffer.from([1]), body, Buffer.from([...sum].map(hex => 48 + parseInt(hex, 16))), Buffer.from([3])]);
 }
 
-function scenario(change = {}) {
+function scenario(change = {}, responses = data) {
   const seen = [];
   function exchange(request) {
     const index = seen.length;
@@ -31,7 +31,7 @@ function scenario(change = {}) {
     seen.push({ command, sequence: request[2], data: command === 48 ? null : request.subarray(4, -6) });
     if (change.fail === index) throw Error('Simulated lost reply');
     const status = index >= 4 && index <= 10 ? opened : idle;
-    const frame = reply(request[2], command, index === change.index ? change.data ?? data[index] : data[index],
+    const frame = reply(request[2], command, index === change.index ? change.data ?? responses[index] : responses[index],
       index === change.index ? change.status ?? status : status);
     if (index === change.corrupt) frame[frame.length - 2] ^= 1;
     return frame;
@@ -53,6 +53,57 @@ test('fixed sequence emits split quantities, both verified tax bytes and explici
     assert.equal(port.seen[9].data.toString(), '\t' + tender + '290');
     assert.equal(port.seen[11].data.length, 0);
   }
+});
+
+// The command 76 and 103 payloads are literal wire fixtures, independent of
+// the simulator's formatter. The two taxable lines total 290 whole MKD.
+const onsiteCommands = [74, 76, 97, 113, 48, 49, 49, 76, 103, 53, 76, 56, 76, 113];
+const onsiteData = [idle, '0,0001,+000007000,+000007000', '18.00,5.00,10.00,0.00', '0000045',
+  '  27,0003', '', '', '1,0002,+000029000,+000000000', '1,+000015000,+000000000,+000014000,+000000000',
+  'D+000000000', '1,0002,+000029000,+000029000', '0028,0003', '0,0002,+000029000,+000029000', '0000046'];
+
+test('identified on-site firmware checks unpaid, paid and closed receipts in hundredths and sends one tender', async () => {
+  for (const [method, tender, zero] of [['cash', '\t', 'R+000000000'], ['card', '\tD290', 'D 0.00']]) {
+    const port = scenario({ index: 9, data: zero }, onsiteData);
+    const result = await executePf700Checkout({ ...sale, method }, { ...operator(), onsiteFirmware: true }, port.exchange);
+    assert.deepEqual(result, { status: 'accepted', reference: '0000046',
+      evidence: { documentNumber: '0000046', fiscalReceiptCount: 28, reversalCount: 3 } });
+    assert.deepEqual(port.seen.map(s => s.command), onsiteCommands);
+    assert.equal(port.seen[9].data.toString(), tender);
+  }
+});
+
+test('on-site mismatches stop the sequence and never release a second tender or close', async () => {
+  for (const [index, value] of [
+    [7, '1,0002,+000000290,+000000000'], [7, '1,0002,+000029000,+000000001'],
+    [7, '1,0003,+000029000,+000000000'], [7, '1,0002,+000029000,-000000000'],
+    [8, '1,+000014000,+000000000,+000015000,+000000000'], [8, '1,+000000150,+000000000,+000000140,+000000000'],
+    [8, '1,+000015000,+000000000,+000014001,+000000000'], [8, '0,+000015000,+000000000,+000014000,+000000000'],
+    [8, '1,150.00,0.00,140.00,0.00'], [9, 'X+000000000'], [9, 'D+1'], [9, 'R-0'],
+    [10, '1,0002,+000029000,+000000000'], [10, '1,0002,+000029000,+000028999'],
+    [11, '0027,0003'], [11, '0028,0004'], [12, '1,0002,+000029000,+000029000'],
+    [12, '0,0002,+000029000,+000000290'], [13, '0000047']
+  ]) {
+    const port = scenario({ index, data: value }, onsiteData);
+    assert.deepEqual(await executePf700Checkout(sale, { ...operator(), onsiteFirmware: true }, port.exchange),
+      { status: 'uncertain' });
+    assert.deepEqual(port.seen.map(s => s.command), onsiteCommands.slice(0, index + 1));
+  }
+  for (let index = 4; index < onsiteCommands.length; index++) {
+    const port = scenario({ fail: index }, onsiteData);
+    assert.deepEqual(await executePf700Checkout(sale, { ...operator(), onsiteFirmware: true }, port.exchange),
+      { status: 'uncertain' });
+    assert.deepEqual(port.seen.map(s => s.command), onsiteCommands.slice(0, index + 1));
+  }
+});
+
+test('a receipt must fit nine digits in hundredths before the on-site printer opens', async () => {
+  const priced = total => ({ ...sale, lines: [{ ...coffee, quantity: 1, unitPrice: total }], total });
+  assert.deepEqual(await registerSimulatedPf700Sale(priced(9999999)), { status: 'accepted', reference: 'SIM-23' });
+  const port = scenario();
+  assert.deepEqual(await executePf700Checkout(priced(10000000), { ...operator(), onsiteFirmware: true }, port.exchange),
+    { status: 'failed' });
+  assert.equal(port.seen.length, 0);
 });
 
 test('unknown or malformed preflight state, rates, permissions, or fiscal mode produce no opening command', async () => {

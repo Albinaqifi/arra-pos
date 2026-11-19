@@ -12,7 +12,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
 | S-085 | In progress | PR #122 merged; independent review and focused tests passed; desktop verification outstanding. |
-| S-084 | In progress | The sixth field matched the printer's label on COM3. Version 1.0.5 recognizes the verified layout. Next is the packaged read-only check on the POS. The first supervised cash receipt, physical card testing, reconciliation and the official daily report remain open. |
+| S-084 | In progress | First supervised Cash A receipt recovered and recorded once. Version 1.0.6 passed offline checkout, interruption and restart tests. Straight-through hardware checkout, physical card checkout and the official daily report remain open. |
 | S-083 | In progress | Independent review and focused tests passed; desktop, offline and physical paper verification outstanding. |
 
 | S-082 | Done | Independent review and automated tests passed; owner reports all checks passed; PR #119 merged as `9cb9f72`. |
