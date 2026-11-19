@@ -116,6 +116,15 @@ test('Windows adapter pins the serial and runs the full checkout over one privat
   assert.ok(!JSON.stringify(mock.log.args).includes(config.operatorPassword));
 });
 
+test('routine adapter uses the saved mark on a legacy single-item receipt', windows, async () => {
+  for (const originalMark of [false, true]) {
+    const mock = mockPipe();
+    const device = createWindowsPf700Checkout({ ...profile(), domesticProduct: !originalMark, allowLegacyOrigin: true }, mock.start);
+    assert.equal((await device.registerSale({...snapshot, domesticProduct:originalMark}, journal)).status, 'accepted');
+    assert.equal(mock.log.domestic, originalMark);
+  }
+});
+
 test('wrong serial, malformed diagnostics and bad pipe frames fail before any fiscal command', windows, async () => {
   for (const bad of [
     { identity: '1.00 231014 1230,ABCD,0011,1,SYNTHETIC02' },

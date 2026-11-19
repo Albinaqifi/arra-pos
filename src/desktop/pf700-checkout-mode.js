@@ -7,6 +7,7 @@ const { isCommissionedDirectory, deviceTrial } = require('./pf700-commissioning'
 const { createWindowsPf700Checkout } = require('./pf700-windows-checkout');
 
 const supervised = '--pf700-supervised-checkout';
+const routine = '--pf700-routine-checkout';
 
 // The attended launcher passes the local settings through a private pipe and
 // closes it before the app opens. Never include its contents in errors or logs.
@@ -39,7 +40,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
     }
     return createTrainingPf700(directory);
   }
-  if (switches[0] !== supervised || process.platform !== 'win32' ||
+  if (![supervised, routine].includes(switches[0]) || process.platform !== 'win32' ||
       args.some(arg => arg.startsWith('--sample-data-directory')) ||
       fs.existsSync(path.join(directory, 'SAMPLE-DATA-ONLY')) ||
       !fs.existsSync(path.join(directory, 'arra.sqlite')) || !isCommissionedDirectory(directory)) {
@@ -51,17 +52,23 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
     throw Error('Check the local PF700 settings and data folder.');
   }
   const trial = deviceTrial(profile.expectedSerial);
+  const isRoutine = switches[0] === routine;
   const adapter = createDevice({
     operatorNumber: profile.operatorNumber, operatorPassword: profile.operatorPassword,
     tillNumber: profile.tillNumber, expectedSerial: profile.expectedSerial, domesticProduct: profile.domesticProduct,
-    mayProbe: trial.available, beforeOpen: trial.claim
+    ...(isRoutine ? {allowLegacyOrigin:true} : {mayProbe: trial.available, beforeOpen: trial.claim})
   });
   return Object.freeze({
     ...adapter,
+    ...(isRoutine ? { requireOrigins: true } : {}),
     dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
-    canRegister(receipt) {
-      return trial.available() && receipt.method === 'cash' && receipt.account === 'A' &&
-        receipt.lines.length === 1 && receipt.lines[0].quantity === 1;
+    canRegister(receipt, prior) {
+      const legacy = typeof receipt.domesticProduct === 'boolean' && receipt.lines.length === 1 &&
+        receipt.lines[0].quantity === 1 && !Object.hasOwn(receipt.lines[0], 'domesticProduct');
+      return receipt.method === 'cash' && receipt.account === 'A' && (isRoutine
+        ? (receipt.lines.every(line => typeof line.domesticProduct === 'boolean') ||
+          (legacy && prior?.status === 'failed' && prior.mode === 'device' && prior.deviceId === adapter.deviceId))
+        : (trial.available() && receipt.lines.length === 1 && receipt.lines[0].quantity === 1));
     }
   });
 }

@@ -2,11 +2,12 @@
 # launcher does not call this script. Operator settings exist only in memory.
 param(
     [Parameter(Mandatory = $true, ParameterSetName = 'Sale')][switch]$StartSale,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Routine')][switch]$StartRoutine,
     [Parameter(Mandatory = $true, ParameterSetName = 'Prepare')][switch]$PrepareData,
     [Parameter(Mandatory = $true, ParameterSetName = 'Identity')][switch]$CheckIdentityOnly
 )
 $ErrorActionPreference = 'Stop'
-if (@($StartSale, $PrepareData, $CheckIdentityOnly).Where({ $_.IsPresent }).Count -ne 1) {
+if (@($StartSale, $StartRoutine, $PrepareData, $CheckIdentityOnly).Where({ $_.IsPresent }).Count -ne 1) {
     throw 'Choose -CheckIdentityOnly, -PrepareData or -StartSale.'
 }
 $app = Join-Path $PSScriptRoot 'resources\app'
@@ -61,13 +62,14 @@ if (!(Test-Path -LiteralPath (Join-Path $data 'arra.sqlite') -PathType Leaf) -or
     (Test-Path -LiteralPath (Join-Path $data 'SAMPLE-DATA-ONLY'))) {
     throw 'Prepare the dedicated PF700 data profile first using -PrepareData.'
 }
-Write-Host 'Supervised PF700 checkout on COM3. Confirming Cash A in Arra can register one real sale, one unit of one item.'
+if ($StartRoutine) { Write-Host 'Routine PF700 checkout on COM3. Confirming Cash A in Arra registers real sales.' }
+else { Write-Host 'Supervised PF700 checkout on COM3. Confirming Cash A in Arra can register one real sale, one unit of one item.' }
 Write-Host 'In Financial information, a Combined user can also confirm a real PF700 fiscal day close.'
 if ((Read-Host 'Type LIVE to prepare this session') -cne 'LIVE') { return }
 $serial = (Read-Host 'Printer serial number from the device').Trim()
 $operator = (Read-Host 'Printer operator number (1 to 8)').Trim()
 $till = (Read-Host 'Till number (1 to 5 digits)').Trim()
-$origin = (Read-Host 'Does the item being sold require the Macedonian-product mark? Enter YES or NO').Trim()
+$origin = if ($StartRoutine) { 'NO' } else { (Read-Host 'Does the item being sold require the Macedonian-product mark? Enter YES or NO').Trim() }
 if ($serial -cnotmatch '^[A-Za-z0-9]{11}$' -or $operator -cnotmatch '^[1-8]$' -or
     $till -cnotmatch '^[0-9]{1,5}$' -or $origin -cnotin @('YES','NO')) { throw 'Check the local printer settings.' }
 $secure = Read-Host 'Printer operator password' -AsSecureString
@@ -85,7 +87,8 @@ try {
     $info = [Diagnostics.ProcessStartInfo]::new()
     $info.FileName = $electron
     $info.WorkingDirectory = $PSScriptRoot
-    $info.Arguments = '"{0}" "--user-data-dir={1}" --pf700-supervised-checkout' -f $app, $data
+    $mode = if ($StartRoutine) { '--pf700-routine-checkout' } else { '--pf700-supervised-checkout' }
+    $info.Arguments = '"{0}" "--user-data-dir={1}" {2}' -f $app, $data, $mode
     $info.UseShellExecute = $false
     $info.RedirectStandardInput = $true
     $info.EnvironmentVariables.Remove('ELECTRON_RUN_AS_NODE')

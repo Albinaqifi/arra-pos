@@ -50,6 +50,7 @@ function trainingRestaurant(t) {
   const pins = { waiter: String(randomInt(1000, 10000)), transfer: String(randomInt(100000, 1000000)) };
   seedSampleIdentities(db, passwords, pins.waiter, pins.transfer);
   seedArraMenu(db);
+  db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
   seedTables(db);
 
   function call(channel, request) { return handlers.get('arra:' + channel)(trusted, request); }
@@ -58,12 +59,16 @@ function trainingRestaurant(t) {
     assert.equal(call('sign-in', { username: 'sample-' + account, password: passwords[roles.indexOf(account)] }).ok, true);
     if (account === 'restaurant') assert.equal(call('identify-staff', { kind: role, pin: pins[role] }).ok, true);
   }
-  async function checkout(products, method = 'cash', account = 'A') {
+  async function checkout(products, method = 'cash', account = 'A', incrementFirst = false) {
     const order = call('open-order', { tableId: 1 });
     assert.equal(order.ok, true);
     const orderId = order.data.id;
     for (const productId of products) {
       assert.equal(call('order-items', { action: 'add', productId, orderId }).ok, true);
+    }
+    if (incrementFirst) {
+      const itemId = call('order-items', { action:'list', orderId }).data.items[0].id;
+      assert.equal(call('order-items', { action:'increment', orderId, itemId }).ok,true);
     }
     assert.equal(call('order-items', { action: 'send', orderId, requestId: 'send-' + orderId }).ok, true);
     const review = call('bill', { action: 'review', orderId });
@@ -192,4 +197,18 @@ test('a transfer into A stays in the shared-day totals and prevents issuing a fi
   assert.deepEqual([summary.count, summary.cash, summary.fiscal.reason], [2, 140, 'coverage']);
   assert.deepEqual(await f.days(issue(dayId)), { ok: false, error: 'coverage' });
   assert.deepEqual(f.reports(), []);
+});
+
+test('offline training registers successive Cash A bills with a mixed quantity and VAT', async t => {
+  const f=trainingRestaurant(t); f.signIn('waiter');
+  const first=await f.checkout([espresso,beer],'cash','A',true);
+  assert.equal(first.fiscal.receipt.total,320);
+  assert.deepEqual(first.fiscal.receipt.lines.map(l=>[l.quantity,l.unitPrice,l.taxRate,l.domesticProduct]),[[2,70,10,true],[1,180,18,false]]);
+  const second=await f.checkout([espresso]);
+  assert.equal(second.fiscal.receipt.total,70);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,2);
+  assert.equal(f.device(db=>db.prepare('SELECT count(*) n FROM documents WHERE bill IS NOT NULL').get().n),2);
+  f.restart();
+  assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,2);
+  assert.equal(f.device(db=>db.prepare('SELECT count(*) n FROM documents WHERE bill IS NOT NULL').get().n),2);
 });

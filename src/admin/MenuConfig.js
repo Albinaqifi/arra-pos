@@ -4,7 +4,7 @@ import { accessNotice } from './shared.js';
 export class MenuConfig extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { categories: [], products: [], groups: [], options: [], access: null, error: '', notice: '', editor: null, busy: false, query: '', expandedCategories: {}, expandedProducts: {}, selectedId: null };
+    this.state = { categories: [], products: [], groups: [], options: [], unclassifiedOrigins: [], access: null, error: '', notice: '', editor: null, busy: false, query: '', expandedCategories: {}, expandedProducts: {}, selectedId: null };
   }
   t(text) { return configText(this.props.language, text); }
   componentDidMount() { this.load(); }
@@ -28,11 +28,11 @@ export class MenuConfig extends React.Component {
     if (!this.leaveEditor()) return;
     const defaults = {
       category: { name: '', parentId: parentId || null, sortOrder: String(this.state.categories.length), active: true },
-      product: { name: '', categoryId: parentId || '', price: '0', sortOrder: String(this.state.products.length), destination: 'kitchen', taxGroup: null, active: true },
+      product: { name: '', categoryId: parentId || '', price: '0', sortOrder: String(this.state.products.length), destination: 'kitchen', taxGroup: null, domesticProduct: null, active: true },
       group: { name: '', productId: parentId || '', required: false, active: true },
       option: { name: '', groupId: parentId || '', adjustment: '0', active: true }
     };
-    const editor = { kind, isSubcategory: kind === 'category' && !!(item ? item.parentId : parentId), id: item ? item.id : null, ...defaults[kind], ...(item || {}), active: item ? !!item.active : true, ...(kind === 'group' && item ? { required: !!item.required } : {}) };
+    const editor = { kind, isSubcategory: kind === 'category' && !!(item ? item.parentId : parentId), id: item ? item.id : null, ...defaults[kind], ...(item || {}), ...(kind === 'product' && item ? { domesticProduct: item.domesticProduct === null ? null : item.domesticProduct ? 'yes' : 'no' } : {}), active: item ? !!item.active : true, ...(kind === 'group' && item ? { required: !!item.required } : {}) };
     this.setState({ editor, original: JSON.stringify(editor), error: '', errorField: null, notice: '' });
   }
   reveal(editor, data, before, certain) {
@@ -71,7 +71,7 @@ export class MenuConfig extends React.Component {
     if (e.kind === 'option' && !whole(e.adjustment)) { this.setState({ errorField: 'adjustment', error: this.t('Price adjustment must be a whole number.') }); return; }
     const request = { action: e.kind, id: e.id, name, active: e.active };
     if (e.kind === 'category') Object.assign(request, { parentId: e.parentId || null, sortOrder: Number(e.sortOrder) });
-    if (e.kind === 'product') Object.assign(request, { categoryId: e.categoryId, price: Number(e.price), sortOrder: Number(e.sortOrder), destination: e.destination, taxGroup: e.taxGroup });
+    if (e.kind === 'product') Object.assign(request, { categoryId: e.categoryId, price: Number(e.price), sortOrder: Number(e.sortOrder), destination: e.destination, taxGroup: e.taxGroup, domesticProduct: e.domesticProduct === null ? null : e.domesticProduct === true || e.domesticProduct === 'yes' });
     if (e.kind === 'group') Object.assign(request, { productId: e.productId, required: e.required });
     if (e.kind === 'option') Object.assign(request, { groupId: e.groupId, adjustment: Number(e.adjustment) });
     this.setState({ busy: true, error: '', notice: '' });
@@ -85,6 +85,16 @@ export class MenuConfig extends React.Component {
       if (loaded) this.reveal(e, loaded, before, true);
       this.setState({ busy: false, editor: null, ...(loaded ? { notice: this.t(e.kind[0].toUpperCase() + e.kind.slice(1) + ' saved.') } : { error: this.t('The change was saved, but the menu could not be refreshed. Reopen the menu to see it.') }) });
     } catch (_) { await this.reconcile(e, before); }
+  }
+  async classifyOrigin(itemId, domesticProduct) {
+    if (this.state.busy) return;
+    this.setState({busy:true,error:'',notice:''});
+    try {
+      const result = await window.arra.menuConfig({action:'classifyOrigin',itemId,domesticProduct});
+      if (!result.ok) this.setState({error:this.t('Could not classify this item. Refresh and check the order.')});
+      else { await this.load(); this.setState({notice:this.t('Item mark saved.')}); }
+    } catch (_) { await this.load(); this.setState({error:this.t('The result is unknown. Check the refreshed list before trying again.')}); }
+    finally { this.setState({busy:false}); }
   }
   render() {
     const h = React.createElement, s = this.state;
@@ -111,6 +121,13 @@ export class MenuConfig extends React.Component {
       h('div', { className: 'floor-hero' }, h('div', null, h('p', { className: 'floor-kicker' }, this.t('ADMINISTRATION / MENU')), h('h1', null, this.t('Menu management')), h('p', null, this.t('Organize categories, products and the choices offered to guests.'))), button(this.t('+ Add category'), () => this.edit('category', null))),
       h('p', { className: 'admin-access-note' }, this.t('Changes here affect the whole restaurant and are recorded under your account.')),
       h('div', { className: 'floor-note' }, h('strong', null, this.t('Menu visibility and choices')), h('p', null, this.t('Inactive categories hide their products and subcategories. Display order uses lower numbers first. Each modifier group permits at most one choice; a required group needs one active option. Existing order snapshots stay unchanged.'))),
+      s.unclassifiedOrigins?.length > 0 && h('section', {className:'floor-list'},
+        h('h2', null, this.t('Classify open order items')),
+        h('p', null, this.t('These items were entered without a saved Macedonian-product mark. Confirm the correct mark for each item before Cash A checkout.')),
+        ...s.unclassifiedOrigins.map(item => h('div', {className:'menu-row',key:item.id},
+          h('span', null, this.t('Table') + ' ' + item.tableId + ' · ' + this.t('Order') + ' #' + item.orderId + ' · ' + item.quantity + ' × ' + item.name),
+          button(this.t('Mark required'), () => this.classifyOrigin(item.id,true)),
+          button(this.t('Mark not required'), () => this.classifyOrigin(item.id,false))))),
       s.notice && h('p', { role: 'status', className: 'floor-success' }, s.notice), s.error && !e && h('p', { role: 'alert' }, s.error),
       e && h('section', { className: 'floor-editor', 'aria-label': this.t(e.isSubcategory ? 'subcategory' : e.kind) + this.t(' details') }, h('div', { className: 'floor-section-head' }, h('div', null, h('p', { className: 'floor-kicker' }, this.t('MENU DETAILS')), h('h2', null, (e.id ? this.t('Edit ') : this.t('New ')) + this.t(e.isSubcategory ? 'subcategory' : e.kind))), button(this.t('Cancel'), () => this.changeContext(() => {}))),
         h('form', { noValidate: true, onSubmit: event => { event.preventDefault(); this.save(); } }, s.error && h('p', { id: 'menu-editor-error', role: 'alert' }, s.error), h('div', { className: 'floor-fields' },
@@ -122,6 +139,9 @@ export class MenuConfig extends React.Component {
           e.kind === 'product' && select(this.t('Dine-in VAT group'), 'taxGroup', [
             { id: 'В', name: this.t('В · 10% · Food and nonalcoholic drinks') },
             { id: 'А', name: this.t('А · 18% · Alcoholic drinks') }
+          ], this.t('Unclassified · Account A fiscal receipt unavailable')),
+          e.kind === 'product' && select(this.t('Macedonian-product mark'), 'domesticProduct', [
+            { id: 'yes', name: this.t('Required') }, { id: 'no', name: this.t('Not required') }
           ], this.t('Unclassified · Account A fiscal receipt unavailable')),
           e.kind === 'product' && field(this.t('Price'), 'price', { type: 'number', min: 0, step: 1 }),
           (e.kind === 'category' || e.kind === 'product') && field(this.t('Display order'), 'sortOrder', { type: 'number', min: 0, step: 1 }),

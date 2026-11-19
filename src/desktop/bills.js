@@ -33,9 +33,13 @@ function attachFiscalPreview(db, bill, adapter) {
   if (!adapter) return;
   bill.fiscalMode = adapter.mode;
   if (adapter.mode === 'device') bill.fiscalDomesticProduct = adapter.domesticProduct;
+  if (adapter.requireOrigins) bill.fiscalRequiresOrigins = true;
   const groups = new Map(db.prepare(`SELECT t.item_id, t.tax_group FROM order_item_fiscal_tax t
     JOIN order_items i ON i.id=t.item_id WHERE i.order_id=?`).all(bill.orderId).map(row => [row.item_id, row.tax_group]));
+  const origins = adapter.requireOrigins ? new Map(db.prepare(`SELECT o.item_id,o.domestic FROM order_item_fiscal_origin o
+    JOIN order_items i ON i.id=o.item_id WHERE i.order_id=?`).all(bill.orderId).map(row => [row.item_id, !!row.domestic])) : null;
   for (const line of bill.lines) {
+    if (origins?.has(line.itemId)) line.domesticProduct = origins.get(line.itemId);
     const group = groups.get(line.itemId);
     if (group) Object.assign(line, { taxGroup: group, taxRate: group === 'А' ? 18 : 10 });
   }

@@ -102,7 +102,7 @@ function createTrainingPf700(directory, now = () => new Date()) {
   const reports = createPf700DailyReportWithTransport({ mode: 'simulation', expectedSerial: serial,
     openPipe: operation => openTrainingPipe(file, operation, now) });
   return Object.freeze({
-    mode: 'simulation',
+    mode: 'simulation', requireOrigins: true,
     async registerSale(snapshot) {
       const result = await registerSimulatedPf700Sale(snapshot);
       if (result.status === 'accepted') recordSale(file, snapshot);

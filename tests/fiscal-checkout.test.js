@@ -519,3 +519,92 @@ test('supervised local-product mark survives retry and rejects conflicting instr
   assert.equal(count(f.db,'payments'),1);
   assert.deepEqual(marks,[true,true]);
 });
+
+test('routine device checkout preserves trial history, requires item origins, and records successive mixed bills once', async t => {
+  let calls = 0;
+  const makeAdapter = routine => ({mode:'device', deviceId:'sample-PF700', domesticProduct:false,
+    ...(routine ? {requireOrigins:true} : {}),
+    registerSale: async (receipt, context) => {
+      calls++; const previousDocumentNumber = String(calls - 1).padStart(7,'0');
+      context.beforeOpen({previousDocumentNumber});
+      const documentNumber = String(calls).padStart(7,'0');
+      return {status:'accepted', reference:documentNumber, evidence:{documentNumber,fiscalReceiptCount:calls,reversalCount:0}};
+    }});
+  const f = setup(t, makeAdapter(false));
+  const first = f.generate(1);
+  const trial = await f.pay(payment(first));
+  assert.equal(trial.ok,true);
+  f.restart(makeAdapter(true));
+  const missing = f.generate(2);
+  assert.equal((await f.pay(payment(missing))).fiscalStatus,'origin');
+  assert.equal(calls,1);
+  assert.equal(count(f.db,'payments'),1);
+  f.db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
+  f.db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(4,4,1,'open'); INSERT INTO order_waiter_ownership VALUES(4,1,1,1,'open')");
+  const mixed = f.generate(3);
+  f.db.exec("UPDATE menu_product_fiscal_origin SET domestic=0 WHERE product_id='arra-product-11-0'");
+  const receipt = await f.pay(payment(mixed));
+  assert.equal(receipt.ok,true);
+  assert.deepEqual(receipt.data.fiscal.receipt.lines.map(l => [l.quantity,l.unitPrice,l.taxRate,l.domesticProduct]), [[2,80,10,true],[1,180,18,false]]);
+  assert.deepEqual(await f.pay(payment(mixed)),receipt);
+  f.restart(makeAdapter(true));
+  assert.deepEqual(await f.pay(payment(mixed)),receipt);
+  assert.equal(calls,2);
+  assert.equal(count(f.db,'payments'),2);
+  assert.equal(f.bills({action:'review',orderId:1}).data.fiscal.reference,trial.data.fiscal.reference);
+});
+
+test('routine unavailable printer leaves bill unpaid and permits same-selection retry', async t => {
+  let calls=0;
+  const adapter = {mode:'device',deviceId:'sample-PF700',domesticProduct:false,requireOrigins:true,registerSale:async()=>{calls++;return {status:'failed'};}};
+  const f=setup(t,adapter);
+  f.db.exec("INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-12-0',0)");
+  const bill=f.generate();
+  assert.equal((await f.pay(payment(bill))).fiscalStatus,'failed');
+  assert.equal((await f.pay(payment(bill))).fiscalStatus,'failed');
+  assert.equal(calls,2); assert.equal(count(f.db,'payments'),0);
+});
+
+test('routine retries only a definitively failed single-item trial using its original mark', async t => {
+  const {selectPf700Checkout} = require('../src/desktop/pf700-checkout-mode');
+  const {enroll,deviceTrial} = require('../src/desktop/pf700-commissioning');
+  const oldLocal = process.env.LOCALAPPDATA;
+  t.after(() => { if (oldLocal === undefined) delete process.env.LOCALAPPDATA; else process.env.LOCALAPPDATA = oldLocal; });
+  for (const originalMark of [false,true]) {
+    await t.test(String(originalMark), async t => {
+      const f=setup(t,{mode:'device',deviceId:'SYNTHETIC01',domesticProduct:originalMark,
+        registerSale:async()=>({status:'failed'})});
+      enroll(f.db);
+      f.db.exec(`INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status)
+        VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent');
+        INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old');
+        INSERT INTO bill_lines(bill_id,item_id,name,unit_price,quantity,modifiers) VALUES(1,1,'Espresso',70,1,'[]')`);
+      assert.equal((await f.pay(payment(1))).fiscalStatus,'failed');
+      process.env.LOCALAPPDATA=f.directory;
+      deviceTrial('SYNTHETIC01').claim();
+      let calls=0;
+      const adapter=selectPf700Checkout(['--pf700-routine-checkout'],f.directory,
+        ()=>({expectedSerial:'SYNTHETIC01',dataDirectory:f.directory,domesticProduct:false}),
+        profile=>({mode:'device',deviceId:'SYNTHETIC01',domesticProduct:false,registerSale:async (receipt,context)=>{
+          assert.equal(profile.allowLegacyOrigin,true);
+          assert.equal(receipt.domesticProduct,originalMark);
+          calls++;
+          if (calls===1) return {status:'failed'};
+          context.beforeOpen({previousDocumentNumber:'0000041'});
+          return {status:'accepted',reference:'0000042',evidence:{documentNumber:'0000042',fiscalReceiptCount:2,reversalCount:0}};
+        }}));
+      f.restart(adapter);
+      assert.equal((await f.pay(payment(1))).fiscalStatus,'failed');
+      assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,0);
+      const result=await f.pay(payment(1)); assert.equal(result.ok,true);
+      assert.equal(result.data.fiscal.receipt.domesticProduct,originalMark);
+      assert.deepEqual(await f.pay(payment(1)),result);
+      f.restart(adapter); assert.deepEqual(await f.pay(payment(1)),result);
+      assert.equal(calls,2);
+      assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_checkout_attempts').get().n,3);
+      assert.equal(f.db.prepare('SELECT count(*) n FROM payments').get().n,1);
+      assert.equal(adapter.canRegister(result.data.fiscal.receipt,null),false);
+      assert.equal(adapter.canRegister(result.data.fiscal.receipt,{status:'uncertain',mode:'device',deviceId:'SYNTHETIC01'}),false);
+    });
+  }
+});

@@ -203,3 +203,15 @@ test('all 105 packaged product names fit the two-line profile, including wine si
   const total = lines.reduce((sum, line) => sum + line.unitPrice, 0);
   assert.deepEqual(await registerSimulatedPf700Sale({ ...sale, lines, total }), { status: 'accepted', reference: 'SIM-23' });
 });
+
+test('mixed item origin marks are encoded separately along with VAT and quantities', async () => {
+  const port = scenario({}, onsiteData);
+  const snapshot = {...sale, lines:[{...coffee, domesticProduct:true},{...beer, domesticProduct:false}]};
+  assert.equal((await executePf700Checkout(snapshot, {...operator(), onsiteFirmware:true}, port.exchange)).status,'accepted');
+  assert.equal(port.seen[5].data.toString('hex'),'43616a206d65204d6a616c74650940c237302a32');
+  assert.equal(port.seen[6].data.toString('hex'),'4265657209c03135302a31');
+  assert.equal(port.seen[9].data.toString(),'\t');
+  const invalid = scenario({}, onsiteData);
+  assert.equal((await executePf700Checkout({...snapshot,lines:[snapshot.lines[0],beer]}, {...operator(), onsiteFirmware:true}, invalid.exchange)).status,'failed');
+  assert.equal(invalid.seen.length,0);
+});
