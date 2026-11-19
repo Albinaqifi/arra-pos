@@ -2,12 +2,10 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
 const { spawnSync } = require('node:child_process');
-const { DatabaseSync } = require('node:sqlite');
-const { pathToFileURL } = require('node:url');
 const { createInterface } = require('node:readline/promises');
 const { readCandidate, classifyReply } = require('./evidence');
+const { markerPath, appendRecord, openIncidentDatabase } = require('./evidence-files');
 
 // This field collector is scoped to the operator's documented, still-held
 // incident. There is no general command console or payment entry point.
@@ -23,11 +21,6 @@ function captureFrame(sequence) {
   const match = /^(PENDING|PROBE) ([0-9A-Fa-f]{2,202})\r?\n$/.exec(child.stdout);
   if (!match || match[2].length % 2 !== 0) return null;
   return { source: match[1], frame: Buffer.from(match[2], 'hex') };
-}
-
-function markerPath(directory, serial) {
-  const device = createHash('sha256').update(serial).digest('hex');
-  return path.join(directory, device + '.bill2-close-capture.jsonl');
 }
 
 function display(candidate, observation, source) {
@@ -51,11 +44,6 @@ function display(candidate, observation, source) {
       '. Device flags: ' + observation.statusHex + '.';
   }
   return 'INCONCLUSIVE. Keep this bill on hold.';
-}
-
-function appendRecord(fd, record) {
-  fs.writeFileSync(fd, JSON.stringify(record) + '\n', 'utf8');
-  fs.fsyncSync(fd);
 }
 
 function collectOnce(candidate, directory, capture = captureFrame) {
@@ -84,13 +72,8 @@ async function run() {
     throw Error('Use the Windows launcher.');
   }
   const directory = path.join(process.env.LOCALAPPDATA, 'Arra POS', 'PF700 commissioning');
-  const uri = pathToFileURL(path.join(process.env.APPDATA, 'Arra POS PF700 Commissioning', 'arra.sqlite'));
-  // The parent holds a deny-write handle for this entire process and checked
-  // for journal sidecars before allowing immutable access to the closed DB.
-  uri.search = 'mode=ro&immutable=1';
-  const db = new DatabaseSync(uri.href, { readOnly: true, allowExtension: false });
+  const db = openIncidentDatabase();
   try {
-    db.exec('PRAGMA trusted_schema=OFF; PRAGMA query_only=ON; PRAGMA temp_store=MEMORY');
     const candidate = readCandidate(db, incident.bill, incident.document);
     if (!candidate || candidate.total !== incident.total) {
       console.log('STOP. The saved checkout does not match this incident. Printer untouched.');

@@ -19,7 +19,7 @@ $sources = @(
 if ($CheckJournal) {
     $filename = if ($JournalRuntimeDirectory) { 'Arra-S096-USB-Test-v5.zip' } else { 'Arra-PF700-Journal-Check-v5.zip' }
     $sources = @('scripts/pf700-journal-check/PF700-Journal-Check.cmd', 'scripts/pf700-journal-check/README.txt', 'scripts/pf700-journal-check/journal-check.js',
-        'scripts/pf700-journal-check/journal-exchange.ps1', 'src/desktop/pf700-frame.js', 'src/desktop/pf700-windows-checkout.js',
+        'scripts/pf700-journal-check/journal-pipe.js', 'scripts/pf700-journal-check/journal-exchange.ps1', 'src/desktop/pf700-frame.js', 'src/desktop/pf700-windows-checkout.js',
         'src/desktop/pf700-checkout-protocol.js')
 } elseif ($CompareIdentity) {
     $filename = 'Arra-PF700-Compare-Identity-1.0.4.zip'

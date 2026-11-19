@@ -22,7 +22,7 @@ const candidateFor = db => readCandidate(db, 2, '0000030');
 
 // Full local sale on an in-memory PF700, including a wrapped sequence and
 // one close intent. Only the delivery or receipt of that last command varies.
-async function lostClose(t, fault) {
+async function lostClose(t, fault, {otherTax = false, reverse = false, imported = false} = {}) {
   const db = new DatabaseSync(':memory:');
   t.after(() => db.close());
   migrate(db);
@@ -54,13 +54,16 @@ async function lostClose(t, fault) {
         operatorNumber:1, operatorPassword:String(randomInt(100000,1000000)), tillNumber:1 }, device.exchange);
     }
   };
+  if (otherTax) db.exec("UPDATE menu_product_fiscal_tax SET tax_group='А' WHERE product_id='arra-product-11-0'");
+  if (imported) db.exec("UPDATE menu_product_fiscal_origin SET domestic=0 WHERE product_id='arra-product-11-0'");
   const handlers = {};
   const ipc = {handle(channel, handler) { handlers[channel] = handler; }};
   const session = {currentUserId:() => 1, authenticatedUserId:() => 1, identityGeneration:() => 0};
   registerOrderItems(ipc, () => true, db, session);
   registerBills(ipc, () => true, db, session, profile);
   registerPayments(ipc, () => true, db, session, null, profile);
-  for (const productId of ['arra-product-11-0','arra-product-11-1']) {
+  const products = ['arra-product-11-0','arra-product-11-1'];
+  for (const productId of reverse ? products.reverse() : products) {
     assert.ok(handlers['arra:order-items']({}, {action:'add', orderId:2, productId}).ok);
   }
   assert.ok(handlers['arra:order-items']({}, {action:'send', orderId:2, requestId:'synthetic-send'}).ok);
@@ -71,6 +74,16 @@ async function lostClose(t, fault) {
   assert.equal((await handlers['arra:payment']({}, {...selection, physicalIntentId:intentId})).fiscalStatus, 'uncertain');
   return {db, device};
 }
+
+test('journal requires the original item order, printed VAT group and domestic origin for both lines', async t => {
+  for (const options of [{}, {otherTax:true}, {imported:true}, {reverse:true}]) {
+    const {db} = await lostClose(t,'after',options);
+    const original = candidateFor(db);
+    assert.ok(original);
+    const strict = readCandidate(db,2,'0000030',{matchJournalPaper:true});
+    assert.deepEqual(strict,Object.keys(options).length ? null : original);
+  }
+});
 
 for (const fault of ['before', 'after']) {
   test('read-only classifier following a synthetic close interruption ' + fault + ' execution', async t => {

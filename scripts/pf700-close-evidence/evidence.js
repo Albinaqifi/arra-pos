@@ -11,7 +11,7 @@ const digest = value => createHash('sha256').update(value).digest('hex');
 
 // The launcher holds the original database against writes for the whole run.
 // This collector is for the reported two-coffee incident only.
-function readCandidate(db, billId, expectedDocument) {
+function readCandidate(db, billId, expectedDocument, {matchJournalPaper = false} = {}) {
   try {
     if (billId !== 2 || expectedDocument !== '0000030' || !isCommissioned(db)) return null;
     const sale = db.prepare(`SELECT i.id AS intentId, i.created_at AS intentAt, i.device_id AS serial,
@@ -49,6 +49,8 @@ function readCandidate(db, billId, expectedDocument) {
     if (!isDeepStrictEqual(receipt, saved) ||
         !receipt.lines.some(line => line.name === 'Espresso' && line.unitPrice === 70 && line.quantity === 1) ||
         !receipt.lines.some(line => line.name === 'Macchiato' && line.unitPrice === 80 && line.quantity === 1)) return null;
+    if (matchJournalPaper && (receipt.lines[0].name !== 'Espresso' ||
+        !receipt.lines.every(line => line.taxGroup === 'В' && line.taxRate === 10 && line.domesticProduct === true))) return null;
     const rows = db.prepare(`SELECT c.id, c.sequence, c.command, c.request_hash AS requestHash, c.created_at AS intentAt,
         a.response_hash AS responseHash, a.summary, a.created_at AS ackAt
       FROM pf700_command_intents c LEFT JOIN pf700_command_acks a ON a.command_id=c.id

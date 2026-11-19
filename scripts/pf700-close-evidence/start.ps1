@@ -1,5 +1,6 @@
 # Hold the original profile closed against writes while the Node reader
 # compares the bill and, if separately authorized, captures evidence.
+param([switch]$Journal)
 $ErrorActionPreference = 'Stop'
 $lockedDatabase = $null
 $result = 1
@@ -27,7 +28,8 @@ try {
     $env:NODE_COMPILE_CACHE = ''
     $env:NODE_V8_COVERAGE = ''
     $node = Join-Path $PSScriptRoot '..\..\runtime\node.exe'
-    & $node --no-warnings (Join-Path $PSScriptRoot 'collect.js')
+    $entry = if ($Journal) { 'read-journal.js' } else { 'collect.js' }
+    & $node --no-warnings (Join-Path $PSScriptRoot $entry)
     $result = $LASTEXITCODE
 } catch {
     Write-Host 'STOP. Could not lock the original closed Arra database or start the checker. Leave all files in place.'

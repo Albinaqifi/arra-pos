@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$CashCardZip, [Parameter(Mandatory=$true)][string]$OutputZip)
+param([Parameter(Mandatory=$true)][string]$CashCardZip, [Parameter(Mandatory=$true)][string]$OutputZip, [switch]$Journal)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = [IO.Directory]::GetParent($PSScriptRoot).FullName
@@ -20,17 +20,26 @@ try {
             } finally { $reader.Dispose() }
         }
         $files = @(
-            'scripts/pf700-close-evidence/start.ps1', 'scripts/pf700-close-evidence/collect.js',
-            'scripts/pf700-close-evidence/capture.ps1', 'scripts/pf700-close-evidence/evidence.js',
+            'scripts/pf700-close-evidence/start.ps1', 'scripts/pf700-close-evidence/evidence.js',
+            'scripts/pf700-close-evidence/evidence-files.js',
             'src/desktop/pf700-frame.js', 'src/desktop/pf700-checkout-protocol.js',
             'src/desktop/pf700-commissioning.js', 'src/desktop/pf700-closed-cash-trace.js',
             'src/desktop/fiscal-checkout.js'
         )
+        if ($Journal) {
+            $launcherName = 'Read-Bill-2-Journal.cmd'
+            $files += @('scripts/pf700-close-evidence/read-journal.js','scripts/pf700-close-evidence/match-journal.js',
+                'src/desktop/pf700-windows-checkout.js','scripts/pf700-journal-check/journal-pipe.js',
+                'scripts/pf700-journal-check/journal-exchange.ps1')
+        } else {
+            $launcherName = 'Check-Bill-2.cmd'
+            $files += @('scripts/pf700-close-evidence/collect.js','scripts/pf700-close-evidence/capture.ps1')
+        }
         foreach ($file in $files) {
             $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,(Join-Path $root $file),$file)
         }
-        $launcher = Join-Path $PSScriptRoot 'pf700-close-evidence\Check-Bill-2.cmd'
-        $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$launcher,'Check-Bill-2.cmd')
+        $launcher = Join-Path (Join-Path $PSScriptRoot 'pf700-close-evidence') $launcherName
+        $null = [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive,$launcher,$launcherName)
     } finally { $archive.Dispose() }
     [IO.File]::Move($staging,$OutputZip)
 } finally {
