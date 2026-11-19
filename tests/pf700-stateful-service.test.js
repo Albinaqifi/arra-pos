@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { randomInt } = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const { openDatabase } = require('../src/desktop/database');
 const { authorizedDatabase } = require('./support/authorized-database');
 const { createStatefulPf700 } = require('./support/pf700-stateful-device');
@@ -18,7 +19,7 @@ const { registerBills } = require('../src/desktop/bills');
 const { registerPayments } = require('../src/desktop/payments');
 
 const windows = { skip: process.platform !== 'win32' };
-function fixture(t, options = {}) {
+function fixture(t, options = {}, wrapAdapter = adapter => adapter) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-s096-stateful-'));
   const checked = path.resolve(directory);
   assert.equal(path.dirname(checked), path.resolve(os.tmpdir()));
@@ -36,7 +37,7 @@ function fixture(t, options = {}) {
   const trusted = {}, handlers = {}, ipc = {handle:(channel,fn)=>{handlers[channel]=fn;}};
   const session = {currentUserId:()=>actor,authenticatedUserId:()=>actor,identityGeneration:()=>generation};
   function register() {
-    const adapter = createWindowsPf700Checkout(config,device.start);
+    const adapter = wrapAdapter(createWindowsPf700Checkout(config,device.start));
     registerOrderItems(ipc,event=>event===trusted,db,session);
     registerBills(ipc,event=>event===trusted,db,session,adapter);
     registerPayments(ipc,event=>event===trusted,db,session,null,adapter);
@@ -52,12 +53,83 @@ function fixture(t, options = {}) {
   assert.equal(generated.ok,true);
   const req={billId:generated.data.id,method:'cash',account:'A'};
   t.after(()=>{db.close();fs.rmSync(checked,{recursive:true,force:true});});
-  return { device, config, req, pay, bills, get db(){return db;},
+  return { device, config, req, pay, bills, directory:checked, get db(){return db;},
     openOtherConnection() {return openDatabase(checked);},
     untrusted:request=>handlers['arra:payment']({},request),
     switchActor(value) {actor=value;generation++;},
     restart() {db.close();db=openDatabase(checked);register();} };
 }
+
+const checkpoints = [
+  {command:49, summary:{itemAccepted:true}, open:true, tenders:0, closes:0},
+  {command:53, summary:{tenderAccepted:true}, open:true, tenders:1, closes:0},
+  {command:56, summary:{fiscalReceiptCount:1,reversalCount:0}, open:false, tenders:1, closes:1}
+];
+
+test('one Cash A sale pauses after the persisted item, cash and close replies', windows, async t => {
+  const stages = checkpoints.map(stage => ({
+    ...stage, arrived:Promise.withResolvers(), resume:Promise.withResolvers()
+  }));
+  const f = fixture(t, {}, adapter => ({
+    ...adapter,
+    registerSale(receipt, journal) {
+      return adapter.registerSale(receipt, {
+        ...journal,
+        async afterCommand(ack) {
+          await journal.afterCommand(ack);
+          const command = f.device.transcript.at(-1).command;
+          const stage = stages.find(entry => entry.command === command);
+          if (stage) {
+            stage.arrived.resolve(ack.id);
+            await stage.resume.promise;
+          }
+        }
+      });
+    }
+  }));
+  const observer = f.openOtherConnection();
+  const prepared = f.pay({...f.req,preparePhysicalCash:true});
+  assert.equal(prepared.ok,true);
+  const checkout = f.pay({...f.req,physicalIntentId:prepared.data.intentId});
+  try {
+    for (const stage of stages) {
+      // Also detect an early checkout exit instead of waiting for a missing stage.
+      const id = await Promise.race([stage.arrived.promise, checkout]);
+      assert.ok(Number.isSafeInteger(id), 'checkout exited before command ' + stage.command);
+      const saved = observer.prepare(`SELECT c.id,c.command,c.sequence,c.request_hash,a.response_hash,a.summary
+        FROM pf700_command_intents c LEFT JOIN pf700_command_acks a ON a.command_id=c.id
+        ORDER BY c.id DESC LIMIT 1`).get();
+      assert.equal(saved.id,id);
+      assert.equal(saved.command,stage.command);
+      assert.match(saved.request_hash,/^[a-f0-9]{64}$/);
+      assert.match(saved.response_hash,/^[a-f0-9]{64}$/);
+      assert.deepEqual(JSON.parse(saved.summary),stage.summary);
+      assert.deepEqual(f.device.transcript.at(-1),{command:stage.command,sequence:saved.sequence,effect:'executed'});
+      const {open,items,paid,tenders,closes,document} = f.device.state;
+      assert.deepEqual({open,items,paid,tenders,closes,document},{
+        open:stage.open, items:1, paid:stage.tenders*70, tenders:stage.tenders,
+        closes:stage.closes, document:1+stage.closes
+      });
+      assert.equal(observer.prepare('SELECT count(*) n FROM payments').get().n,0);
+      const length = f.device.transcript.length;
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(f.device.transcript.length,length,'a pause holds the next exchange');
+      stage.resume.resolve();
+    }
+    const result = await checkout;
+    assert.equal(result.ok,true);
+    assert.equal(result.data.fiscal.reference,'0000002');
+    assert.deepEqual(f.device.transcript.filter(row => [48,49,53,56].includes(row.command)).map(row => row.command),
+      [48,49,53,56]);
+    assert.deepEqual(observer.prepare('SELECT amount,method,account FROM payments').all().map(row=>({...row})),
+      [{amount:70,method:'cash',account:'A'}]);
+    assert.equal(observer.prepare('SELECT status FROM orders WHERE id=1').get().status,'completed');
+  } finally {
+    for (const stage of stages) stage.resume.resolve();
+    await checkout;
+    observer.close();
+  }
+});
 
 test('daily report and cash preparation exclude each other across database connections', windows, t => {
   for (const reportFirst of [true,false]) {
@@ -108,6 +180,19 @@ for (const [command,mode] of [[48,'before'],[48,'after'],[49,'before'],[49,'afte
     assert.equal(ledger.at(-1).responseHash,null,'lost reply stays unacknowledged');
     assert.ok(ledger.slice(0,-1).every(row=>/^[a-f0-9]{64}$/.test(row.responseHash)));
     assert.ok(ledger.every(row=>row.command === 48 ? row.requestHash === null : /^[a-f0-9]{64}$/.test(row.requestHash)));
+    if (checkpoints.some(stage => stage.command === command)) {
+      // The child sees only persisted local evidence. It does not inherit the
+      // simulator, the successful rehearsal's ACK, or the fault's timing.
+      const child = path.join(__dirname,'support','pf700-restarted-bill.js');
+      const observed = JSON.parse(execFileSync(process.execPath,[child,f.directory,String(f.req.billId)],
+        {encoding:'utf8',windowsHide:true,stdio:['ignore','pipe','pipe']}));
+      assert.deepEqual(observed,{
+        item:'Espresso', total:70, method:'cash', account:'A', receiptStatus:'uncertain',
+        previousDocument:'0000001', expectedDocument:'0000002', confirmedDocument:null,
+        canInspect:false, inspection:'uncertain', transportStarts:0,
+        lastCommand:command, lastAcknowledged:false, seals:0, payments:0
+      });
+    }
     f.restart();
     assert.equal(f.pay({...f.req,releasePhysicalCash:true}).fiscalStatus,'uncertain');
     assert.equal(f.pay({...f.req,acknowledgedDocument:'0000002'}).fiscalStatus,'uncertain');
