@@ -76,7 +76,10 @@ test('live confirmation names the sale and saved origin; uncertainty refreshes e
   await view.pay();
   await view.pay();
   const output = JSON.stringify(view.render());
-  assert.match(output, /check document 0001235 on printer SYNTHETIC01/);
+  assert.match(output, /expected document 0001235 on printer SYNTHETIC01/);
+  assert.match(output, /Ask for help; do not take another payment or run printer checks/);
+  assert.match(output, /Reload saved bill/);
+  assert.doesNotMatch(output, /Check receipt status/);
   assert.match(output, /Macedonian-product mark omitted/);
   assert.ok(!output.includes('Registered PF700 receipt') && !output.includes('Register cash sale'));
   assert.equal(writes, 1);
@@ -103,4 +106,50 @@ test('a submitted receipt offers local settlement and shows the saved document i
     assert.equal(view.state.receipt.status, 'accepted');
     assert.equal(writes, 1);
   }
+});
+
+
+test('uncertain receipt guidance remains visible when saved-bill reload fails or throws', async () => {
+  for (const throws of [false, true]) {
+    let reads = 0, payments = 0;
+    const unknown = { ...fiscal, status: 'uncertain', reference: null };
+    const view = dialog({
+      bill: async () => {
+        if (++reads === 1) return { ok: true, data: { ...bill, fiscal: unknown } };
+        if (throws) throw Error('Unavailable');
+        return { ok: false, error: 'Could not prepare bill' };
+      },
+      payment: async () => { payments++; }
+    });
+    await view.review();
+    await view.review();
+    const output = JSON.stringify(view.render());
+    assert.match(output, /Ask for help; do not take another payment or run printer checks/);
+    assert.match(output, /Could not prepare bill/);
+    assert.match(output, /Reload saved bill/);
+    assert.equal(view.state.fiscalHold, true);
+    await view.pay();
+    assert.equal(payments, 0);
+  }
+});
+
+
+test('lost device Cash A bridge response warns and retains the locked original selection', async () => {
+  const selections = [];
+  const view = dialog({
+    bill: async () => ({ ok: true, data: bill }),
+    payment: async selection => { selections.push(selection); throw Error('Lost response'); }
+  });
+  await view.review();
+  view.selectMethod('cash', 'A');
+  await view.pay();
+  const output = JSON.stringify(view.render());
+  assert.match(output, /Ask for help; do not take another payment or run printer checks/);
+  assert.doesNotMatch(output, /Register cash sale|Retry the same selection/);
+  assert.equal(view.state.uncertain, true);
+  view.selectMethod('cash', 'B');
+  assert.equal(view.state.account, 'A');
+  await view.pay();
+  assert.deepEqual(selections.map(({billId,method,account}) => [billId,method,account]), [[1,'cash','A']]);
+  assert.deepEqual([view.paymentSelection.billId,view.paymentSelection.method,view.paymentSelection.account], [1,'cash','A']);
 });

@@ -3,7 +3,7 @@ import { waiterTranslate } from '../shared/waiter-ui.js';
 
 const fiscalMessages = {
   pending: 'The PF700 checkout is in progress. Check its status.',
-  uncertain: 'The receipt outcome is unknown. Check the original transaction before taking another payment.',
+  uncertain: 'The receipt outcome is unknown. Ask for help; do not take another payment or run printer checks.',
   failed: 'The receipt did not start. You can retry the same payment method.',
   unmapped: 'A bill item has no saved VAT group. Check its menu and order details.',
   origin: 'A bill item has no saved Macedonian-product mark. Ask Combined to classify it in Menu management.',
@@ -115,7 +115,8 @@ export class DesktopBill extends React.Component {
     finally { this.end(operation); }
   }
   async pay() {
-    if (this.state.fiscalHold || !this.state.data?.id || (!this.paymentSelection && (!this.state.method || !this.state.account))) return;
+    if (this.state.fiscalHold || (this.state.uncertain && this.paymentSelection?.account === 'A' && this.state.data?.fiscalMode === 'device') ||
+        !this.state.data?.id || (!this.paymentSelection && (!this.state.method || !this.state.account))) return;
     const selection = this.paymentSelection || Object.freeze({ billId: this.state.data.id, method: this.state.method, account: this.state.method === 'card' ? 'A' : this.state.account });
     const operation = this.begin('payment'); if (!operation) return;
     this.setState({ error: '' });
@@ -187,11 +188,12 @@ export class DesktopBill extends React.Component {
     const fiscal = receipt || d?.fiscal;
     const device = (fiscal?.mode || d?.fiscalMode) === 'device';
     const submitted = this.state.fiscalStatus === 'submitted';
+    const unknownDevicePayment = this.state.uncertain && this.paymentSelection?.account === 'A' && d?.fiscalMode === 'device';
     const domestic = fiscal?.receipt?.domesticProduct ?? d?.fiscalDomesticProduct;
     const legacyTrial = fiscal?.status === 'failed' && fiscal.mode === 'device' &&
       fiscal.receipt.lines.length === 1 && fiscal.receipt.lines[0].quantity === 1 &&
       typeof fiscal.receipt.domesticProduct === 'boolean' && !Object.hasOwn(fiscal.receipt.lines[0], 'domesticProduct');
-    const liveSelection = d?.fiscalMode === 'device' && !receipt && !submitted && !this.state.fiscalHold && this.state.account === 'A';
+    const liveSelection = d?.fiscalMode === 'device' && !receipt && !submitted && !this.state.fiscalHold && !this.state.uncertain && this.state.account === 'A';
     const locked = this.state.busy || this.state.uncertain || this.state.fiscalHold || this.state.fiscalTenderFixed || !!receipt;
     return h('div', { className: 'bill-overlay' },
       h('div', { className: 'bill-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'desktop-bill-title', tabIndex: -1, ref: node => { this.dialog = node; }, onKeyDown: event => this.onKeyDown(event) },
@@ -202,7 +204,9 @@ export class DesktopBill extends React.Component {
           h('button', { type: 'button', className: 'bill-brand', 'aria-label': t('Select Cash B'), title: t('Select Cash B'), 'aria-pressed': this.state.method === 'cash' && this.state.account === 'B', disabled: !d?.id || locked, onClick: () => this.selectMethod('cash', 'B') }, h('span', { 'aria-hidden': 'true' }, 'A'), h('strong', null, 'Arra'))),
         h('div', { className: 'bill-body' },
           (this.state.loading || this.state.busy) && h('p', { role: 'status', className: 'bill-status' }, t(this.state.loading ? 'Loading bill…' : 'Working…')),
-          this.state.error && h('p', { role: 'alert', className: 'bill-error' }, t(this.state.error)),
+          (this.state.fiscalStatus === 'uncertain' || unknownDevicePayment) && h('p', { role: 'alert', className: 'bill-error' }, t(fiscalMessages.uncertain)),
+          this.state.error && !unknownDevicePayment && (this.state.fiscalStatus !== 'uncertain' || this.state.error !== fiscalMessages.uncertain) &&
+            h('p', { role: 'alert', className: 'bill-error' }, t(this.state.error)),
           receipt && h('p', { role: 'status', className: 'bill-status' }, receipt.reference, ' · ', t(receipt.method === 'card' ? 'Card' : 'Cash')),
           !receipt && d?.fiscalMode === 'simulation' && this.state.account === 'A' &&
             h('p', { className: 'bill-status' }, t('Offline PF700 checkout. This payment uses a simulated printer.')),
@@ -211,10 +215,10 @@ export class DesktopBill extends React.Component {
             h('p', { className: 'bill-status' }, t(domestic ? 'Macedonian-product mark included' : 'Macedonian-product mark omitted')),
           !receipt && submitted && fiscal?.reference && h('p', { className: 'bill-status' }, t('Acknowledged document {number}', {number:fiscal.reference})),
           device && this.state.fiscalStatus === 'uncertain' && fiscal?.baseline && h('p', { className: 'bill-warning' },
-            t('Ask the operator to check document {number} on printer {device} against this bill.', {
+            t('For the person helping: expected document {number} on printer {device}.', {
               number:fiscal.baseline.expectedDocumentNumber, device:fiscal.baseline.deviceId
             })),
-          this.state.uncertain && h('p', { className: 'bill-warning' }, t("The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.")),
+          this.state.uncertain && !unknownDevicePayment && h('p', { className: 'bill-warning' }, t("The POS payment result is uncertain. Retry the same selection to recover the result; do not repeat the separate terminal payment.")),
           !receipt && !legacyTrial && d?.fiscalRequiresOrigins && this.state.account === 'A' && d.lines.some(l => !l.taxGroup || typeof l.domesticProduct !== 'boolean') &&
             h('p', { role: 'alert', className: 'bill-warning' }, t('A bill item is missing its saved VAT group or Macedonian-product mark. Ask Combined to check Menu management.')),
           d && h('section', { className: 'bill-summary' },
@@ -228,8 +232,8 @@ export class DesktopBill extends React.Component {
         h('footer', { className: 'bill-actions' },
           receipt ? h('button', { className: 'bill-primary', onClick: () => this.finishReceipt() }, t('Continue')) :
             h('button', { onClick: () => this.close(), disabled: this.state.busy || this.state.uncertain }, d?.id ? t("Close") : t("No, go back")),
-          this.state.error && !this.state.uncertain && h('button', { onClick: () => this.review(), disabled: this.state.busy }, t(this.state.fiscalHold ? 'Check receipt status' : 'Review again')),
+          this.state.error && !this.state.uncertain && h('button', { onClick: () => this.review(), disabled: this.state.busy }, t(this.state.fiscalHold ? 'Reload saved bill' : 'Review again')),
           !d?.id && d && h('button', { className: 'bill-primary', onClick: () => this.generate(), disabled: this.state.busy }, t("Generate bill")),
-          d?.id && this.state.account && !receipt && !this.state.fiscalHold && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t(submitted ? 'Finish recording payment' : liveSelection ? 'Register cash sale' : 'confirim bill')))));
+          d?.id && this.state.account && !receipt && !this.state.fiscalHold && !unknownDevicePayment && h('button', { className: 'bill-primary', disabled: this.state.busy, onClick: () => this.pay() }, t(submitted ? 'Finish recording payment' : liveSelection ? 'Register cash sale' : 'confirim bill')))));
   }
 }

@@ -1,11 +1,13 @@
 [CmdletBinding(DefaultParameterSetName = 'Paper')]
 param(
-    [string]$OutputDirectory = (Join-Path $PSScriptRoot '..\build\sample-installer'),
+    [string]$OutputDirectory,
     [Parameter(ParameterSetName = 'Reply')][switch]$CheckReplyOnly,
     [Parameter(ParameterSetName = 'Vat')][switch]$CheckVatRates,
-    [Parameter(ParameterSetName = 'Identity')][switch]$CompareIdentity
+    [Parameter(ParameterSetName = 'Identity')][switch]$CompareIdentity,
+    [Parameter(ParameterSetName = 'Journal')][switch]$CheckJournal
 )
 $ErrorActionPreference = 'Stop'
+if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot '..\build\sample-installer' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $repo = Split-Path -Parent $PSScriptRoot
 $sources = @(
@@ -13,7 +15,12 @@ $sources = @(
     'scripts/pf700-paper-test/paper-exchange.ps1',
     'src/desktop/pf700-frame.js'
 )
-if ($CompareIdentity) {
+if ($CheckJournal) {
+    $filename = 'Arra-PF700-Journal-Check.zip'
+    $sources = @('scripts/pf700-journal-check/PF700-Journal-Check.cmd', 'scripts/pf700-journal-check/README.txt', 'scripts/pf700-journal-check/journal-check.js',
+        'scripts/pf700-journal-check/journal-exchange.ps1', 'src/desktop/pf700-frame.js', 'src/desktop/pf700-windows-checkout.js',
+        'src/desktop/pf700-checkout-protocol.js')
+} elseif ($CompareIdentity) {
     $filename = 'Arra-PF700-Compare-Identity-1.0.4.zip'
     $sources = @('scripts/pf700-paper-test/PF700-Compare-Identity.cmd', 'scripts/pf700-paper-test/compare-identity.ps1', 'scripts/pf700-paper-test/check-identity-layout.js')
 } elseif ($CheckVatRates) {
@@ -33,7 +40,7 @@ try {
     $archive = [IO.Compression.ZipFile]::Open($tempZip, 'Create')
     try {
         foreach ($source in $sources) {
-            $entry = if ($CompareIdentity -or $source.EndsWith('.cmd')) { [IO.Path]::GetFileName($source) } else { $source }
+            $entry = if ($CompareIdentity -or $source.EndsWith('.cmd') -or ($CheckJournal -and $source.EndsWith('/README.txt'))) { [IO.Path]::GetFileName($source) } else { $source }
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, (Join-Path $repo $source), $entry)
         }
     } finally {
