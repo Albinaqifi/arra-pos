@@ -107,6 +107,10 @@ function reserveSale(db, request, total, actor, prior, adapter) {
     db.prepare('INSERT INTO simulated_card_attempts(attempt_id,nonce) VALUES(?,?)')
       .run(attemptId,require('node:crypto').randomBytes(32).toString('hex'));
   }
+  if (adapter.mode === 'simulation' && request.method === 'cash' && request.simulateInterrupt) {
+    db.prepare('INSERT INTO simulated_cash_attempts(attempt_id,nonce,interruption) VALUES(?,?,?)')
+      .run(attemptId,require('node:crypto').randomBytes(32).toString('hex'),request.simulateInterrupt);
+  }
   return { attemptId, receipt };
 }
 
@@ -132,8 +136,10 @@ async function submitSale(db, adapter, reservation) {
   if (!pending) { pending = new Set(); active.set(db, pending); }
   pending.add(attemptId);
   try {
+    const cashAttempt = db.prepare('SELECT nonce,interruption FROM simulated_cash_attempts WHERE attempt_id=?').get(attemptId);
     const result = await adapter.registerSale(receipt, {
-      simulationAttempt: db.prepare('SELECT nonce FROM simulated_card_attempts WHERE attempt_id=?').get(attemptId)?.nonce,
+      simulationAttempt: cashAttempt?.nonce || db.prepare('SELECT nonce FROM simulated_card_attempts WHERE attempt_id=?').get(attemptId)?.nonce,
+      ...(cashAttempt ? { simulateInterrupt:cashAttempt.interruption } : {}),
       beforeOpen({previousDocumentNumber}) {
         if (adapter.mode !== 'device' || typeof previousDocumentNumber !== 'string' ||
             !/^[0-9]{7}$/.test(previousDocumentNumber) || previousDocumentNumber === '9999999') {
