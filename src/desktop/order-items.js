@@ -11,6 +11,7 @@ const validId = n => Number.isSafeInteger(n) && n > 0;
 const cancellationOpen = (sentAt, now) => Number.isSafeInteger(sentAt) && sentAt > 0 && Number.isSafeInteger(now) && sentAt <= now && now - sentAt < 120000;
 
 function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting = null) {
+  const preparationMode = testPrinting?.preparationMode;
   const key = 'sent-correction-owner-pin-attempts';
   const readAttempts = () => { try { return JSON.parse(db.prepare('SELECT value FROM app_metadata WHERE key=?').get(key)?.value || '{}'); } catch (_) { return { until: Number.MAX_SAFE_INTEGER }; } };
   const writeAttempts = value => db.prepare('INSERT INTO app_metadata(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value));
@@ -77,7 +78,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
     if (!hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']))) return { ok: false, rejected: true, error: 'Access denied', ...(request.action === 'correct' ? {code:'access_denied'} : {}) };
     try {
       const testAttempts = [];
-      let cancellationAttempt, correctionSentAt, approvingOwner, usedApproval;
+      let cancellationOutput, correctionSentAt, approvingOwner, usedApproval;
       db.exec('BEGIN IMMEDIATE');
       try {
         if (!ownsOrder(db, session, request.orderId)) { db.exec('ROLLBACK'); return { ok:false, rejected:true, error:'Order unavailable', ...(request.action === 'correct' ? {code:'unavailable'} : {}) }; }
@@ -89,6 +90,7 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
         if (!priorCorrection && !priorSend && !db.prepare(`SELECT o.id FROM orders o JOIN dining_tables t ON t.id = o.table_id LEFT JOIN dining_areas a ON a.id = t.area_id
           WHERE o.id = ? AND o.status = 'open' AND o.retired_empty = 0 AND t.active = 1 AND COALESCE(a.active, 1) = 1`).get(request.orderId)) throw Error('Invalid order');
         if (request.action === 'correct') {
+          let correctionId = priorCorrection?.id;
           if (!priorCorrection) {
             const item = db.prepare("SELECT quantity FROM order_items WHERE id = ? AND order_id = ? AND status = 'sent'").get(request.itemId, request.orderId);
             const corrected = db.prepare('SELECT COALESCE(SUM(quantity), 0) AS quantity FROM sent_item_corrections WHERE item_id = ?').get(request.itemId).quantity;
@@ -104,12 +106,12 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
               if (request.approvalToken) throw Error('Invalid retry');
               correctionSentAt = round.sentAt;
             }
-            const id = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
+            correctionId = db.prepare('INSERT INTO sent_item_corrections (request_id, item_id, order_id, actor_id, quantity, reason, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(request.requestId, request.itemId, request.orderId, session.currentUserId(), request.quantity, reason, now).lastInsertRowid;
             markService(db, now);
-            const noticeId = cancellationPrinting.createCancellationJob(db, id, request.itemId, request.quantity);
-            if (testPrinting) cancellationAttempt = cancellationPrinting.reserveCancellationAttempt(db, noticeId, 'initial-' + noticeId, session.currentUserId());
-            recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId: id, quantity: request.quantity, reason, source: 'waiter', ...(approvingOwner ? { approvingOwnerId: approvingOwner } : {}) });
+            cancellationPrinting.createCancellationJob(db, correctionId, request.itemId, request.quantity);
+            recordAudit(db, session.currentUserId(), 'correct_sent', 'order_item', request.itemId, request.orderId, { correctionId, quantity: request.quantity, reason, source: 'waiter', ...(approvingOwner ? { approvingOwnerId: approvingOwner } : {}) });
           }
+          cancellationOutput = cancellationPrinting.initialCancellationOutput(db,correctionId,session.currentUserId(),testPrinting,priorCorrection);
         } else if (request.action === 'send') {
           if (!priorSend) {
             const pending = db.prepare("SELECT i.id, i.quantity, p.destination FROM order_items i JOIN menu_products p ON p.id = i.product_id WHERE i.order_id = ? AND i.status = 'pending' ORDER BY i.id").all(request.orderId);
@@ -125,15 +127,19 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
                 const ticketId = db.prepare("INSERT INTO preparation_tickets (round_id, destination, adapter) VALUES (?, ?, 'simulated')").run(roundId, destination).lastInsertRowid;
                 for (const item of selected) db.prepare('INSERT INTO preparation_ticket_items (ticket_id, item_id, quantity) VALUES (?, ?, ?)').run(ticketId, item.id, item.quantity);
                 if (testPrinting) {
-                  const job = testPrinting.createPreparationJob(db, ticketId);
+                  const job = testPrinting.createPreparationJob(db, ticketId, preparationMode);
                   testAttempts.push(testPrinting.reserveAttempt(db, job, 'prep-' + ticketId, session.currentUserId()));
                 }
-                const jobId = db.prepare('INSERT INTO print_jobs (ticket_id, created_at) VALUES (?, ?)').run(ticketId, Date.now()).lastInsertRowid;
-                const result = db.prepare('SELECT result FROM simulated_printers WHERE destination = ?').get(destination).result;
-                db.prepare('INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) VALUES (?, ?, ?, ?, ?)').run(jobId, 'initial-' + jobId, session.currentUserId(), Date.now(), result);
+                // PF700 modes use the durable per-queue job above as their
+                // sole output. The earlier sample simulator has its own jobs.
+                if (!preparationMode) {
+                  const jobId = db.prepare('INSERT INTO print_jobs (ticket_id, created_at) VALUES (?, ?)').run(ticketId, Date.now()).lastInsertRowid;
+                  const result = db.prepare('SELECT result FROM simulated_printers WHERE destination = ?').get(destination).result;
+                  db.prepare('INSERT INTO print_attempts (job_id, request_id, actor_id, occurred_at, result) VALUES (?, ?, ?, ?, ?)').run(jobId, 'initial-' + jobId, session.currentUserId(), Date.now(), result);
+                }
               }
               db.prepare("UPDATE order_items SET status = 'sent' WHERE order_id = ? AND status = 'pending'").run(request.orderId);
-              recordAudit(db, session.currentUserId(), 'send', 'preparation_round', roundId, request.orderId, { number, itemIds: pending.map(i => i.id), adapter: 'simulated' });
+              recordAudit(db, session.currentUserId(), 'send', 'preparation_round', roundId, request.orderId, { number, itemIds: pending.map(i => i.id), adapter: preparationMode === 'routine' ? 'windows' : 'simulated' });
             }
           }
         } else if (request.action === 'add') {
@@ -195,8 +201,8 @@ function registerOrderItems(ipcMain, isAllowedSender, db, session, testPrinting 
         }
         db.exec('COMMIT');
         if (usedApproval) approvals.delete(usedApproval);
-        if (testPrinting) { for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt); cancellationPrinting.dispatchCancellation(db, testPrinting.adapter, cancellationAttempt); }
-        return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting) } };
+        if (testPrinting) { for (const attempt of testAttempts) testPrinting.dispatch(db, testPrinting.adapter, attempt); cancellationPrinting.dispatchCancellation(db, testPrinting.adapter, cancellationOutput?.attempt); }
+        return { ok: true, data: { items, total, testPrintEnabled: Boolean(testPrinting), preparationMode, noticeDeferred:cancellationOutput?.deferred } };
       } catch (error) {
         try { db.exec('ROLLBACK'); } catch (_) { return { ok: false, uncertain: request.action === 'correct' }; }
         if (request.action === 'correct') {

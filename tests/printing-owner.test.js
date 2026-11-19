@@ -191,3 +191,136 @@ test('printer panels are hidden in waiter view and included in administration', 
  const simulated = nodes(admin.render()).find(node => node.type === PrintJobs);
  assert.ok(simulated); assert.equal(simulated.props.admin,true);
 });
+
+for (const preparationMode of ['routine', 'training']) {
+  test(preparationMode + ' waiter sees per-destination output and retries only the checked ticket or notice', async () => {
+    const requests = [];
+    const queues = {
+      preparationMode, queues: [{ destination: 'bar', queue: 'Bar queue' }],
+      jobs: [
+        { id: 5, ticketId: 2, destination: 'bar', queue: 'Bar queue', tableId: 1, round: 1, attempts: 1, result: 'uncertain' },
+        { id: 7, ticketId: 3, destination: 'kitchen', queue: 'Kitchen queue', tableId: 1, round: 1, attempts: 1, result: 'accepted' },
+      ],
+      notices: [{ id: 5, destination: 'bar', tableId: 1, round: 1, attempts: 1, result: 'failed', lines: [{ quantity: 1, name: 'Coffee' }] }],
+    };
+    const { printing, PrintJobs, TestPrintJobs, context } = harness({
+      printJobs: async ({ action }) => {
+        assert.equal(action, 'list');
+        return { ok: true, data: { preparationMode, jobs: [], printers: [] } };
+      },
+      testPrinting: async request => {
+        if (request.action !== 'list') requests.push({ ...request });
+        return { ok: true, data: queues };
+      },
+    });
+    const waiter = new PrintJobs({ printing, language: 'en' });
+    await waiter.load();
+    const panelNode = waiter.render();
+    const panel = new panelNode.type(panelNode.props);
+    await panel.load();
+    const view = panel.render();
+    const output = JSON.stringify(view);
+    assert.match(output, /2 need attention/);
+    assert.match(output, /Bar job #5/);
+    assert.match(output, /Kitchen 1 job #7/);
+    assert.match(output, /CANCELLATION · Bar/);
+    assert.doesNotMatch(output, /Save queue|Simulated printer settings/);
+    if (preparationMode === 'training') {
+      assert.match(output, /Simulated output uncertain/);
+      assert.match(output, /Simulated success/);
+      assert.doesNotMatch(output, /Windows/);
+    } else {
+      assert.match(output, /Output uncertain; check paper/);
+      assert.match(output, /Accepted by Windows/);
+    }
+    const retries = nodes(view).filter(node => node.type === 'button' && label(node) === 'Retry after checking');
+    assert.equal(retries.length, 3);
+    context.window.confirm = () => false;
+    await retries[0].props.onClick(); await retries[1].props.onClick();
+    assert.deepEqual(requests, []);
+    context.window.confirm = () => true;
+    await retries[0].props.onClick(); await retries[1].props.onClick();
+    assert.deepEqual(requests.map(r => [r.action, r.jobId, r.checked]), [['retryNotice', 5, true], ['retry', 5, true]]);
+    assert.notEqual(requests[0].requestId, requests[1].requestId);
+    assert.match(await printing.handoffNotice('en'), /needs attention/);
+    assert.equal(requests.length, 2);
+
+    const admin = new TestPrintJobs({ printing, language: 'en' });
+    await admin.load();
+    const adminTree = admin.render();
+    const simulator = nodes(adminTree).find(node => node.type === PrintJobs);
+    if (preparationMode === 'training') {
+      assert.equal(simulator.props.settingsOnly, true);
+      assert.doesNotMatch(JSON.stringify(adminTree), /Save queue|compatible printer sound/);
+    } else {
+      assert.equal(simulator, undefined);
+      assert.match(JSON.stringify(adminTree), /Save queue/);
+    }
+  });
+}
+
+test('waiter can refresh a failed first printer status read before a mode is known', async () => {
+  for (const preparationMode of [undefined, 'routine', 'training']) {
+    let reads = 0;
+    const { printing, PrintJobs } = harness({ printJobs: async request => {
+      assert.equal(request.action, 'list');
+      if (++reads === 1) throw Error('Reply unavailable');
+      return { ok: true, data: { ...data, preparationMode } };
+    } });
+    const panel = new PrintJobs({ printing });
+    await panel.load();
+    const failure = panel.render();
+    assert.ok(nodes(failure).some(node => node.props.role === 'alert'));
+    const refresh = nodes(failure).find(node => node.type === 'button' && label(node) === 'Refresh tickets');
+    await refresh.props.onClick();
+    assert.equal(reads, 2);
+    assert.equal(panel.state.error, '');
+    if (preparationMode) assert.equal(panel.render().props.preparationMode, preparationMode);
+    else assert.equal(panel.render(), null);
+  }
+});
+
+test('accepted cancellation with conflicting printer history still requires manual follow-up', async () => {
+  const preparationMode = 'training';
+  const notices = [{id:1,destination:'bar',tableId:1,round:1,attempts:1,result:'accepted',retryBlocked:true,lines:[{name:'Sample',quantity:1}]}];
+  const {printing,PrintJobs} = harness({
+    printJobs:async () => ({ok:true,data:{...data,preparationMode}}),
+    testPrinting:async () => ({ok:true,data:{jobs:[],notices,preparationMode}}),
+  });
+  const panel = new PrintJobs({printing,language:'en'});
+  await panel.load();
+  const queue = panel.render();
+  const view = new queue.type(queue.props);
+  await view.load();
+  assert.match(JSON.stringify(view.render()),/1 need attention/);
+  assert.doesNotMatch(JSON.stringify(view.render()),/Retry after checking/);
+  assert.match(await printing.handoffNotice('en'),/Tell preparation staff in person/);
+});
+
+test('earlier simulated ticket is visible on handoff and retried only through its original simulator', async () => {
+  const retries = [], preparationMode = 'training';
+  const earlier = { id: 2, destination: 'bar', tableId: 3, round: 1, result: 'uncertain', attempts: 1, hadUncertain: true };
+  const { printing, PrintJobs, context } = harness({
+    printJobs: async req => {
+      if (req.action !== 'list') retries.push({ ...req });
+      return { ok: true, data: { jobs: [earlier], printers: [], preparationMode } };
+    },
+    testPrinting: async req => {
+      assert.equal(req.action, 'list');
+      return { ok: true, data: { jobs: [], notices: [], preparationMode } };
+    },
+  });
+  assert.match(await printing.handoffNotice('en'), /needs attention/);
+  const panel = new PrintJobs({ printing, language: 'en' });
+  await panel.load();
+  assert.match(JSON.stringify(panel.render()), /Earlier simulated tickets/);
+  assert.doesNotMatch(JSON.stringify(panel.render()), /simulated result|Save queue/);
+  const retry = nodes(panel.render()).find(node => node.type === 'button' && label(node) === 'Retry simulated job');
+  context.window.confirm = () => false;
+  await retry.props.onClick();
+  assert.deepEqual(retries, []);
+  context.window.confirm = prompt => { assert.match(prompt, /simulated ticket/); return true; };
+  await retry.props.onClick();
+  assert.equal(retries.length, 1);
+  assert.deepEqual([retries[0].action, retries[0].jobId, retries[0].checked], ['retry', 2, true]);
+});

@@ -15,7 +15,8 @@ export function describeEvent(e, language = 'en') {
  case 'move_items': return t('Moved items {items} from table {source} to table {destination} (order #{order}).',{items:itemRefs(e.itemIds),source:e.sourceId,destination:e.destinationId,order:e.destinationOrderId});
  case 'cancel_order': return t('Cancelled order. Reason: {reason}. Affected items: {items}.',{reason:e.reason,items:e.items.map(i => `${i.quantity} × ${i.name} (#${i.id}, ${t(i.status)})`).join(', ')});
  case 'correct_sent': return t('Corrected {quantity} of item #{id}. Reason: {reason}.',{quantity:e.quantity,id:e.entityId,reason:e.reason});
- case 'print_attempt': return t('Simulated {destination} print attempt for round {number}: {result}.',{destination:t(e.destination),number:e.number,result:t(e.result)});
+ case 'print_attempt': return t(e.adapter === 'windows' ? 'Windows {destination} print attempt for round {number}: {result}.' : 'Simulated {destination} print attempt for round {number}: {result}.',{destination:t(e.destination),number:e.number,result:t(e.result)});
+ case 'cancellation_print_attempt': return t(e.adapter === 'windows' ? 'Windows {destination} cancellation for round {number}: {result}.' : 'Simulated {destination} cancellation for round {number}: {result}.',{destination:t(e.destination),number:e.number,result:t(e.result)});
  default: return t('Activity recorded.');
  }
 }

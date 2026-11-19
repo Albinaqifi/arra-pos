@@ -3,13 +3,19 @@ const { ownsOrder, canRecoverLegacyPrint } = require('./order-ownership');
 const { recordAudit } = require('./audit');
 const CHANNEL = 'arra:print-jobs';
 
-function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
+function registerPrintJobs(ipcMain, isAllowedSender, db, session, preparationMode) {
+  const training = preparationMode === 'training';
+  // Prior PF700 rehearsals used this simulator alone. A paired preparation
+  // job has its own output history and must never gain a second retry path.
+  const sourceFilter = training ? 'NOT EXISTS (SELECT 1 FROM test_print_jobs p WHERE p.ticket_id=j.ticket_id)' : '1';
   ipcMain.handle(CHANNEL, (event, request) => {
-    const fields = { list: ['action'], simulate: ['action', 'destination', 'result'], retry: ['action', 'jobId', 'requestId'] };
+    const fields = { list: ['action'], simulate: ['action', 'destination', 'result'], retry: training ? ['action', 'jobId', 'requestId', 'checked'] : ['action', 'jobId', 'requestId'] };
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
         !Object.hasOwn(fields, request.action) || Reflect.ownKeys(request).length !== fields[request.action].length || !fields[request.action].every(k => Object.hasOwn(request, k)) ||
         (request.action === 'simulate' && (!['kitchen', 'kitchen2', 'bar'].includes(request.destination) || !['success', 'failed', 'uncertain'].includes(request.result))) ||
-        (request.action === 'retry' && (!Number.isSafeInteger(request.jobId) || request.jobId <= 0 || typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId)))) return { ok: false, error: 'Invalid request' };
+        (request.action === 'retry' && ((training && request.checked !== true) || !Number.isSafeInteger(request.jobId) || request.jobId <= 0 || typeof request.requestId !== 'string' || !/^[a-zA-Z0-9-]{1,100}$/.test(request.requestId)))) return { ok: false, error: 'Invalid request' };
+    if (preparationMode === 'routine' && request.action === 'retry') return {ok:false};
+    if (preparationMode === 'routine' && request.action === 'simulate') return {ok:false};
     try {
       const operational = hasPermissions(db, session, ...(request.action === 'list' ? ['orders.view'] : ['orders.view', 'orders.change']));
       const userId = session.currentUserId();
@@ -21,7 +27,7 @@ function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
       try {
         if (request.action === 'simulate') db.prepare('UPDATE simulated_printers SET result = ? WHERE destination = ?').run(request.result, request.destination);
         if (request.action === 'retry') {
-          const job = db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) WHERE j.id=?`).get(request.jobId);
+          const job = db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) WHERE j.id=? AND ${sourceFilter}`).get(request.jobId);
           const token = 'retry-' + request.requestId;
           const prior = db.prepare('SELECT job_id FROM print_attempts WHERE request_id=?').get(token);
           if (!job || !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)) || job.cancelled || (prior && prior.job_id !== job.id) || (!prior && job.result === 'success')) throw Error('Invalid retry');
@@ -31,10 +37,10 @@ function registerPrintJobs(ipcMain, isAllowedSender, db, session) {
             recordAudit(db, session.currentUserId(), 'print_retry', 'print_attempt', attemptId, job.orderId, { jobId: job.id, result, adapter: 'simulated' });
           }
         }
-        const jobs = operational ? db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, r.table_id AS tableId, r.number AS round, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) ORDER BY j.id DESC`).all().filter(job=>ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)).map(({roundActor,...job})=>job) : [];
-        const printers = db.prepare('SELECT destination, result FROM simulated_printers ORDER BY destination').all();
+        const jobs = operational && preparationMode !== 'routine' ? db.prepare(`SELECT j.id, r.order_id AS orderId, r.actor_id AS roundActor, r.table_id AS tableId, r.number AS round, t.destination, a.result, (EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=r.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=t.id)) AS cancelled, (SELECT count(*) FROM print_attempts WHERE job_id=j.id) AS attempts, EXISTS(SELECT 1 FROM print_attempts WHERE job_id=j.id AND result='uncertain') AS hadUncertain FROM print_jobs j JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN print_attempts a ON a.id=(SELECT MAX(id) FROM print_attempts WHERE job_id=j.id) WHERE ${sourceFilter} AND (? = 0 OR EXISTS (SELECT 1 FROM print_attempts old WHERE old.job_id=j.id AND old.result != 'success')) ORDER BY j.id DESC`).all(training ? 1 : 0).filter(job=>ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)).map(({roundActor,...job})=>job) : [];
+        const printers = preparationMode === 'routine' ? [] : db.prepare('SELECT destination, result FROM simulated_printers ORDER BY destination').all();
         db.exec('COMMIT');
-        return { ok: true, data: { jobs, printers } };
+        return { ok: true, data: { jobs, printers, preparationMode } };
       } catch (error) { db.exec('ROLLBACK'); throw error; }
     } catch (_) { return { ok: false, error: 'Print jobs unavailable. Try again.' }; }
   });

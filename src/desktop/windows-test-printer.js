@@ -50,7 +50,16 @@ function textForJob(job) {
     rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den');
     return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
   }
-  const rows = job.cancellation ? ['*** CANCELLATION ***', 'TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' CANCELLATION', 'Table ' + s.tableId, 'Round ' + s.round] : job.destination === 'bill' ? ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId] : ['TEST ' + (job.destination === 'kitchen' ? 'KITCHEN 1' : job.destination === 'kitchen2' ? 'KITCHEN 2' : job.destination.toUpperCase()) + ' TICKET', 'Table ' + s.tableId, 'Round ' + s.round];
+  let rows;
+  if (job.destination === 'bill') {
+    rows = ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId];
+  } else {
+    const station = {kitchen:'KITCHEN 1', kitchen2:'KITCHEN 2', bar:'BAR'}[job.destination];
+    if (!station) throw Error('Invalid preparation destination');
+    const prefix = s.preparationMode === 'routine' ? '' : 'TEST ';
+    rows = [prefix + station + (job.cancellation ? ' CANCELLATION' : ' TICKET'), 'Table ' + s.tableId, 'Round ' + s.round];
+    if (job.cancellation) rows.unshift('*** CANCELLATION ***');
+  }
   rows.push('--------------------------------');
   for (const l of s.lines) {
     rows.push(l.quantity + ' x ' + l.name + (job.destination === 'bill' ? '  ' + (l.quantity * l.unitPrice) + ' den' : ''));

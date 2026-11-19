@@ -133,7 +133,9 @@ export class CorrectionWorkflow extends FeatureState {
         this.orders.applyConfirmedItems(lease, result.data.items);
         this.jobsChanged();
         this._set({ dialog: null });
-        this.notify(this.t('Correction saved.'));
+        this.notify(this.t(result.data.noticeDeferred
+          ? 'Correction saved. Printing is disabled. Check previous output and tell preparation staff in person.'
+          : 'Correction saved.'));
       } else if (result?.rejected && result.code === 'window_expired') {
         this._set({ dialog: { ...this.state.dialog, phase: 'pin', pin: '', approvalToken: null, saving: false, error: '' } });
       } else if (result?.rejected && !dialog.unresolved) {

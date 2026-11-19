@@ -1,37 +1,79 @@
-// Sample-only print jobs. An attempt is persisted before handing anything to
-// Windows; a missing result after interruption is deliberately uncertain.
+// An attempt is persisted before dispatch. A missing result after interruption
+// is deliberately uncertain.
 const { hasPermissions } = require('./permissions');
 const { ownsOrder, canRecoverLegacyPrint } = require('./order-ownership');
 const validId = n => Number.isSafeInteger(n) && n > 0;
 const token = s => typeof s === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(s);
 const destination = s => ['kitchen', 'kitchen2', 'bar', 'bill', 'bill-A', 'bill-B'].includes(s);
+const preparationDestination = s => ['kitchen', 'kitchen2', 'bar'].includes(s);
 const inFlight = new Set();
 
-function createPreparationJob(db, ticketId) {
+function createPreparationJob(db, ticketId, preparationMode) {
   const ticket = db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round FROM preparation_tickets t JOIN preparation_rounds r ON r.id=t.round_id WHERE t.id=?`).get(ticketId);
   const lines = db.prepare(`SELECT i.id, i.name, i.note, ti.quantity FROM preparation_ticket_items ti JOIN order_items i ON i.id=ti.item_id WHERE ti.ticket_id=? ORDER BY i.id`).all(ticketId);
   for (const line of lines) line.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName FROM order_item_modifiers WHERE item_id=? ORDER BY rowid').all(line.id);
-  return db.prepare('INSERT INTO test_print_jobs(destination,ticket_id,snapshot,created_at) VALUES(?,?,?,?)').run(ticket.destination, ticketId, JSON.stringify({ ...ticket, lines }), Date.now()).lastInsertRowid;
+  return db.prepare('INSERT INTO test_print_jobs(destination,ticket_id,snapshot,created_at) VALUES(?,?,?,?)').run(ticket.destination, ticketId, JSON.stringify({ ...ticket, lines, preparationMode }), Date.now()).lastInsertRowid;
 }
 
-// Capture the original ticket destination and sent-round details, never current routing.
+// Capture the adapter as well as the destination from the original send.
+// Older Windows sample tickets have a queue job without a mode. A ticket
+// with only a legacy simulated job never went to Windows.
+function originalTicket(db, itemId) {
+  return db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round, i.name, i.note,
+    CASE WHEN j.id IS NOT NULL THEN COALESCE(json_extract(j.snapshot,'$.preparationMode'),'sample')
+         WHEN legacy.id IS NOT NULL THEN 'training' ELSE 'unresolved' END AS preparationMode
+    FROM preparation_ticket_items ti JOIN preparation_tickets t ON t.id=ti.ticket_id
+    JOIN preparation_rounds r ON r.id=t.round_id JOIN order_items i ON i.id=ti.item_id
+    LEFT JOIN test_print_jobs j ON j.ticket_id=t.id LEFT JOIN print_jobs legacy ON legacy.ticket_id=t.id
+    WHERE ti.item_id=?`).get(itemId);
+}
 function createCancellationJob(db, correctionId, itemId, quantity) {
-  const ticket = db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round, i.name, i.note FROM preparation_ticket_items ti JOIN preparation_tickets t ON t.id=ti.ticket_id JOIN preparation_rounds r ON r.id=t.round_id JOIN order_items i ON i.id=ti.item_id WHERE ti.item_id=?`).get(itemId);
-  if (!ticket) throw Error('Original preparation ticket unavailable');
-  const source=ticket;
+  const source = originalTicket(db,itemId);
+  if (!source) throw Error('Original preparation ticket unavailable');
   const modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName FROM order_item_modifiers WHERE item_id=? ORDER BY rowid').all(itemId);
-  const snapshot = { tableId:source.tableId, round:source.round, lines:[{name:source.name,note:source.note,quantity,modifiers}], cancellation:true };
+  const snapshot = { tableId:source.tableId, round:source.round, lines:[{name:source.name,note:source.note,quantity,modifiers}], cancellation:true, preparationMode:source.preparationMode };
   return db.prepare('INSERT INTO cancellation_notice_jobs(correction_id,destination,snapshot,created_at) VALUES(?,?,?,?)').run(correctionId,source.destination,JSON.stringify(snapshot),Date.now()).lastInsertRowid;
 }
+function noticeMode(db, noticeId, snapshot) {
+  if (snapshot.preparationMode) return snapshot.preparationMode;
+  // Before S-098, cancellation notices did not store the adapter. Read the
+  // original ticket. Any older Windows attempt on a simulator-only original
+  // leaves conflicting evidence; keep that notice for manual follow-up.
+  const correction = db.prepare(`SELECT c.item_id FROM cancellation_notice_jobs j
+    JOIN sent_item_corrections c ON c.id=j.correction_id WHERE j.id=?`).get(noticeId);
+  const mode = originalTicket(db,correction.item_id)?.preparationMode || 'unresolved';
+  if (mode === 'training' && db.prepare(`SELECT 1 FROM cancellation_notice_attempts
+    WHERE job_id=? AND request_id NOT GLOB 'training-retry-*'`).get(noticeId)) return 'unresolved';
+  return mode;
+}
+function canDispatchNotice(mode, preparationMode) {
+  return mode !== 'unresolved' && (mode === 'training') === (preparationMode === 'training');
+}
+function initialCancellationOutput(db, correctionId, actor, printer, replay) {
+  const notice = db.prepare('SELECT id,snapshot FROM cancellation_notice_jobs WHERE correction_id=?').get(correctionId);
+  if (!notice) return {}; // Corrections from before cancellation printing.
+  const mode = noticeMode(db,notice.id,JSON.parse(notice.snapshot));
+  if (replay) {
+    const attempted = db.prepare('SELECT 1 FROM cancellation_notice_attempts WHERE job_id=? LIMIT 1').get(notice.id);
+    return attempted && mode !== 'unresolved' ? {} : {deferred:true};
+  }
+  if (!printer || !canDispatchNotice(mode,printer.preparationMode)) return {deferred:true};
+  return {attempt:reserveCancellationAttempt(db,notice.id,'initial-' + notice.id,actor)};
+}
 function reserveCancellationAttempt(db, jobId, requestId, actorId) {
-  const prior = db.prepare('SELECT job_id AS jobId FROM cancellation_notice_attempts WHERE request_id=?').get(requestId);
-  if (prior) { if (prior.jobId !== jobId) throw Error('Invalid retry'); return null; }
   const job=db.prepare('SELECT destination,snapshot FROM cancellation_notice_jobs WHERE id=?').get(jobId);
   if (!job) throw Error('Job unavailable');
-  const queue=db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
-  const beep=db.prepare('SELECT beep FROM cancellation_alert_settings WHERE destination=?').get(job.destination).beep;
+  const snapshot=JSON.parse(job.snapshot);
+  const mode=noticeMode(db,jobId,snapshot);
+  if (mode === 'unresolved') throw Error('Notice output unavailable');
+  const training=mode === 'training';
+  if (training && !snapshot.preparationMode) requestId = 'training-' + requestId;
+  const prior = db.prepare('SELECT job_id AS jobId FROM cancellation_notice_attempts WHERE request_id=?').get(requestId);
+  if (prior) { if (prior.jobId !== jobId) throw Error('Invalid retry'); return null; }
+  const queue=training ? job.destination : db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
+  const beep=training ? 0 : db.prepare('SELECT beep FROM cancellation_alert_settings WHERE destination=?').get(job.destination).beep;
   const attemptId=db.prepare('INSERT INTO cancellation_notice_attempts(job_id,request_id,actor_id,queue,beep,started_at) VALUES(?,?,?,?,?,?)').run(jobId,requestId,actorId,queue,beep,Date.now()).lastInsertRowid;
-  return {attemptId,queue,destination:job.destination,snapshot:JSON.parse(job.snapshot),cancellation:true,beep:!!beep};
+  return {attemptId,queue,destination:job.destination,snapshot,cancellation:true,beep:!!beep};
 }
 function dispatchCancellation(db,adapter,attempt) {
   if (!attempt) return;
@@ -61,10 +103,14 @@ function reserveAttempt(db, jobId, requestId, actorId) {
   if (prior) { if (prior.jobId !== jobId) throw Error('Invalid retry'); return null; }
   const job = db.prepare('SELECT destination,snapshot FROM test_print_jobs WHERE id=?').get(jobId);
   if (!job) throw Error('Job unavailable');
+  const snapshot = JSON.parse(job.snapshot);
   const payment = job.destination === 'bill' ? db.prepare("SELECT COALESCE(c.account,p.account) AS account FROM payments p LEFT JOIN (SELECT payment_id,'A' AS account FROM payment_account_corrections) c ON c.payment_id=p.id WHERE p.bill_id=(SELECT bill_id FROM test_print_jobs WHERE id=?)").get(jobId) : null;
-  const queue = payment ? db.prepare('SELECT queue FROM bill_printer_queues WHERE account=?').get(payment.account).queue : db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
+  let queue;
+  if (snapshot.preparationMode === 'training') queue = job.destination;
+  else if (payment) queue = db.prepare('SELECT queue FROM bill_printer_queues WHERE account=?').get(payment.account).queue;
+  else queue = db.prepare('SELECT queue FROM test_printer_queues WHERE destination=?').get(job.destination).queue;
   const attemptId = db.prepare('INSERT INTO test_print_attempts(job_id,request_id,actor_id,queue,started_at) VALUES(?,?,?,?,?)').run(jobId, requestId, actorId, queue, Date.now()).lastInsertRowid;
-  return { attemptId, queue, destination: job.destination, snapshot: JSON.parse(job.snapshot) };
+  return { attemptId, queue, destination: job.destination, snapshot };
 }
 
 function dispatch(db, adapter, attempt) {
@@ -75,7 +121,8 @@ function dispatch(db, adapter, attempt) {
   }).catch(() => { /* unknown: leave the durable attempt without a result */ }).finally(() => inFlight.delete(attempt.attemptId));
 }
 
-function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, enabled, billOnly = false) {
+function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, enabled, billOnly = false, preparationMode) {
+  const training = preparationMode === 'training';
   ipcMain.handle('arra:test-printing', (event, req) => {
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype) return { ok:false };
     if (!enabled) return {ok:false,disabled:true};
@@ -86,6 +133,8 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
       (req.action === 'bill' && (!validId(req.billId) || !token(req.requestId))) ||
       (['retry','retryNotice'].includes(req.action) && (!validId(req.jobId) || !token(req.requestId) || req.checked !== true))) return {ok:false};
     if (billOnly && (req.action === 'configureAlert' || req.action === 'retryNotice' || (req.action === 'configure' && !['bill-A','bill-B'].includes(req.destination)))) return {ok:false};
+    if (preparationMode && (req.action === 'bill' || (req.action === 'configure' && !preparationDestination(req.destination)))) return {ok:false};
+    if (training && ['configure','configureAlert'].includes(req.action)) return {ok:false};
     const operational = hasPermissions(db,session,'orders.view','orders.change');
     const financial = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && hasPermissions(db,session,'employees.view') && ['A','B','combined'].includes(db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope);
     const correctionAdmin = session.currentUserId() && session.authenticatedUserId() === session.currentUserId() && db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(session.currentUserId())?.scope === 'combined' && !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='orders.correct_sent'").get(session.currentUserId());
@@ -116,25 +165,30 @@ function registerTestPrinting(ipcMain, isAllowedSender, db, session, adapter, en
           attempt = reserveAttempt(db,job.id,requestId,session.currentUserId());
         }
         if (req.action === 'retry') {
-          const job = db.prepare(`SELECT j.bill_id AS billId, (SELECT pr.order_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS orderId, (SELECT pr.actor_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS roundActor, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
-          if (!job || (billOnly && !job.billId) || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational || !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)))) throw Error('Job unavailable');
+          const job = db.prepare(`SELECT j.bill_id AS billId, json_extract(j.snapshot,'$.preparationMode') AS mode, (SELECT pr.order_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS orderId, (SELECT pr.actor_id FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id WHERE pt.id=j.ticket_id) AS roundActor, (EXISTS(SELECT 1 FROM preparation_tickets pt JOIN preparation_rounds pr ON pr.id=pt.round_id JOIN order_cancellations c ON c.order_id=pr.order_id WHERE pt.id=j.ticket_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled, (SELECT max(id) FROM test_print_attempts WHERE job_id=j.id) AS lastAttempt FROM test_print_jobs j WHERE j.id=?`).get(req.jobId);
+          if (!job || (preparationMode && job.billId) || (job.mode === 'training') !== training || (billOnly && !job.billId) || job.cancelled || inFlight.has(job.lastAttempt) || (job.billId ? !canPrintBill(db,session,job.billId) : !operational || !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.roundActor)))) throw Error('Job unavailable');
           attempt = reserveAttempt(db,req.jobId,'retry-' + req.requestId,session.currentUserId());
         }
         let noticeAttempt;
         if (req.action === 'retryNotice') {
-          const job=db.prepare('SELECT j.id,c.order_id AS orderId,c.actor_id AS correctionActor,(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) AS lastAttempt FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id WHERE j.id=?').get(req.jobId);
-          if (!(operational || correctionAdmin) || !job || (!correctionAdmin && !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.correctionActor))) || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
+          const job=db.prepare('SELECT j.id,j.snapshot,c.order_id AS orderId,c.actor_id AS correctionActor,(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) AS lastAttempt FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id WHERE j.id=?').get(req.jobId);
+          if (!(operational || correctionAdmin) || !job || !canDispatchNotice(noticeMode(db,job.id,JSON.parse(job.snapshot)),preparationMode) || (!correctionAdmin && !(ownsOrder(db,session,job.orderId) || canRecoverLegacyPrint(db,session,job.orderId,job.correctionActor))) || inFlight.has('c'+job.lastAttempt)) throw Error('Job unavailable');
           noticeAttempt=reserveCancellationAttempt(db,req.jobId,'retry-'+req.requestId,session.currentUserId());
         }
-        const notices = !billOnly && (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,c.order_id AS orderId,c.actor_id AS correctionActor,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().filter(j=>correctionAdmin || ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.correctionActor)).map(({correctionActor,...j})=>({...j,...JSON.parse(j.snapshot)})) : [];
-        const queues = db.prepare("SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination UNION ALL SELECT 'bill-' || account AS destination,queue,NULL AS beep FROM bill_printer_queues ORDER BY destination").all().filter(q => !billOnly || ['bill-A','bill-B'].includes(q.destination));
-        const jobs = db.prepare(`SELECT j.id,j.destination,j.ticket_id AS ticketId,j.bill_id AS billId,pr.order_id AS orderId,pr.actor_id AS roundActor,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,COALESCE(a.queue,'') AS queue,a.started_at AS startedAt,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? canPrintBill(db,session,j.billId) : !billOnly && operational && (ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.roundActor))).map(({roundActor,...j})=>j);
+        const notices = !billOnly && (operational || correctionAdmin) ? db.prepare(`SELECT j.id,j.destination,j.snapshot,c.order_id AS orderId,c.actor_id AS correctionActor,a.queue,a.beep,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM cancellation_notice_attempts WHERE job_id=j.id) AS attempts FROM cancellation_notice_jobs j JOIN sent_item_corrections c ON c.id=j.correction_id LEFT JOIN cancellation_notice_attempts a ON a.id=(SELECT MAX(id) FROM cancellation_notice_attempts WHERE job_id=j.id) LEFT JOIN cancellation_notice_results r ON r.attempt_id=a.id ORDER BY j.id DESC`).all().filter(j=>correctionAdmin || ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.correctionActor)).map(({correctionActor,...j}) => {
+          const snapshot = JSON.parse(j.snapshot);
+          const mode = noticeMode(db,j.id,snapshot);
+          return {...j,...snapshot,preparationMode:mode,retryBlocked:mode === 'unresolved'};
+        }).filter(j=>j.retryBlocked || canDispatchNotice(j.preparationMode,preparationMode)) : [];
+        const queues = db.prepare("SELECT q.destination,q.queue,s.beep FROM test_printer_queues q LEFT JOIN cancellation_alert_settings s ON s.destination=q.destination UNION ALL SELECT 'bill-' || account AS destination,queue,NULL AS beep FROM bill_printer_queues ORDER BY destination").all().filter(q => (!billOnly || ['bill-A','bill-B'].includes(q.destination)) && (!preparationMode || preparationDestination(q.destination)))
+          .map(q => training ? {destination:q.destination, queue:q.destination, beep:0} : q);
+        const jobs = db.prepare(`SELECT j.id,j.destination,json_extract(j.snapshot,'$.preparationMode') AS mode,j.ticket_id AS ticketId,j.bill_id AS billId,pr.order_id AS orderId,pr.actor_id AS roundActor,pr.table_id AS tableId,pr.number AS round,(EXISTS(SELECT 1 FROM order_cancellations c WHERE c.order_id=pr.order_id) OR EXISTS(SELECT 1 FROM preparation_ticket_items ti JOIN sent_item_corrections c ON c.item_id=ti.item_id WHERE ti.ticket_id=j.ticket_id)) AS cancelled,COALESCE(a.queue,'') AS queue,a.started_at AS startedAt,COALESCE(r.result,CASE WHEN a.id IS NULL THEN 'unattempted' ELSE 'uncertain' END) AS result,(SELECT count(*) FROM test_print_attempts WHERE job_id=j.id) AS attempts FROM test_print_jobs j LEFT JOIN test_print_attempts a ON a.id=(SELECT MAX(id) FROM test_print_attempts WHERE job_id=j.id) LEFT JOIN test_print_results r ON r.attempt_id=a.id LEFT JOIN preparation_tickets pt ON pt.id=j.ticket_id LEFT JOIN preparation_rounds pr ON pr.id=pt.round_id ORDER BY j.id DESC`).all().filter(j=>j.billId ? !preparationMode && canPrintBill(db,session,j.billId) : (j.mode === 'training') === training && !billOnly && operational && (ownsOrder(db,session,j.orderId) || canRecoverLegacyPrint(db,session,j.orderId,j.roundActor))).map(({roundActor,mode,...j})=>j);
         db.exec('COMMIT');
         dispatch(db,adapter,attempt);
         dispatchCancellation(db,adapter,noticeAttempt);
-        return {ok:true,data:{queues,jobs,notices}};
+        return {ok:true,data:{queues,jobs,notices,preparationMode}};
       } catch (e) { db.exec('ROLLBACK'); throw e; }
     } catch (_) { return {ok:false,error:'Test printing unavailable. Check the job before retrying.'}; }
   });
 }
-module.exports = {createCancellationJob,reserveCancellationAttempt,dispatchCancellation,createPreparationJob,createBillJob,reserveAttempt,dispatch,registerTestPrinting};
+module.exports = {createCancellationJob,initialCancellationOutput,reserveCancellationAttempt,dispatchCancellation,createPreparationJob,createBillJob,reserveAttempt,dispatch,registerTestPrinting};

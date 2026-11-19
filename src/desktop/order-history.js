@@ -88,6 +88,25 @@ function registerOrderHistory(ipcMain, isAllowedSender, db, session) {
         FROM print_attempts pa JOIN print_jobs j ON j.id=pa.job_id JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds r ON r.id=t.round_id
         LEFT JOIN local_users u ON u.id=pa.actor_id WHERE r.order_id=?`).all(req.orderId);
       for (const a of attempts) events.push({ ...a, id: 'print-' + a.id, action:'print_attempt', adapter:'simulated', orderId:req.orderId });
+      // Fiscal profiles use only the preparation queue ledger. Include every
+      // submission, including retries whose acknowledgement never arrived.
+      const queueAttempts = db.prepare(`SELECT 'ticket-' || a.id AS id, a.started_at AS occurredAt,
+        u.username AS actor, COALESCE(result.result,'uncertain') AS result, j.destination, round.number,
+        json_extract(j.snapshot,'$.preparationMode') AS mode, 'print_attempt' AS action
+        FROM test_print_attempts a JOIN test_print_jobs j ON j.id=a.job_id
+        JOIN preparation_tickets t ON t.id=j.ticket_id JOIN preparation_rounds round ON round.id=t.round_id
+        JOIN local_users u ON u.id=a.actor_id LEFT JOIN test_print_results result ON result.attempt_id=a.id
+        WHERE round.order_id=? AND json_extract(j.snapshot,'$.preparationMode') IN ('routine','training')
+        UNION ALL SELECT 'notice-' || a.id, a.started_at, u.username, COALESCE(result.result,'uncertain'),
+        j.destination, json_extract(j.snapshot,'$.round'), COALESCE(json_extract(j.snapshot,'$.preparationMode'),
+          CASE WHEN a.request_id GLOB 'training-retry-*' THEN 'training' ELSE 'sample' END), 'cancellation_print_attempt'
+        FROM cancellation_notice_attempts a JOIN cancellation_notice_jobs j ON j.id=a.job_id
+        JOIN sent_item_corrections c ON c.id=j.correction_id JOIN local_users u ON u.id=a.actor_id
+        LEFT JOIN cancellation_notice_results result ON result.attempt_id=a.id
+        WHERE c.order_id=?`).all(req.orderId,req.orderId);
+      for (const {mode,...attempt} of queueAttempts) {
+        events.push({...attempt, adapter:mode === 'training' ? 'simulated' : 'windows', orderId:req.orderId});
+      }
       events.sort((a,b) => a.occurredAt-b.occurredAt || String(a.id).localeCompare(String(b.id), undefined, { numeric:true }));
       return { ok: true, data: { order, items, events } };
     } catch (_) { return { ok: false }; }
