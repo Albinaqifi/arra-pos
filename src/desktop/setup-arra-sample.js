@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { openDatabase } = require('./database');
-const { hashPassword, validPassword } = require('./session');
+const { hashPassword, waiterPinCredential, validPassword } = require('./session');
 const { seedTables } = require('./tables');
 const { seedArraMenu } = require('./arra-menu');
 let db, values;
@@ -32,6 +32,7 @@ try {
    else for (const permission of role === 'combined' ? ['tables.change','menu.change','employees.view','employees.change','orders.correct_sent','business_days.close'] : ['tables.change','menu.change','employees.view','employees.change']) grant.run(id,permission);
   });
   const waiter = add(values[10],randomBytes(32).toString('hex'),values[4]); scope.run(waiter,'waiter');
+  db.prepare('UPDATE local_users SET pin_salt=?,pin_hash=? WHERE id=?').run(...waiterPinCredential(values[4]),waiter);
   db.prepare('INSERT INTO verified_waiter_pins(user_id) VALUES (?)').run(waiter);
   for (const permission of ['tables.view','menu.view','orders.view','orders.change','orders.correct_sent']) grant.run(waiter,permission);
   const manager = add(values[11],randomBytes(32).toString('hex'),values[5]); db.prepare('INSERT INTO transfer_managers VALUES(?)').run(manager);

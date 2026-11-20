@@ -4,15 +4,23 @@ using System.IO;
 using System.Reflection;
 using System.Security.Cryptography;
 
-// Only the files in the verified RC4 release can receive the launch profile.
+// Only the files in the verified restaurant release can receive the launch profile.
 // Program data, operator settings and the desktop shortcut live outside program/.
 internal static class ReleaseFiles
 {
+#if RC5
+    internal const string Edition = "RC5";
+    internal const string Version = "1.0.10.5";
+#else
+    internal const string Edition = "RC4";
+    internal const string Version = "1.0.10.4";
+#endif
+
     internal static void Verify(string installDirectory)
     {
         string root = Path.GetFullPath(installDirectory);
         Dictionary<string, string> expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        using (Stream manifest = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArraPOS.RC4.sha256"))
+        using (Stream manifest = Assembly.GetExecutingAssembly().GetManifestResourceStream("ArraPOS." + Edition + ".sha256"))
         using (StreamReader reader = new StreamReader(manifest))
         {
             string line;
@@ -41,21 +49,21 @@ internal static class ReleaseFiles
             }
         }
         if (expected.Count != 0)
-            throw new InvalidDataException("Files from the Arra POS RC4 program folder are missing.");
+            throw new InvalidDataException("Files from the Arra POS " + Edition + " program folder are missing.");
     }
 
     private static void VerifyFile(string root, string relative, SHA256 sha, Dictionary<string, string> expected)
     {
         string digest;
         if (!expected.TryGetValue(relative, out digest))
-            throw new InvalidDataException("The program folder differs from the Arra POS RC4 release.");
+            throw new InvalidDataException("The program folder differs from the Arra POS " + Edition + " release.");
         string path = Path.Combine(root, relative);
         RejectRedirect(path);
         using (FileStream file = File.OpenRead(path))
         {
             string actual = BitConverter.ToString(sha.ComputeHash(file)).Replace("-", "");
             if (!String.Equals(actual, digest, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException("The Arra POS RC4 program files could not be verified.");
+                throw new InvalidDataException("The Arra POS " + Edition + " program files could not be verified.");
         }
         expected.Remove(relative);
     }
@@ -63,6 +71,6 @@ internal static class ReleaseFiles
     private static void RejectRedirect(string path)
     {
         if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-            throw new InvalidDataException("Use the extracted Arra POS RC4 program files.");
+            throw new InvalidDataException("Use the extracted Arra POS " + Edition + " program files.");
     }
 }

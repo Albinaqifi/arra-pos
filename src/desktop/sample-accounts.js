@@ -1,6 +1,6 @@
 // Development sample identities only. Never call this against an operational database.
 const { randomBytes } = require('node:crypto');
-const { hashPassword, validPassword } = require('./session');
+const { hashPassword, waiterPinCredential, validPassword } = require('./session');
 const { waiterPinAvailable } = require('./employee-config');
 const identities = [['sample-waiter', 'waiter'], ['sample-owner-a', 'A'], ['sample-owner-b', 'B'], ['sample-combined', 'combined']];
 const entryIdentities = [['sample-restaurant', 'waiter'], ['sample-owner-a', 'A'], ['sample-owner-b', 'B'], ['sample-combined', 'combined']];
@@ -29,6 +29,7 @@ function seedSampleIdentities(db, passwords, waiterPin, transferPin, ownerPin = 
     if (!lookup.get('sample-waiter') && !waiterPinAvailable(db, waiterPin)) throw new Error('Sample waiter PIN is already in use');
     const waiter = add('sample-waiter', randomBytes(32).toString('hex'), waiterPin);
     if (waiter !== null) {
+      db.prepare('UPDATE local_users SET pin_salt=?,pin_hash=? WHERE id=?').run(...waiterPinCredential(waiterPin), waiter);
       scope.run(waiter, 'waiter');
       db.prepare('INSERT INTO verified_waiter_pins(user_id) VALUES (?)').run(waiter);
       for (const permission of ['tables.view','menu.view','orders.view','orders.change','orders.correct_sent']) grant.run(waiter, permission);

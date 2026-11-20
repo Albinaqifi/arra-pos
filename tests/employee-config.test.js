@@ -24,7 +24,8 @@ test('employee changes require authenticated administrator, protect credentials 
   assert.equal(handlers['arra:employee-config']({}, { action: 'list' }).ok, false);
   assert.equal(invoke({ action: 'create', username: 'staff', password: 'sample staff password', pin }).ok, true);
   const user = db.prepare('SELECT id, salt, password_hash, pin_salt, pin_hash FROM local_users WHERE username = ?').get('staff');
-  assert.notDeepEqual(Buffer.from(user.password_hash), Buffer.from('sample staff password')); assert.notDeepEqual(Buffer.from(user.pin_hash), Buffer.from(pin));
+  assert.notDeepEqual(Buffer.from(user.password_hash), Buffer.from('sample staff password'));
+  assert.equal(user.pin_salt.length, 0); assert.deepEqual(Buffer.from(user.pin_hash), Buffer.from(pin));
   assert.equal(invoke({ action: 'permissions', id: user.id, permissions: ['orders.view', 'financial.A'] }).ok, false);
   assert.equal(invoke({ action: 'permissions', id: 1, permissions: ['employees.change'] }).ok, false);
   assert.equal(invoke({ action: 'permissions', id: user.id, permissions: ['orders.view', 'employees.view', 'employees.change'] }).ok, true);

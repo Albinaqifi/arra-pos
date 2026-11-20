@@ -6,6 +6,20 @@ const failure = () => ({ ok: false, error: 'Sign in failed' });
 const validUsername = value => typeof value === 'string' && value === value.trim() && value.length > 0 && value.length <= 128;
 const validPassword = value => typeof value === 'string' && value.length > 0 && Buffer.byteLength(value, 'utf8') <= 1024;
 function hashPassword(password, salt) { return scryptSync(password, salt, 32, OPTIONS); }
+// An empty salt marks a four-digit waiter PIN stored directly in pin_hash.
+// Existing salted PINs remain valid until an authorized reset.
+function waiterPinCredential(pin) { return [Buffer.alloc(0), Buffer.from(pin, 'utf8')]; }
+function matchesPin(pin, salt, hash, allowPlain = false) {
+  const storedSalt = Buffer.from(salt), expected = Buffer.from(hash);
+  if (storedSalt.length === 0) {
+    if (!allowPlain || expected.length !== 4 || !/^\d{4}$/.test(expected.toString('utf8'))) throw Error('Invalid PIN credential');
+    const actual = Buffer.from(pin, 'utf8');
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  }
+  const actual = hashPassword(pin, storedSalt);
+  if (expected.length !== actual.length) throw Error('Invalid PIN credential');
+  return timingSafeEqual(actual, expected);
+}
 function verifyLocalAccount(db, username, password) {
   if (!validUsername(username) || !validPassword(password)) return null;
   try {
@@ -80,9 +94,7 @@ function createSession(db) {
                     ELSE EXISTS(SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id) END)`).all(request.kind);
         const matches = [];
         for (const row of rows) {
-          const actual = hashPassword(request.pin, row.pin_salt), expected = Buffer.from(row.pin_hash);
-          if (expected.length !== actual.length) return fail();
-          if (timingSafeEqual(actual, expected)) matches.push(row);
+          if (matchesPin(request.pin, row.pin_salt, row.pin_hash, request.kind === 'waiter')) matches.push(row);
         }
         if (matches.length !== 1 || (request.kind === 'waiter' && matches[0].verified !== 1)) return fail();
         activeId = matches[0].id;
@@ -113,8 +125,7 @@ function createSession(db) {
         if ((!selectedTransfer && row.scope !== 'waiter') || db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(request.id)) return fail();
         {
           if (!row.pin_hash || !row.pin_salt || !(selectedTransfer ? /^\d{6}$/ : /^\d{4}$/).test(request.pin)) return fail();
-          const candidate = hashPassword(request.pin, row.pin_salt), expected = Buffer.from(row.pin_hash);
-          if (candidate.length !== expected.length || !timingSafeEqual(candidate, expected)) return fail();
+          if (!matchesPin(request.pin, row.pin_salt, row.pin_hash, !selectedTransfer)) return fail();
         }
         activeId = request.id;
         return { ok: true };
@@ -176,4 +187,4 @@ function registerSession(ipcMain, isAllowedSender, db) {
   });
   return session;
 }
-module.exports = { bootstrap, createSession, registerSession, hashPassword, validUsername, validPassword, verifyLocalAccount };
+module.exports = { bootstrap, createSession, registerSession, hashPassword, matchesPin, waiterPinCredential, validUsername, validPassword, verifyLocalAccount };

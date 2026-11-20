@@ -828,6 +828,7 @@ The [plan and design brief](optional-shifts-plan.md) applies to S-088–S-091. S
 
 **Owner decisions and transition**
 
+- Owner-requested performance follow-up: new or reset waiter PINs may be stored directly for fast local matching. Existing salted waiter PINs remain usable until reset, including a reset to the same digits. This supersedes the waiter-PIN plaintext restriction below; passwords and manager/owner PINs retain their existing hashing. Preserve uniqueness and all authorization checks across both formats.
 - This request supersedes the earlier FLOOR 02 baseline that any waiter may serve any table. There is no waiter-to-waiter table handover in this story. The Manager button opens only the existing restricted cash B-to-A correction workflow; it does not authorize a handover. Keep Combined-only staff credential management and existing owner financial scopes.
 - Ask for the PIN when a table is selected from the grid. On successful send or payment, return to the table grid in place of the former waiter-selection screen. A subsequent table selection asks for a PIN. Preserve the existing recovery flow when an operation fails or its outcome is unknown.
 - Existing open orders may not have a reliable assigned waiter, because the current system permits several waiters to use one order. Preserve these orders, provide a safe documented transition, and do not silently infer ownership from incomplete history. Resolve an owner decision only if an actual transition constraint cannot be handled safely.

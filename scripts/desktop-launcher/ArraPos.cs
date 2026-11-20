@@ -15,9 +15,9 @@ using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Arra POS")]
 [assembly: AssemblyProduct("Arra POS")]
-[assembly: AssemblyDescription("Desktop launcher for the restaurant RC4 release")]
-[assembly: AssemblyFileVersion("1.0.10.4")]
-[assembly: AssemblyVersion("1.0.10.4")]
+[assembly: AssemblyDescription("Desktop launcher for the restaurant " + ReleaseFiles.Edition + " release")]
+[assembly: AssemblyFileVersion(ReleaseFiles.Version)]
+[assembly: AssemblyVersion(ReleaseFiles.Version)]
 
 internal sealed class PrinterProfile
 {
@@ -81,7 +81,7 @@ internal static class ArraPos
         }
         catch
         {
-            MessageBox.Show("Windows could not complete this action. Close any older Arra window and open Arra POS.exe from the extracted RC4 folder to run setup again.",
+            MessageBox.Show("Windows could not complete this action. Close any older Arra window and open Arra POS.exe from the extracted " + ReleaseFiles.Edition + " folder to run setup again.",
                 Title, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         return 1;
@@ -102,14 +102,14 @@ internal static class ArraPos
         try { ReleaseFiles.Verify(kit); }
         catch
         {
-            throw new LauncherException("Place Arra POS.exe in the extracted restaurant RC4 folder, beside Open-Arra-Pay.cmd and the program folder. If it is already there, extract a fresh copy of the verified RC4 ZIP.");
+            throw new LauncherException("Open Arra POS.exe in the extracted restaurant " + ReleaseFiles.Edition + " folder, beside Open-Arra-Pay.cmd and the program folder. If it is already there, extract a fresh copy of the verified " + ReleaseFiles.Edition + " ZIP.");
         }
 
         string local = AppData("LOCALAPPDATA");
         string directory = Path.Combine(AppData("APPDATA"), ProfileFolder);
         if (!File.Exists(Path.Combine(directory, "arra.sqlite")) ||
             File.Exists(Path.Combine(directory, "SAMPLE-DATA-ONLY")) || Directory.Exists(Path.Combine(directory, "SAMPLE-DATA-ONLY")))
-            throw new LauncherException("The existing restaurant profile was not found. Use the Windows account that ran RC4 on the enrolled POS PC.");
+            throw new LauncherException("The existing restaurant profile was not found. Use the original Windows account on the enrolled POS PC.");
 
         string settings = Path.Combine(local, "Arra POS", "Desktop launcher", "rc4.profile");
         if (open && File.Exists(settings))
@@ -118,7 +118,7 @@ internal static class ArraPos
             try { profile = ReadProfile(settings, directory); }
             catch
             {
-                throw new LauncherException("The saved printer settings could not be opened for this Windows account. Open Arra POS.exe in the RC4 folder to set them up again.");
+                throw new LauncherException("The saved printer settings could not be opened for this Windows account. Open Arra POS.exe in the " + ReleaseFiles.Edition + " folder to set them up again.");
             }
             CheckDeviceClaim(profile.expectedSerial, local);
             Launch(kit, profile);
@@ -209,7 +209,7 @@ internal static class ArraPos
         {
             for (int n = 1; ; n++)
             {
-                string name = n == 1 ? Title : Title + " (RC4" + (n == 2 ? "" : " " + (n - 1)) + ")";
+                string name = n == 1 ? Title : Title + " (" + ReleaseFiles.Edition + (n == 2 ? "" : " " + (n - 1)) + ")";
                 string path = Path.Combine(desktop, name + ".lnk");
                 if (Directory.Exists(path)) continue;
                 bool exists = File.Exists(path);
@@ -296,7 +296,7 @@ internal sealed class PrinterSetup : Form
     internal PrinterSetup(string dataDirectory)
     {
         directory = dataDirectory;
-        Text = "Arra POS desktop setup";
+        Text = "Arra POS " + ReleaseFiles.Edition + " desktop setup";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
