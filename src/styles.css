@@ -331,3 +331,5 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 .fiscal-field input { width:100%; max-width:280px; border:1px solid #aab8c9; border-radius:8px; padding:10px; font:inherit; }
 .fiscal-confirm { background:#edf3ff; border-radius:8px; padding:12px; }
 .fiscal-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.fiscal-pair { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; }
+@media (max-width: 600px) { .fiscal-pair { grid-template-columns:1fr; gap:0; } }

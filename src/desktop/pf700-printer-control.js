@@ -11,9 +11,9 @@ function createPf700PrinterControl({ expectedSerial, openPipe, printerWait }) {
     busy = true;
     let pipe, lock, attempted = false;
     try {
-      if (cash && printerWait) {
+      if ((cash || [79, 94, 95, 73].includes(command)) && printerWait) {
         lock = await printerWait.acquire(authorized);
-        if (!lock || !authorized()) return 'not_sent';
+        if (!lock || !authorized()) return cash ? 'not_sent' : 'failed';
       }
       pipe = await openPipe('PrinterControl');
       const sequence = randomInt(0x20, 0x80);
@@ -33,6 +33,7 @@ function createPf700PrinterControl({ expectedSerial, openPipe, printerWait }) {
       if (cash) {
         return !match ? 'unknown' : match[1] === 'P' ? 'accepted' : 'declined';
       }
+      if ([79, 94, 95, 73].includes(command) && reply.length !== 0) return 'failed';
       return 'accepted';
     } catch (error) { return cash ? (!attempted || error?.code === 'PF700_CASH_NOT_SENT' ? 'not_sent' : 'unknown') : 'failed'; }
     finally {
@@ -43,6 +44,11 @@ function createPf700PrinterControl({ expectedSerial, openPipe, printerWait }) {
   }
   return Object.freeze({
     printDailyControl: authorized => print(69, '2', authorized),
+    printPeriodicReport(report, authorized) {
+      if (!report || ![79, 94, 95, 73].includes(report.command) || typeof report.data !== 'string' ||
+          !([79, 94].includes(report.command) ? /^\d{6},\d{6}$/ : /^\d{4},\d{4}$/).test(report.data)) return 'failed';
+      return print(report.command, report.data, authorized);
+    },
     printCashMovement(payload, authorized) {
       if (typeof payload !== 'string' || payload.length > 9 || !/^-?(?:0|[1-9]\d*)\.\d{2}$/.test(payload) || !/[1-9]/.test(payload)) return 'not_sent';
       return print(70, payload, authorized);
