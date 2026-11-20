@@ -9,6 +9,58 @@ const {registerOrderItems} = require('../src/desktop/order-items');
 const {registerBills} = require('../src/desktop/bills');
 const printing = require('../src/desktop/test-printing');
 
+test('preparation snapshots preserve original sender and time across stations, rename and restart', async t => {
+  const originalTz=process.env.TZ;
+  t.after(()=>{ if (originalTz === undefined) delete process.env.TZ; else process.env.TZ=originalTz; });
+  process.env.TZ='UTC';
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-prep-sender-'));
+  t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+  let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db);
+  db.exec(`UPDATE menu_products SET destination='kitchen' WHERE id='qebapa';
+    UPDATE menu_products SET destination='kitchen2' WHERE id='shopska';
+    UPDATE menu_products SET destination='bar' WHERE id='espresso';
+    UPDATE test_printer_queues SET queue='Sample kitchen 2' WHERE destination='kitchen2';
+    INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open');
+    INSERT INTO order_waiter_ownership SELECT id,1,1,1,'open' FROM orders WHERE id NOT IN (SELECT order_id FROM order_waiter_ownership);`);
+  const session={currentUserId:()=>1,authenticatedUserId:()=>1};
+  let orders, jobs; const calls=[];
+  const adapter=async attempt=>{ calls.push(attempt); return 'failed'; };
+  const register=()=>{
+    registerOrderItems({handle:(_,fn)=>orders=fn},()=>true,db,session,{...printing,adapter});
+    printing.registerTestPrinting({handle:(_,fn)=>jobs=fn},()=>true,db,session,adapter,true);
+  };
+  register();
+  for (const productId of ['qebapa','shopska','espresso']) assert.equal(orders({}, {action:'add',orderId:1,productId}).ok,true);
+  assert.equal(orders({}, {action:'send',orderId:1,requestId:'original'}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,3);
+  const round=db.prepare('SELECT sent_at AS sentAt FROM preparation_rounds WHERE request_id=?').get('original');
+  const sentDate=new Date(round.sentAt);
+  const expectedTime=String(sentDate.getUTCHours()).padStart(2,'0')+':'+String(sentDate.getUTCMinutes()).padStart(2,'0');
+  for (const call of calls) {
+    assert.equal(call.snapshot.waiterName,'fixture');
+    assert.equal(call.snapshot.sentAt,round.sentAt);
+    assert.equal(call.snapshot.sentTime,expectedTime);
+  }
+  const original=calls.find(call=>call.destination==='kitchen').snapshot;
+  db.prepare('UPDATE local_users SET username=? WHERE id=1').run('Renamed waiter');
+  db.close(); process.env.TZ='Asia/Tokyo'; db=authorizedDatabase(openDatabase(dir)); register();
+  assert.equal(orders({}, {action:'send',orderId:1,requestId:'original'}).ok,true);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM preparation_rounds').get().n,1);
+  const jobId=db.prepare("SELECT id FROM test_print_jobs WHERE destination='kitchen'").get().id;
+  assert.equal(jobs({}, {action:'retry',jobId,requestId:'retry',checked:true}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,4); assert.deepEqual(calls[3].snapshot,original);
+  assert.ok(require('../src/desktop/windows-test-printer').textForJob(calls[3]).includes('\nTime: '+expectedTime+'\n'));
+  assert.equal(orders({}, {action:'add',orderId:1,productId:'qebapa'}).ok,true);
+  assert.equal(orders({}, {action:'send',orderId:1,requestId:'second'}).ok,true);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls.length,5); assert.equal(calls[4].snapshot.round,2);
+  assert.equal(calls[4].snapshot.waiterName,'Renamed waiter');
+  assert.equal(calls[4].snapshot.sentAt,db.prepare('SELECT sent_at AS sentAt FROM preparation_rounds WHERE request_id=?').get('second').sentAt);
+  db.close();
+});
+
 test('sample test jobs route only the new round, persist attempts and preserve bills and payments', async t => {
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'arra-test-print-')); t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
   let db=authorizedDatabase(openDatabase(dir)); seedTables(db); seedMenu(db); db.exec("INSERT INTO user_permissions VALUES(1,'employees.change')");

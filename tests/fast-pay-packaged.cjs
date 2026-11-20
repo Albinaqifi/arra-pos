@@ -351,7 +351,8 @@ async function desktopPhase() {
     for(const paper of barOutput) {
       assert.equal(paper.options.deviceName,barQueue);
       assert.equal(paper.options.silent,true);
-      assert.match(paper.html,/NON-FISCAL CUSTOMER BILL/);
+      assert.match(paper.html,/RESTAURANT ARRA/);
+      assert.match(paper.html,/Thank you/);
       assert.match(paper.html,/Bill #3/);
       assert.match(paper.html,/Table 3/);
       const lines=observe(db=>db.prepare('SELECT name,quantity,unit_price AS price FROM bill_lines WHERE bill_id=3 ORDER BY id').all());

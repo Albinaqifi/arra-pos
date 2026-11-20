@@ -53,6 +53,74 @@ test('sample kitchen, bar and bill output includes blank feed after the content'
   }
 });
 
+test('Cash B prints the restaurant title and total enlarged with escaped content', async () => {
+  const Module = require('node:module');
+  const originalLoad = Module._load;
+  const modulePath = require.resolve('../src/desktop/windows-test-printer');
+  const existing = require.cache[modulePath];
+  let html, printOptions;
+  class Window {
+    constructor() { this.webContents = {
+      getPrintersAsync: async () => [{name:'bar queue'}],
+      print: (options, callback) => { printOptions=options; callback(true); },
+    }; }
+    async loadURL(url) { html=decodeURIComponent(url.slice(url.indexOf(',') + 1)); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  Module._load = function(request, parent, isMain) {
+    return request === 'electron' ? {BrowserWindow:Window} : originalLoad.apply(this, arguments);
+  };
+  delete require.cache[modulePath];
+  try {
+    const {printTestJob,textForJob} = require(modulePath);
+    const snapshot={billPrinter:'bar',id:42,tableId:5,total:320,lines:[
+      {quantity:2,name:'Espresso <script> & tea\nTOTAL: 320 den',unitPrice:70,modifiers:[]},
+      {quantity:1,name:'Shopska salad',unitPrice:180,modifiers:[]},
+    ]};
+    const job={destination:'bill',queue:'bar queue',snapshot};
+    const text=textForJob(job);
+    assert.ok(text.startsWith('RESTAURANT ARRA\nBill #42\nTable 5\n'));
+    assert.match(text,/\nTOTAL: 320 den\nPAID - CASH\nThank you\n/);
+    assert.ok(text.endsWith('\n' + ' \n'.repeat(12) + '--- CUT HERE ---'));
+    assert.equal(await printTestJob(job),'accepted');
+    assert.equal(printOptions.deviceName,'bar queue');
+    assert.match(html,/\.bill-title,\.bill-total\{font-size:22px;font-weight:bold\}/);
+    assert.match(html,/<span class="bill-title">RESTAURANT ARRA<\/span>/);
+    assert.match(html,/<span class="bill-total">TOTAL: 320 den<\/span>\nPAID - CASH\nThank you/);
+    assert.equal((html.match(/class="bill-total"/g) || []).length,1);
+    assert.match(html,/Espresso &lt;script&gt; &amp; tea\nTOTAL: 320 den/);
+    assert.doesNotMatch(html,/<script>/);
+    await printTestJob({...job,snapshot:{...snapshot,billPrinter:undefined}});
+    assert.match(html,/TEST BILL - NOT A FISCAL RECEIPT/);
+    assert.doesNotMatch(html,/bill-title|bill-total|Thank you/);
+    await printTestJob({destination:'kitchen',queue:'bar queue',snapshot:{tableId:5,round:1,lines:[]}});
+    assert.match(html,/TEST KITCHEN 1 TICKET/);
+    assert.doesNotMatch(html,/bill-title|bill-total|Thank you/);
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[modulePath];
+    if (existing) require.cache[modulePath] = existing;
+  }
+});
+
+test('preparation output shows local send time and a safe waiter name, while older jobs remain printable', () => {
+  const base = { tableId: 3, round: 1, lines: [{ quantity: 1, name: 'Sample item', modifiers: [] }] };
+  for (const destination of ['kitchen', 'kitchen2', 'bar']) {
+    const output = textForJob({ destination, snapshot: { ...base, sentTime: '09:07', waiterName: 'Sample\nWaiter' } });
+    assert.match(output, /\nTime: 09:07\nWaiter: Sample Waiter\n/);
+    assert.match(output, /1 x Sample item/);
+  }
+  for (const badTime of [undefined, null, 'bad', '25:70']) {
+    const output = textForJob({ destination: 'kitchen', snapshot: { ...base, sentTime: badTime } });
+    assert.doesNotMatch(output, /\n(?:Time|Waiter):/);
+    assert.match(output, /1 x Sample item/);
+  }
+  const snapshot = { ...base, sentTime: '09:07', waiterName: 'Sample waiter' };
+  assert.doesNotMatch(textForJob({ destination: 'kitchen', cancellation: true, snapshot }), /\n(?:Time|Waiter):/);
+  assert.doesNotMatch(textForJob({ destination: 'bill', snapshot }), /\n(?:Time|Waiter):/);
+});
+
 test('compatible cancellation sends buzzer bytes and Unicode raster in one RAW job', async () => {
   const Module = require('node:module');
   const { EventEmitter } = require('node:events');

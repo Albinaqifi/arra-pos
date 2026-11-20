@@ -113,12 +113,6 @@ export class PendingItems extends FeatureState {
   setNoteText(text) {
     if (this._canAct() && this.state.dialog?.type === 'note') this._set({ dialog: { ...this.state.dialog, text } });
   }
-  toggleNoteChip(label) {
-    if (!this._canAct() || this.state.dialog?.type !== 'note') return;
-    const variants = ['en', 'sq'].map(language => waiterTranslate(language, 'waiter.' + label));
-    const parts = this.state.dialog.text.split(',').map(part => part.trim()).filter(Boolean);
-    this.setNoteText((parts.some(part => variants.includes(part)) ? parts.filter(part => !variants.includes(part)) : parts.concat(this.t(label))).join(', '));
-  }
   async saveNote() {
     const dialog = this.state.dialog;
     if (!this._canAct() || dialog?.type !== 'note' || !this._sameOrigin(dialog.target)) return;
