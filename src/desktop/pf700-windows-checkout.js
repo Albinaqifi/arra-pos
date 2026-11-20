@@ -48,23 +48,29 @@ function windowsPipe(startProcess, operation = 'Checkout') {
   });
   let stopped = false, pending = null;
   const closed = new Promise(resolve => child.once('close', resolve));
-  function fail() {
+  function fail(error = Error('PF700 exchange interrupted')) {
     stopped = true;
     if (pending) {
       clearTimeout(pending.timer);
-      pending.reject(Error('PF700 exchange interrupted'));
+      pending.reject(error);
       pending = null;
     }
   }
-  child.once('error', fail);
-  child.once('close', fail);
-  child.stdin.on('error', fail);
-  child.stdout.on('error', fail);
-  child.stdout.on('end', fail);
+  child.once('error', () => fail());
+  child.once('close', () => fail());
+  child.stdin.on('error', () => fail());
+  child.stdout.on('error', () => fail());
+  child.stdout.on('end', () => fail());
   child.stdout.on('data', bytes => {
     if (!pending || pending.data.length + bytes.length > 204) { fail(); return; }
     pending.data += bytes.toString('latin1');
     if (!pending.data.includes('\n')) return;
+    if (operation === 'PrinterControl' && pending.command === 70 && /^FAIL_NOT_SENT\r?\n$/.test(pending.data)) {
+      const error = Error('PF700 cash movement was not written');
+      error.code = 'PF700_CASH_NOT_SENT';
+      fail(error);
+      return;
+    }
     const isReady = pending.kind === 'open' && /^READY\r?\n$/.test(pending.data);
     if (!isReady && (pending.kind === 'open' || !/^(?:[0-9A-F]{2}){1,101}\r?\n$/.test(pending.data))) { fail(); return; }
     const { data, resolve, timer } = pending;
@@ -84,7 +90,7 @@ function windowsPipe(startProcess, operation = 'Checkout') {
       if (stopped || pending) throw Error('PF700 exchange unavailable');
       return new Promise((resolve, reject) => {
         const timeout = ['DailyReport', 'PrinterControl'].includes(operation) && request[3] === 69 ? 125000 : 25000;
-        pending = { data: '', resolve, reject, timer: setTimeout(fail, timeout) };
+        pending = { data: '', resolve, reject, command:request[3], timer: setTimeout(fail, timeout) };
         child.stdin.write(request.toString('hex') + '\n', error => { if (error) fail(); });
       });
     },

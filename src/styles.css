@@ -1,6 +1,7 @@
 #application-status { position: sticky; top: 0; z-index: 100; padding: 8px 16px; background: #1e293b; color: #fff; font: 700 14px system-ui, sans-serif; }
 body[data-mode="demo"] #application-status { background: #9a3412; }
 #application-status[role="alert"] { background: #991b1b; }
+#application-status[data-key="status.waitingForPrinter"] { z-index: 1001; font-size: 16px; pointer-events: none; }
 body { margin: 0; background: #F4F6FB; }
 a { color: #1D4ED8; }
 a:hover { color: #1E3A8A; }
@@ -321,3 +322,12 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 @media(max-width:650px) { .fiscal-desk { grid-template-columns:1fr; } }
 
 .fiscal-document-warning-icon { color:#c51b23; font-size:24px; line-height:1; }
+.fiscal-switcher { display:flex; gap:8px; flex-wrap:wrap; }
+.admin-shell .fiscal-switcher button[aria-pressed="false"] { background:#fff; border-color:#cbd5e1; color:#334155; }
+.fiscal-choice { display:flex; gap:18px; border:0; padding:0; margin:0 0 18px; }
+.fiscal-choice legend { font-weight:650; margin-bottom:8px; }
+.fiscal-choice label { display:flex; gap:6px; align-items:center; }
+.fiscal-field { display:grid; gap:7px; font-weight:650; margin-bottom:18px; }
+.fiscal-field input { width:100%; max-width:280px; border:1px solid #aab8c9; border-radius:8px; padding:10px; font:inherit; }
+.fiscal-confirm { background:#edf3ff; border-radius:8px; padding:12px; }
+.fiscal-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }

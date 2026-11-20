@@ -25,6 +25,18 @@ contextBridge.exposeInMainWorld('arra', Object.freeze({
   async businessDays(request) {
     try { return await ipcRenderer.invoke('arra:business-days', request); } catch (_) { return { ok: false, uncertain: request?.action === 'accountABillsPrint' }; }
   },
+  async getFiscalPrinterWaiting() {
+    try { return (await ipcRenderer.invoke('arra:fiscal-printer-waiting')) === true; }
+    catch (_) { return false; }
+  },
+  onFiscalPrinterWaiting(listener) {
+    if (typeof listener !== 'function') throw new TypeError('Expected a printer status listener');
+    const receive = (_event, waiting) => {
+      if (typeof waiting === 'boolean') listener(waiting);
+    };
+    ipcRenderer.on('arra:fiscal-printer-waiting', receive);
+    return () => { ipcRenderer.removeListener('arra:fiscal-printer-waiting', receive); };
+  },
   async billHistory(request) {
     try { return await ipcRenderer.invoke('arra:bill-history', request); } catch (_) { return {ok:false, uncertain:request?.action === 'print'}; }
   },

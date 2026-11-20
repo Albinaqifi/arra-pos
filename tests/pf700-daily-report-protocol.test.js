@@ -231,6 +231,13 @@ test('Windows report exchange restricts command and payload, permits a long busy
     '}',
     ...[
       ['PrinterControl', [probe, packet(69, '2')], 2, false],
+      ['PrinterControl', [probe, packet(70, '2000.00')], 2, false],
+      ['PrinterControl', [probe, packet(70, '-500.00')], 2, false],
+      ['PrinterControl', [probe, packet(70, '0.00')], 1, true],
+      ['PrinterControl', [probe, packet(70, '-100000.00')], 1, true],
+      ['PrinterControl', [probe, packet(70, '1.000')], 1, true],
+      ['PrinterControl', [probe, packet(70, '1.00'), packet(70, '1.00')], 2, true],
+      ['PrinterControl', [probe, packet(69, '2'), packet(70, '1.00')], 2, true],
       ['PrinterControl', [probe, packet(69, '2'), packet(69, '2')], 2, true],
       ['PrinterControl', [probe, report], 1, true],
       ['PrinterControl', [probe, read], 1, true],

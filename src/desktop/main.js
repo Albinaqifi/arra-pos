@@ -35,7 +35,7 @@ let fastPayments;
 let mainWindow;
 let session;
 
-function createWindow() {
+function createWindow(printerWait) {
   const window = new BrowserWindow({
     width: 1280,
     height: 900,
@@ -48,7 +48,15 @@ function createWindow() {
   });
 
   mainWindow = window;
-  window.on('closed', () => { if (mainWindow === window) { mainWindow = undefined; if (session) session.signOut(); } });
+  const unsubscribe = printerWait?.subscribe(waiting => {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send('arra:fiscal-printer-waiting', waiting);
+    }
+  });
+  window.on('closed', () => {
+    unsubscribe?.();
+    if (mainWindow === window) { mainWindow = undefined; if (session) session.signOut(); }
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
   window.loadFile(path.join(__dirname, '../../dist/index.html'));
@@ -78,6 +86,9 @@ app.whenReady().then(() => {
   const isAllowedSender = (event) =>
     Boolean(mainWindow && event.sender === mainWindow.webContents &&
       event.senderFrame === mainWindow.webContents.mainFrame);
+  const printerWait = fiscalCheckout?.printerWait;
+  require('electron').ipcMain.handle('arra:fiscal-printer-waiting', event =>
+    isAllowedSender(event) && printerWait?.isWaiting() === true);
   session = registerSession(require('electron').ipcMain, isAllowedSender, database);
   registerApplicationInfo(require('electron').ipcMain, isAllowedSender);
   registerLanguage(require('electron').ipcMain, isAllowedSender, database, session);
@@ -110,9 +121,9 @@ app.whenReady().then(() => {
   registerPrintJobs(require('electron').ipcMain, isAllowedSender, database, session, preparation?.preparationMode);
   testPrinting.registerTestPrinting(require('electron').ipcMain, isAllowedSender, database, session,
     preparation?.adapter || localPrinter || (() => 'failed'), !!preparation || !fiscalCheckout, !preparation, preparation?.preparationMode);
-  createWindow();
+  createWindow(printerWait);
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(printerWait);
   });
 });
 
