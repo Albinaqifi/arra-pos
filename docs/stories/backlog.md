@@ -1,5 +1,17 @@
 # Development backlog
 
+### S-108 — Personalize the Account B customer bill
+
+Replace the existing heading on the Cash B customer bill with RESTAURANT ARRA, add Thank you at the end, and print the title and total larger through the existing Windows printer path. Preserve itemized amounts, payment, routing and recovery, and leave other documents unchanged. Verify the output, safe text rendering and existing checkout behavior with sample data; record physical-paper verification separately.
+
+### S-107 — Show send time and waiter on preparation tickets
+
+Print the local send time and sending waiter's name on new kitchen preparation tickets, including the other preparation stations that share their format. Capture both in the durable ticket snapshot so retries retain the original values. Preserve existing orders, historical jobs, routing and retry behavior; older snapshots without the fields remain printable. Verify multiple stations, later rounds, retries and legacy snapshots with sample data.
+
+### S-106 — Remove item-note suggestions
+
+Show a single typed note field without suggested notes or an example placeholder. Preserve saving, editing, clearing and recovery of pending-item notes, including existing busy and failure handling. Verify both languages and the affected note workflow.
+
 ### S-103 — Open restaurant RC4 from a desktop icon
 
 For the existing enrolled RC4 installation, provide a Windows application that creates a desktop shortcut and opens the POS from that shortcut. An operator enters their existing PF700 settings and authorizes live startup once in a graphical setup screen. Protect the saved settings for the original Windows user. Starting from the icon opens the same checkout with no console or repeated setup. Reopening setup allows the operator to update the settings. Preserve the original restaurant data, receipt recovery, payment routes and Bar queue. Verify with disposable settings, an actual Windows shortcut and the RC4 package.

@@ -4,6 +4,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-108 | In progress | Cash B bill updated; review and focused tests passed. PR merge and physical paper check remain. [Handoff](handoffs/S-108.md) |
+| S-107 | In progress | Preparation ticket time and waiter added; review and focused tests passed. PR merge and physical paper check remain. [Handoff](handoffs/S-107.md) |
+| S-106 | In progress | Suggested notes removed; review and focused tests passed. PR merge remains. [Handoff](handoffs/S-106.md) |
 | S-105 | In progress | Independent review and focused offline tests passed; PR merge and physical printer verification remain open. [Handoff](handoffs/S-105.md) |
 | S-103 | In progress | Windows launcher and RC5 source integration are under review. Restaurant installation and PR merge remain open. [Integration handoff](handoffs/RC5-integration.md) |
 | S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |

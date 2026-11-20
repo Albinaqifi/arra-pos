@@ -256,7 +256,8 @@ test('routine Cash B sends one full non-fiscal bill to Bar and recovers the pape
   assert.equal(copy.queue,'Bar by the till');
   const {textForJob} = require('../src/desktop/windows-test-printer');
   const text = textForJob(copy);
-  assert.match(text,/^NON-FISCAL CUSTOMER BILL/);
+  assert.match(text,/^RESTAURANT ARRA/);
+  assert.match(text,/\nThank you\n/);
   assert.match(text,/1 x Qebapa/);
   assert.match(text,/1 x Espresso/);
   assert.ok(text.includes('TOTAL: ' + bill.total + ' den'));
