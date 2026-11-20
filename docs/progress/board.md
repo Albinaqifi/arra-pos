@@ -7,7 +7,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |
 | S-097 | In progress | Simulated Card A approval, durable hold and training receipt recovery reviewed and tested. Physical Card A remains disabled pending S-096. [Handoff](handoffs/S-097.md) |
-| S-096 | In progress | Bill #2 recovery verified on the POS. Receipt 0000030, one 150 den Cash A payment, table free, nothing printed during recovery. PR #151 remains open. [Handoff](handoffs/S-096.md) |
+| S-096 | In progress | Bill #2 recovered on the POS with one 150 den Cash A payment and no reprint. The PF700 confirmed 0000030 closed and latest. Original close counters are missing and the Z report remains blocked. [Handoff](handoffs/S-096.md) |
 | S-095 | In progress | Routine Cash A checkout reviewed and automated tests passed; offline desktop and physical PF700 checks remain. [Handoff](handoffs/S-095.md) |
 | S-093 | In progress | Original story merged in PR #136; table PIN auto-submit follow-up reviewed and tested, PR pending. Owner-requested assigned waiter names added to entry grid; verification and delivery in progress. |
 | S-092 | Done | PR #132 merged as `f38e174`; review, full suite and sample desktop checks passed. Owner deferred full host-offline verification; it does not block other stories. |
