@@ -319,3 +319,5 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 .fiscal-result { margin:15px 0 0; padding:10px 12px; background:#edf3ff; border-radius:8px; }
 .fiscal-tray { padding:14px 18px 16px; background:#e7edf3; border-radius:16px; color:#526176; text-align:center; }.fiscal-tray-title { display:flex; justify-content:space-between; font-size:13px; font-weight:650; margin-bottom:12px; }.fiscal-paper { max-width:300px; margin:auto auto 10px; padding:22px 16px 24px; background:#fffef9; color:#242522; font:13px/1.4 'Courier New',monospace; box-shadow:0 3px 8px #17253422; }.fiscal-paper strong,.fiscal-paper small { display:block; }.fiscal-paper strong { font-size:22px; letter-spacing:.14em; }.fiscal-paper small { font-size:11px; }.fiscal-paper hr { border:0; border-top:1px dashed #78776c; }
 @media(max-width:650px) { .fiscal-desk { grid-template-columns:1fr; } }
+
+.fiscal-document-warning-icon { color:#c51b23; font-size:24px; line-height:1; }

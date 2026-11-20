@@ -5,6 +5,8 @@ export function closeBlockMessage(code) {
 }
 
 const sq={
+'Arra’s last sale receipt is #{sale}. The printer’s last document is #{printer}. A Daily control report may explain the difference. Please ask the person responsible for the fiscal printer to review these numbers. You can continue closing.':'Fatura e fundit e shitjes ne Arra eshte #{sale}. Dokumenti i fundit i printerit eshte #{printer}. Nje raport kontrolli ditor mund ta shpjegoje ndryshimin. Kerkoni nga personi pergjegjes per printerin fiskal te kontrolloje keto numra. Mund te vazhdoni mbylljen.',
+'Continue closing':'Vazhdo mbylljen',
 'Account A fiscal printer':'Printeri fiskal i llogarise A',
 'Print the daily fiscal control':'Printo kontrollin fiskal ditor',
 'Daily control':'Kontrolli ditor',

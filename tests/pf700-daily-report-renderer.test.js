@@ -185,3 +185,18 @@ test('read-only proof of no issuance requires a new confirmation bound to the la
   assert.deepEqual(requests.at(-2), { action: 'accountAFiscalClose', dayId: 7, mode: 'device', confirmed: true, retryAfter: 13 });
   screen.componentWillUnmount();
 });
+test('document mismatch warning displays both numbers and continues the close',async()=>{
+  const days=[{...day,fiscal:{mode:'device',status:'ready'}}];let calls=0;
+  const f=fixture(days,req=>{
+    calls++;
+    if(calls===1)return {ok:false,error:'document-warning',saleDocument:'0000120',printerDocument:'0000121'};
+    assert.equal(req.warningDocument,'0000121');
+    days[0]={...day,status:'complete',accountClosedAt:3,closedBy:4,fiscal:{mode:'device',status:'complete',reportNumber:'0042'}};
+    return {ok:true};
+  });
+  await nextTurn();f.button('Review official Z report').props.onClick();await f.button('Issue official Z report').props.onClick();
+  assert.match(f.text(),/receipt is #120.*document is #121.*Daily control.*person responsible.*continue closing/);
+  assert.ok(f.button('Continue closing'));
+  await f.button('Continue closing').props.onClick();assert.match(f.text(),/acknowledged official Z report #0042/);
+  assert.equal(f.requests.filter(x=>x.action==='accountAFiscalClose').length,2);f.screen.componentWillUnmount();
+});

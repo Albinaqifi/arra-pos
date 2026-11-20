@@ -2,6 +2,8 @@ const { recordAudit } = require('./audit');
 const { isCommissioned } = require('./pf700-commissioning');
 
 const working = new WeakMap();
+const warnings = new WeakMap();
+function warningMap(db) { if (!warnings.has(db)) warnings.set(db,new Map()); return warnings.get(db); }
 function flights(db) {
   if (!working.has(db)) working.set(db, new Set());
   return working.get(db);
@@ -167,7 +169,7 @@ function currentDate() {
   return [date.getDate(),date.getMonth()+1,date.getFullYear()%100].map(n=>String(n).padStart(2,'0')).join('');
 }
 
-async function handle(db, req, actor, authorized, adapter, report, originalCloseId) {
+async function handle(db, req, actor, authorized, adapter, report, originalCloseId, generation) {
   const {dayId,mode} = req;
   if (!adapter || mode !== adapter.mode || !authorized()) return {ok:false};
   if (require('./supervised-card').blocksClose(db)) return {ok:false,error:'unresolved'};
@@ -200,11 +202,17 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
       const {expected,reason} = coverage(db,dayId,report,adapter);
       if (!expected) return {ok:false,error:reason};
       const frozen = JSON.stringify(expected);
+      const warning = warningMap(db).get(dayId);
+      if (req.warningDocument !== undefined && (!warning || warning.actor !== actor || warning.generation !== generation || warning.mode !== mode ||
+          warning.document !== req.warningDocument || warning.expected !== frozen || warning.retryAfter !== req.retryAfter)) return {ok:false,error:'review'};
+      warningMap(db).delete(dayId);
       // Preflight reads are repeatable. Only the winner of this transaction
       // may issue a Z. A process crash before the callback can send no Z.
-      result = await adapter.issueDailyReport(expected,{beforeIssue(baseline) {
+      result = await adapter.issueDailyReport(expected,{warningDocument:req.warningDocument,beforeIssue(baseline) {
         if (!acceptingBaseline || reserved || !authorized() || !baseline ||
-            baseline.deviceDate !== currentDate() || baseline.previousDocumentNumber !== expected.lastDocumentNumber ||
+            baseline.deviceDate !== currentDate() || !/^[0-9]{7}$/.test(baseline.previousDocumentNumber) || Number(baseline.previousDocumentNumber) >= 9999999 ||
+            !(baseline.previousDocumentNumber === expected.lastDocumentNumber && req.warningDocument === undefined ||
+              baseline.previousDocumentNumber === req.warningDocument && Number(baseline.previousDocumentNumber) === Number(expected.lastDocumentNumber) + 1) ||
             !Number.isInteger(baseline.previousClosure) || baseline.previousClosure < 0 || baseline.previousClosure >= 9999) throw Error('Invalid report baseline');
         transaction(db, () => {
           if (req.retryAfter !== lastUnissuedAttempt(db,dayId) ||
@@ -217,6 +225,15 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
         });
         reserved = true;
       }});
+      if (!reserved && result?.status === 'document-warning' && authorized() &&
+          result.deviceDate === currentDate() && result.saleDocument === expected.lastDocumentNumber &&
+          req.retryAfter === lastUnissuedAttempt(db,dayId) &&
+          (db.prepare('SELECT id FROM account_a_closes WHERE day_id=?').get(dayId)?.id ?? null) === originalCloseId &&
+          JSON.stringify(coverage(db,dayId,report,adapter).expected) === frozen &&
+          /^[0-9]{7}$/.test(result.printerDocument) &&
+          Number(result.printerDocument) === Number(expected.lastDocumentNumber) + 1)
+        { warningMap(db).set(dayId,{actor,generation,mode,document:result.printerDocument,expected:frozen,retryAfter:req.retryAfter});
+          return {ok:false,error:'document-warning',saleDocument:result.saleDocument,printerDocument:result.printerDocument}; }
       if (!reserved) return authorized() ? {ok:false,error:'preflight'} : {ok:false,denied:true};
     }
     const ok = confirm(db,record,report,result,actor);

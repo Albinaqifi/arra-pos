@@ -9,7 +9,7 @@ const blockedReasons = {
   unavailable: 'Reopen the fiscal profile and printer used for this day.'
 };
 
-export function Pf700DailyReport({ day, language, busy, operation, confirming, onReview, onCancel, onConfirm, onCheck }) {
+export function Pf700DailyReport({ day, language, busy, operation, confirming, onReview, onCancel, onConfirm, onCheck, warning, onContinue }) {
   const t = (key, values) => financeText(language, key, values);
   const { mode, status, reason, reportNumber, canReconcile } = day.fiscal;
   const simulated = mode === 'simulation';
@@ -35,7 +35,10 @@ export function Pf700DailyReport({ day, language, busy, operation, confirming, o
   } else if (status === 'pending') {
     content = h('p', { role: 'status' }, t('A report request is in progress. Refresh to see its saved status.'));
   } else if (status === 'ready' && (simulated || mode === 'device')) {
-    content = confirming
+    content = warning ? h('div',{className:'finance-confirm',role:'alert'},
+      h('span',{className:'fiscal-document-warning-icon','aria-hidden':true},'⚠'),
+      h('p',null,t('Arra’s last sale receipt is #{sale}. The printer’s last document is #{printer}. A Daily control report may explain the difference. Please ask the person responsible for the fiscal printer to review these numbers. You can continue closing.',{sale:String(Number(warning.saleDocument)),printer:String(Number(warning.printerDocument))})),
+      h('div',{className:'floor-actions'},h('button',{type:'button',className:'floor-primary',disabled:busy,onClick:onContinue},t('Continue closing')),h('button',{type:'button',disabled:busy,onClick:onCancel},t('Cancel')))) : confirming
       ? h('div', { className: 'finance-confirm', role: 'group', 'aria-label': t(confirm) },
           h('p', null, t(simulated
             ? 'Simulate a fiscal day close for business day #{id}? This uses the training ledger. The physical printer is untouched.'
