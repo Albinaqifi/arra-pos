@@ -5,7 +5,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | Story | Status | Note |
 | --- | --- | --- |
 | S-105 | In progress | Independent review and focused offline tests passed; PR merge and physical printer verification remain open. [Handoff](handoffs/S-105.md) |
-| S-104 | In progress | Independent review and focused offline tests passed; PR merge and physical printer verification remain open. [Handoff](handoffs/S-104.md) |
+| S-104 | In progress | Focused checks passed on `5ffa168`. Owner deferred two admin message fixes and printer-tab navigation so the next story can proceed. PR merge and physical printer verification remain open. [Deferred TODOs](handoffs/S-104.md#deferred-review-todos) |
 | S-103 | In progress | Windows launcher and RC5 source integration are under review. Restaurant installation and PR merge remain open. [Integration handoff](handoffs/RC5-integration.md) |
 | S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |
 | S-101 | In progress | Separate-terminal Card A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-101.md) |
