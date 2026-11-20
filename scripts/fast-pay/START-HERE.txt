@@ -1,0 +1,19 @@
+Arra Pay trial for the enrolled restaurant POS
+
+Extract the entire ZIP to a new folder on the POS PC. Extraction cannot print
+or record a payment. Close the old Arra window before starting this version.
+Open Open-Arra-Pay.cmd using the same Windows account and printer profile.
+
+For a NEW bill, select Cash A or Card A and press Pay once. Arra records the
+payment and frees the table. The PF700 receives one background receipt attempt.
+For Card A, take the money on the separate card terminal. Retrying on that
+terminal has no connection to Arra. Check the terminal outcome before retrying.
+
+If paper is missing, check the printer and keep the bill number. A Combined
+user can refresh Financial information > Print Account A bills for the receipt
+status. Refresh only reads Arra. An unconfirmed receipt may have printed.
+Do not make a second sale for it. On restart, the app can send a saved receipt
+that it has never attempted. It will not resend an attempted receipt.
+
+Keep the already printed third espresso bill for separate recovery. Opening
+this version does not settle it. The existing fiscal daily-close hold continues.

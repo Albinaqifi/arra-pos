@@ -1,5 +1,15 @@
 # Development backlog
 
+### S-100 — Pay Cash A immediately and send one fiscal receipt
+
+For a new, eligible Account A bill on the enrolled Windows POS, the waiter chooses Cash A and presses Pay. In one local transaction, record one cash payment for the bill, assign it to the shift and business day, complete the order, and save its fiscal receipt for dispatch. Dismiss the bill and free the table as soon as the transaction succeeds. Preserve owner checks, tax groups, origin and quantities. A failed transaction must leave the bill available and send nothing.
+
+Submit the receipt in the background on the enrolled PF700. Keep a durable claim before the first printer operation. Repeated clicks, competing sessions, crashes and a missing printer reply must never produce a second payment or repeat an attempted receipt. A distinct new bill can proceed when the printer confirms it is idle. Show unresolved receipts in the Combined Account A preview. Preserve already printed legacy bills and fiscal day-close evidence.
+
+### S-101 — Pay Card A with a separate card terminal
+
+Use the S-100 Pay flow for Card A. Record the full amount as card on Account A and exclude it from expected cash. The waiter handles the bank payment separately at the physical terminal. Arra can complete the order without terminal approval and sends a single card-tender receipt to the enrolled PF700. Exercise duplicate and conflicting tenders, uncertain printer results, terminal independence, and amounts in Account A reporting. Preserve Cash B and existing card-trial history.
+
 ### S-087 — Make closing the shared business day clear
 
 **Goal:** Simplify the shared business-day close into a clear review, confirmation and completion flow. The operator should know which day is being closed, what needs attention, and whether the day and its restaurant report have succeeded. **Depends on:** existing S-026, S-057, S-058 and S-061 behavior; inspect their implementation and outstanding verification before starting. Preserve the existing worktree, including any uncommitted S-058 recovery changes.
