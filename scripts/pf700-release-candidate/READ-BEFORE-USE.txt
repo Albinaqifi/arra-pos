@@ -1,0 +1,33 @@
+Arra POS 1.0.10 / S-096 receipt reader update
+
+For the manager
+
+This package uses the restaurant's existing PF700 profile. Arra-Cash-A.cmd
+can issue real cash fiscal receipts. Arra-Card-A-Trial.cmd is limited to one
+supervised Card A trial. For that trial, prepare the bill in Arra before
+taking payment on the separate terminal. Routine card checkout is unavailable.
+The printer's close counters for receipt 0000030 are still unknown. Arra's fiscal Z report
+for this period remains on hold. This build has passed offline tests. Reliable
+customer checkout and end-of-day closing have yet to be verified on this POS.
+
+Extract the whole ZIP into a new folder. Keep the previous program, existing
+POS data and verified pre-upgrade backup. Use the original Windows account.
+Fully close any older Arra session. Use the launcher in the newly extracted
+folder. Both copies show version 1.0.10. Bill #2 is already settled with one
+150 den Cash A payment for receipt 0000030.
+
+If a receipt prints and the table stays occupied
+
+1. Keep the bill number, printed fiscal document number, total and tender
+   together. For a card, keep the terminal transaction reference. An approved
+   card charge stands even if Arra loses the printer reply.
+2. Reopen the original table and bill. Use Reload saved bill if shown. If
+   Arra offers Finish recording payment, compare the receipt number, amount
+   and tender with the paper. If all match, choose Finish recording payment
+   once. It records the original payment locally without printing. Look for
+   Registered PF700 receipt and the matching document number.
+3. If the number differs, the result is unknown, or the Finish button is
+   missing after paper printed, leave the bill open and call the manager.
+   Another fiscal checkout can be blocked until this one is reconciled.
+   Do not register the sale again, switch accounts or charge the card again.
+   Give support the bill number, fiscal receipt number and on-screen message.
