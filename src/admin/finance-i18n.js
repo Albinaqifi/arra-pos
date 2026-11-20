@@ -5,6 +5,21 @@ export function closeBlockMessage(code) {
 }
 
 const sq={
+'Arra’s last sale receipt is #{sale}. The printer’s last document is #{printer}. A Daily control report may explain the difference. Please ask the person responsible for the fiscal printer to review these numbers. You can continue closing.':'Fatura e fundit e shitjes ne Arra eshte #{sale}. Dokumenti i fundit i printerit eshte #{printer}. Nje raport kontrolli ditor mund ta shpjegoje ndryshimin. Kerkoni nga personi pergjegjes per printerin fiskal te kontrolloje keto numra. Mund te vazhdoni mbylljen.',
+'Continue closing':'Vazhdo mbylljen',
+'Account A fiscal printer':'Printeri fiskal i llogarise A',
+'Print the daily fiscal control':'Printo kontrollin fiskal ditor',
+'Daily control':'Kontrolli ditor',
+'Daily fiscal control':'Kontrolli fiskal ditor',
+'Print the figures registered so far. Service continues with the fiscal day open.':'Printo te dhenat e regjistruara deri tani. Puna vazhdon me diten fiskale te hapur.',
+'Expected Account A cash':'Parate e pritshme ne llogarine A',
+'See printed report':'Shiko raportin e printuar',
+'Print daily fiscal control':'Printo kontrollin fiskal ditor',
+'Daily control request sent.':'Kerkesa per kontrollin ditor u dergua.',
+'Could not confirm the print request. Check the printer.':'Kerkesa e printimit nuk u konfirmua. Kontrollo printerin.',
+'Example paper':'Shembull letre',
+'Illustrative excerpt · firmware determines the layout':'Shembull ilustrues · pamja varet nga printeri',
+
 'The status check confirmed that no report was issued. Review the day again to request a new report.':'Kontrolli konfirmoi se raporti nuk u leshua. Shqyrtoni perseri diten per te kerkuar nje raport te ri.',
 'Non-fiscal Account A report':'Raporti jo fiskal i llogarise A',
 'Retry non-fiscal report after checking printer':'Riprinto raportin jo fiskal pas kontrollit te printerit',

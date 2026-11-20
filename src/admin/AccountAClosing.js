@@ -9,12 +9,12 @@ const simulatePf700Status = () => desktopBridge.businessDays({ action: 'accountA
 const retryTokens=new Map();
 const date=value=>new Date(value).toLocaleString();
 export class AccountAClosing extends React.Component {
-  constructor(props) { super(props); this.state={data:null,loading:true,busy:false,error:'',notice:'',confirmId:null,fiscalReview:null,fiscalActivity:null}; this.sequence=0; this.active=false; this.busy=false; }
+  constructor(props) { super(props); this.state={data:null,loading:true,busy:false,error:'',notice:'',confirmId:null,fiscalReview:null,fiscalActivity:null,fiscalWarning:null}; this.sequence=0; this.active=false; this.busy=false; }
   componentDidMount() { this.active=true; this.load(); }
   componentWillUnmount() { this.active=false; this.sequence++; }
   async load() {
     const sequence=++this.sequence;
-    this.setState({loading:true,error:'',confirmId:null,fiscalReview:null});
+    this.setState({loading:true,error:'',confirmId:null,fiscalReview:null,fiscalWarning:null});
     try {
       const r=await desktopBridge.businessDays({action:'accountAList'});
       if(!this.active || sequence!==this.sequence) return;
@@ -33,24 +33,27 @@ export class AccountAClosing extends React.Component {
     } catch (_) { if(this.active) { this.setState({confirmId:null,notice:'Close result unavailable. Refresh and check the day before trying again.'}); await this.load(); } }
     finally { this.busy=false; if(this.active) this.setState({busy:false}); }
   }
-  async requestFiscal(dayId, mode, operation, retryAfter) {
+  async requestFiscal(dayId, mode, operation, retryAfter, warningDocument) {
     const { data, fiscalReview, loading } = this.state;
     const fiscal = data?.days.find(day => day.id === dayId)?.fiscal;
     if (!this.active || loading || this.busy || !fiscal || fiscal.mode !== mode) return;
     const reconcile = operation === 'check';
     if (reconcile) {
       if (fiscal.status !== 'uncertain' || fiscal.canReconcile !== true) return;
-    } else if (fiscal.status !== 'ready' || fiscalReview?.dayId !== dayId || fiscalReview.mode !== mode ||
-               fiscal.retryAfter !== retryAfter || fiscalReview.retryAfter !== retryAfter) return;
+    } else if (fiscal.status !== 'ready' || fiscal.retryAfter !== retryAfter || (warningDocument === undefined
+      ? fiscalReview?.dayId !== dayId || fiscalReview.mode !== mode || fiscalReview.retryAfter !== retryAfter
+      : this.state.fiscalWarning?.dayId !== dayId || this.state.fiscalWarning.mode !== mode || this.state.fiscalWarning.printerDocument !== warningDocument || this.state.fiscalWarning.retryAfter !== retryAfter)) return;
 
     this.busy = true;
     this.setState({ busy: true, fiscalReview: null, fiscalActivity: { dayId, operation }, error: '', notice: '' });
-    let notice = '';
+    let notice = '', warning = null;
     try {
       const reply = await desktopBridge.businessDays(reconcile
         ? { action: 'accountAFiscalReconcile', dayId, mode }
-        : { action: 'accountAFiscalClose', dayId, mode, confirmed: true, ...(retryAfter === undefined ? {} : { retryAfter }) });
-      if (reconcile && reply?.ok && reply.outcome === 'not-issued') {
+        : { action: 'accountAFiscalClose', dayId, mode, confirmed: true, ...(retryAfter === undefined ? {} : { retryAfter }), ...(warningDocument === undefined ? {} : { warningDocument }) });
+      if (!reconcile && reply?.error === 'document-warning' && /^[0-9]{7}$/.test(reply.saleDocument) && /^[0-9]{7}$/.test(reply.printerDocument)) {
+        warning = {dayId, mode, retryAfter, saleDocument:reply.saleDocument, printerDocument:reply.printerDocument};
+      } else if (reconcile && reply?.ok && reply.outcome === 'not-issued') {
         notice = 'The status check confirmed that no report was issued. Review the day again to request a new report.';
       } else if (!reply?.ok) {
         notice = !reconcile && reply?.error === 'preflight'
@@ -61,8 +64,8 @@ export class AccountAClosing extends React.Component {
       notice = 'Could not confirm the daily report. Check its saved status before continuing.';
     } finally {
       if (this.active) {
-        this.setState({ notice });
-        await this.load();
+        this.setState({ notice, fiscalWarning:warning });
+        if (!warning) await this.load();
       }
       this.busy = false;
       if (this.active) this.setState({ busy: false, fiscalActivity: null });
@@ -97,10 +100,12 @@ export class AccountAClosing extends React.Component {
     const s = this.state, { mode, retryAfter } = day.fiscal;
     return h(Pf700DailyReport, {
       day, language: this.props.language, busy: s.busy,
+      warning: s.fiscalWarning?.dayId === day.id ? s.fiscalWarning : null,
+      onContinue: () => this.requestFiscal(day.id, mode, 'issue', retryAfter, s.fiscalWarning?.printerDocument),
       operation: s.fiscalActivity?.dayId === day.id ? s.fiscalActivity.operation : null,
       confirming: s.fiscalReview?.dayId === day.id && s.fiscalReview.mode === mode && s.fiscalReview.retryAfter === retryAfter,
-      onReview: () => this.setState({ fiscalReview: { dayId: day.id, mode, retryAfter }, confirmId: null, notice: '' }),
-      onCancel: () => this.setState({ fiscalReview: null }),
+      onReview: () => this.setState({ fiscalReview: { dayId: day.id, mode, retryAfter }, fiscalWarning:null, confirmId: null, notice: '' }),
+      onCancel: () => this.setState({ fiscalReview: null, fiscalWarning:null }),
       onConfirm: () => this.requestFiscal(day.id, mode, 'issue', retryAfter),
       onCheck: () => this.requestFiscal(day.id, mode, 'check')
     });

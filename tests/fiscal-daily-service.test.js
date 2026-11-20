@@ -424,3 +424,13 @@ test('permanently enrolled databases reject local-only closes even for corrected
   assert.equal((await f.call(issue(id))).error,'coverage');
   assert.equal(f.db.prepare('SELECT count(*) n FROM account_a_closes').get().n,0);
 });
+test('document warning is rejected when the printer date or authorization is stale',async t=>{
+  let date='000000';
+  const f=fixture(t,device(expected=>({status:'document-warning',saleDocument:expected.lastDocumentNumber,printerDocument:'0000023',deviceDate:date})));
+  payment(f.db,1); const id=await f.closeDay();
+  assert.equal((await f.call(issue(id))).error,'preflight');
+  date=localDate(); const warning=await f.call(issue(id));
+  assert.equal(warning.error,'document-warning');
+  f.switchActor(3); assert.equal((await f.call({...issue(id),warningDocument:'0000023'})).ok,false);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
+});

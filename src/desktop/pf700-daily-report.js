@@ -60,7 +60,8 @@ function checkExpected(expected) {
 function checkBaseline(baseline, expected) {
   requireMatch(baseline && Number.isInteger(baseline.previousClosure) &&
     baseline.previousClosure >= 0 && baseline.previousClosure < 9999 &&
-    baseline.previousDocumentNumber === expected.lastDocumentNumber);
+    typeof baseline.previousDocumentNumber === 'string' && /^[0-9]{7}$/.test(baseline.previousDocumentNumber) &&
+    Number(baseline.previousDocumentNumber) < 9999999);
   calendarDate(baseline.deviceDate);
 }
 
@@ -87,7 +88,7 @@ function checkTaxTotals(amounts, expected) {
   requireMatch(amounts.length === 4 && amounts.every((value, index) => value === expected.taxTotals[index] * 100));
 }
 
-async function checkOpenPeriod(send, expected, closure) {
+async function checkOpenPeriod(send, expected, closure, expectedDocument = null) {
   // The v1.40 heading calls these net sums while its fields describe
   // turnover by VAT group. Require the exact recorded gross values.
   // Any other representation needs on-site read-only verification.
@@ -96,7 +97,8 @@ async function checkOpenPeriod(send, expected, closure) {
   checkTaxTotals(taxRegisters.slice(1).map(registerAmount), expected);
   checkRegisters(await send(67), await send(110), expected, closure);
   const documentNumber = await send(113);
-  requireMatch(documentNumber === expected.lastDocumentNumber);
+  requireMatch(/^[0-9]{7}$/.test(documentNumber) && Number(documentNumber) < 9999999);
+  if (expectedDocument !== null) requireMatch(documentNumber === expectedDocument);
   return documentNumber;
 }
 
@@ -139,7 +141,7 @@ function createPf700DailyReportWithTransport({ mode, expectedSerial, openPipe })
         if (record.closure !== baseline.previousClosure) return await verifyRecord(send, expected, baseline, record);
         const attemptDate = calendarDate(baseline.deviceDate);
         requireMatch(calendarDate(record.date) < attemptDate && calendarDate(clockDate(await send(62))) >= attemptDate);
-        const documentNumber = await checkOpenPeriod(send, expected, record.closure);
+        const documentNumber = await checkOpenPeriod(send, expected, record.closure, baseline.previousDocumentNumber);
         return { status: 'not-issued', evidence: { closure: record.closure, documentNumber, deviceDate: baseline.deviceDate } };
       }
 
@@ -149,6 +151,9 @@ function createPf700DailyReportWithTransport({ mode, expectedSerial, openPipe })
       // is identified by the registered receipts, counters and tender registers.
       requireMatch(calendarDate(previous.date) < calendarDate(deviceDate));
       const previousDocumentNumber = await checkOpenPeriod(send, expected, previous.closure);
+      if (previousDocumentNumber !== expected.lastDocumentNumber) {
+        if (context.warningDocument !== previousDocumentNumber) return { status:'document-warning', saleDocument:expected.lastDocumentNumber, printerDocument:previousDocumentNumber, deviceDate };
+      } else requireMatch(context.warningDocument === undefined);
       baseline = { previousClosure: previous.closure, previousDocumentNumber, deviceDate };
       checkBaseline(baseline, expected);
       await context.beforeIssue({ ...baseline });

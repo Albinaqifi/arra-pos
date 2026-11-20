@@ -46,7 +46,9 @@ function handleAccountA(event, req, allowed, db, session, adapter, dailyAdapter)
     ['accountAList', 'accountAPf700Profile', 'accountAPf700Simulate'].includes(req.action);
   const fiscalRequest = Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['device','simulation'].includes(req.mode) &&
     ((req.action === 'accountAFiscalClose' && req.confirmed === true &&
-      (keys === 4 || (keys === 5 && Number.isSafeInteger(req.retryAfter) && req.retryAfter > 0))) ||
+      keys === 4 + (Object.hasOwn(req,'retryAfter') ? 1 : 0) + (Object.hasOwn(req,'warningDocument') ? 1 : 0) &&
+      (!Object.hasOwn(req,'retryAfter') || (Number.isSafeInteger(req.retryAfter) && req.retryAfter > 0)) &&
+      (!Object.hasOwn(req,'warningDocument') || (typeof req.warningDocument === 'string' && /^[0-9]{7}$/.test(req.warningDocument)))) ||
      (req.action === 'accountAFiscalReconcile' && keys === 3));
   const valid = readOnly || fiscalRequest || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||
     (req.action === 'accountARetry' && keys === 4 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && req.checked === true && typeof req.requestId === 'string' && /^[a-zA-Z0-9-]{1,100}$/.test(req.requestId)) ||
@@ -65,7 +67,7 @@ function handleAccountA(event, req, allowed, db, session, adapter, dailyAdapter)
       const authorized=()=>allowed(event) && actor===session.currentUserId() && actor===session.authenticatedUserId()
         && generation===session.identityGeneration?.() && db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope==='combined'
         && hasPermissions(db,session,'business_days.close');
-      return daily.handle(db,req,actor,authorized,dailyAdapter,fiscalSnapshot(day.source,day.snapshot && JSON.parse(day.snapshot)),day.closeId);
+      return daily.handle(db,req,actor,authorized,dailyAdapter,fiscalSnapshot(day.source,day.snapshot && JSON.parse(day.snapshot)),day.closeId,generation);
     }
     if (req.action === 'accountAPf700Profile') {
       return { ok: true, data: { profile: PF700_PROFILE, hardwareVerified: false } };

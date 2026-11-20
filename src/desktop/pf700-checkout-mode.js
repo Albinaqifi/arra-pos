@@ -3,6 +3,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { offlineCheckoutRequested } = require('./fiscal-checkout');
 const { createTrainingPf700 } = require('./training-pf700');
+const { createWindowsPf700PrinterControl } = require('./pf700-printer-control');
 const { createWindowsPf700DailyReport } = require('./pf700-daily-report');
 const { isCommissionedDirectory, deviceTrial, cardTrialLedger } = require('./pf700-commissioning');
 const { createWindowsPf700Checkout } = require('./pf700-windows-checkout');
@@ -89,6 +90,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
       claimCardDispatch: token => cardLedger.dispatch(profile.expectedSerial, token)
     } : {}),
     dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
+    printerControl: createWindowsPf700PrinterControl({ expectedSerial: profile.expectedSerial }),
     canRegister(receipt, prior) {
       if (isCardTrial) return receipt.account === 'A' && receipt.method === 'card' &&
         receipt.lines.length > 0 && receipt.lines.every(line => typeof line.domesticProduct === 'boolean');

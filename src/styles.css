@@ -307,3 +307,17 @@ details[open] > .menu-category-summary::before, details[open] > .menu-product-su
 .correction-form textarea { min-height: 100px; }
 .correction-effect { color: #475569; }
 @media (max-width: 700px) { .correction-layout { grid-template-columns: 1fr; } }
+
+.fiscal-device { color:#64748b; text-align:right; font-size:13px; font-weight:600; }
+.fiscal-switcher { margin:12px 0 14px; }
+.admin-shell .fiscal-switcher button { border:1px solid #1d4ed8; border-radius:9px; padding:8px 14px; background:#edf3ff; color:#1d4ed8; font-weight:650; min-height:42px; }
+.fiscal-desk { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(250px,.85fr); gap:16px; align-items:start; }
+.fiscal-panel { background:#fff; border:1px solid #d8e1ed; border-radius:16px; padding:28px; }
+.fiscal-panel h2 { margin:0; font-size:21px; }.fiscal-intro { color:#526176; margin:8px 0 18px; }
+.fiscal-figure { display:grid; gap:5px; padding:13px 16px; background:#edf3ff; border-radius:10px; margin-bottom:18px; }.fiscal-figure strong { font-size:20px; }
+.admin-shell .fiscal-print { background:#1d4ed8; color:#fff; border:1px solid #1d4ed8; border-radius:9px; min-height:42px; padding:8px 14px; font-weight:650; }.fiscal-print:disabled { opacity:.55; }
+.fiscal-result { margin:15px 0 0; padding:10px 12px; background:#edf3ff; border-radius:8px; }
+.fiscal-tray { padding:14px 18px 16px; background:#e7edf3; border-radius:16px; color:#526176; text-align:center; }.fiscal-tray-title { display:flex; justify-content:space-between; font-size:13px; font-weight:650; margin-bottom:12px; }.fiscal-paper { max-width:300px; margin:auto auto 10px; padding:22px 16px 24px; background:#fffef9; color:#242522; font:13px/1.4 'Courier New',monospace; box-shadow:0 3px 8px #17253422; }.fiscal-paper strong,.fiscal-paper small { display:block; }.fiscal-paper strong { font-size:22px; letter-spacing:.14em; }.fiscal-paper small { font-size:11px; }.fiscal-paper hr { border:0; border-top:1px dashed #78776c; }
+@media(max-width:650px) { .fiscal-desk { grid-template-columns:1fr; } }
+
+.fiscal-document-warning-icon { color:#c51b23; font-size:24px; line-height:1; }

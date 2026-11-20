@@ -83,7 +83,7 @@ function windowsPipe(startProcess, operation = 'Checkout') {
     exchange(request) {
       if (stopped || pending) throw Error('PF700 exchange unavailable');
       return new Promise((resolve, reject) => {
-        const timeout = operation === 'DailyReport' && request[3] === 69 ? 125000 : 25000;
+        const timeout = ['DailyReport', 'PrinterControl'].includes(operation) && request[3] === 69 ? 125000 : 25000;
         pending = { data: '', resolve, reject, timer: setTimeout(fail, timeout) };
         child.stdin.write(request.toString('hex') + '\n', error => { if (error) fail(); });
       });
