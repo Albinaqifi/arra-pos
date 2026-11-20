@@ -120,12 +120,13 @@ async function checkWindowsPf700Identity(expectedSerial, startProcess = spawn) {
 
 function createWindowsPf700Checkout(profile, startProcess = spawn) {
   const { expectedSerial, operatorNumber, operatorPassword, tillNumber, domesticProduct, mayProbe, beforeOpen,
-    allowLegacyOrigin = false, supervisedCardTrial = false } = profile;
+    allowLegacyOrigin = false, supervisedCardTrial = false, fastPayCardCounters = false } = profile;
   if (!validSerial(expectedSerial) ||
       !['string','number'].includes(typeof operatorNumber) || !/^[1-8]$/.test(String(operatorNumber)) ||
       typeof operatorPassword !== 'string' || !/^[0-9]{4,6}$/.test(operatorPassword) ||
       !['string','number'].includes(typeof tillNumber) || !/^[0-9]{1,5}$/.test(String(tillNumber)) || typeof domesticProduct !== 'boolean' ||
-      typeof allowLegacyOrigin !== 'boolean' || typeof supervisedCardTrial !== 'boolean' || (mayProbe !== undefined && typeof mayProbe !== 'function') ||
+      typeof allowLegacyOrigin !== 'boolean' || typeof supervisedCardTrial !== 'boolean' ||
+      typeof fastPayCardCounters !== 'boolean' || (fastPayCardCounters && !supervisedCardTrial) || (mayProbe !== undefined && typeof mayProbe !== 'function') ||
       (beforeOpen !== undefined && typeof beforeOpen !== 'function')) throw Error('Invalid PF700 checkout profile');
   let busy = false;
   return Object.freeze({
@@ -164,7 +165,7 @@ function createWindowsPf700Checkout(profile, startProcess = spawn) {
         return await executePf700Checkout(snapshot, {
           firstSequence: sequence === 0x7f ? 0x20 : sequence + 1,
           operatorNumber, operatorPassword, tillNumber, domesticProduct: snapshot.domesticProduct,
-          onsiteFirmware: identity.onsiteFirmware, supervisedCardTrial,
+          onsiteFirmware: identity.onsiteFirmware, supervisedCardTrial, fastPayCardCounters,
           beforeCommand:context.beforeCommand, afterCommand:context.afterCommand,
           async beforeOpen(baseline) {
             if (beforeOpen) await beforeOpen(baseline);

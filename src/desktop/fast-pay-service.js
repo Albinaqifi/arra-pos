@@ -56,6 +56,15 @@ function createQueue(db) {
         previous_document TEXT NOT NULL CHECK(length(previous_document)=7 AND
           previous_document NOT GLOB '*[^0-9]*' AND previous_document<'9999999')
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS fast_pay_v1_command_events (
+        id INTEGER PRIMARY KEY,
+        payment_id INTEGER NOT NULL REFERENCES fast_pay_v1_claims(payment_id),
+        command INTEGER NOT NULL CHECK(command IN (90,74,76,97,113,110,48,49,51,103,53,56)),
+        stage TEXT NOT NULL CHECK(stage IN ('attempted','checked')),
+        attempt_id INTEGER REFERENCES fast_pay_v1_command_events(id),
+        CHECK((stage='attempted' AND attempt_id IS NULL) OR (stage='checked' AND attempt_id IS NOT NULL)),
+        UNIQUE(attempt_id)
+      ) STRICT;
       CREATE TABLE IF NOT EXISTS fast_pay_v1_results (
         payment_id INTEGER PRIMARY KEY REFERENCES fast_pay_v1_claims(payment_id),
         status TEXT NOT NULL CHECK(status IN ('acknowledged','unconfirmed')),
@@ -97,6 +106,14 @@ function createQueue(db) {
         WHEN EXISTS(SELECT 1 FROM ${table} WHERE payment_id=NEW.payment_id)
         BEGIN SELECT RAISE(ABORT,'Fast payment history is immutable'); END;`);
     }
+    db.exec(`CREATE TRIGGER IF NOT EXISTS fast_pay_v1_command_events_no_update BEFORE UPDATE ON fast_pay_v1_command_events
+      BEGIN SELECT RAISE(ABORT,'Fast payment command history is immutable'); END;
+      CREATE TRIGGER IF NOT EXISTS fast_pay_v1_command_events_no_delete BEFORE DELETE ON fast_pay_v1_command_events
+      BEGIN SELECT RAISE(ABORT,'Fast payment command history is immutable'); END;
+      CREATE TRIGGER IF NOT EXISTS fast_pay_v1_command_events_no_replace BEFORE INSERT ON fast_pay_v1_command_events
+      WHEN EXISTS(SELECT 1 FROM fast_pay_v1_command_events WHERE id=NEW.id OR
+        (NEW.attempt_id IS NOT NULL AND attempt_id=NEW.attempt_id))
+      BEGIN SELECT RAISE(ABORT,'Fast payment command history is immutable'); END;`);
   });
 }
 
@@ -202,6 +219,16 @@ function receiptWorker(db, adapter) {
     let accepted;
     try {
       const result = await adapter.registerSale(job.receipt,{
+        ...(job.receipt.method === 'card' ? { beforeCommand({command}) {
+          return db.prepare("INSERT INTO fast_pay_v1_command_events(payment_id,command,stage) VALUES(?,?,'attempted')")
+            .run(job.id,command).lastInsertRowid;
+        },
+        afterCommand({id}) {
+          const saved = db.prepare(`INSERT INTO fast_pay_v1_command_events(payment_id,command,stage,attempt_id)
+            SELECT payment_id,command,'checked',id FROM fast_pay_v1_command_events
+            WHERE id=? AND payment_id=? AND stage='attempted'`).run(id,job.id);
+          if (saved.changes !== 1) throw Error('Invalid command acknowledgement');
+        } } : {}),
         beforeOpen({previousDocumentNumber}) {
           if (stopped || typeof previousDocumentNumber !== 'string' || !/^\d{7}$/.test(previousDocumentNumber)) {
             throw Error('Invalid receipt baseline');

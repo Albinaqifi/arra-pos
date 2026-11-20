@@ -85,6 +85,43 @@ function ack(receipt,context,number) {
     ...(receipt.method==='card'?{debitAmountMinor:receipt.total*100}:{})}};
 }
 
+test('card diagnostics retain checked stages without raw request material and never resend after an uncertain reply', async t => {
+  const calls = [];
+  const f = fixture(t,{...goodAdapter,async registerSale(receipt,context) {
+    calls.push(receipt.billId);
+    const first = context.beforeCommand({command:90,sequence:42,requestHash:'discarded-marker'});
+    await context.afterCommand({id:first,responseHash:'discarded-marker',summary:{identityMatched:true}});
+    context.beforeOpen({previousDocumentNumber:'0000031'});
+    const opened = context.beforeCommand({command:48,sequence:43,requestHash:'discarded-marker'});
+    if (receipt.billId === 1) return {status:'uncertain'};
+    await context.afterCommand({id:opened,responseHash:'discarded-marker',summary:{fiscalReceiptCount:3}});
+    context.beforeCommand({command:49,sequence:44,requestHash:'discarded-marker'});
+    return {status:'uncertain'};
+  }});
+  f.bill(1); f.bill(2);
+  assert.equal(f.pay(pay(1,'card')).ok,true);
+  assert.equal(f.pay(pay(2,'card')).ok,true);
+  await until(() => status(f.db,1)==='unconfirmed' && status(f.db,2)==='unconfirmed');
+  const rows = f.db.prepare(`SELECT p.bill_id,e.command,e.stage FROM fast_pay_v1_command_events e
+    JOIN payments p ON p.id=e.payment_id ORDER BY e.id`).all().map(row => ({...row}));
+  assert.deepEqual(rows, [
+    {bill_id:1,command:90,stage:'attempted'},{bill_id:1,command:90,stage:'checked'},
+    {bill_id:1,command:48,stage:'attempted'},
+    {bill_id:2,command:90,stage:'attempted'},{bill_id:2,command:90,stage:'checked'},
+    {bill_id:2,command:48,stage:'attempted'},{bill_id:2,command:48,stage:'checked'},
+    {bill_id:2,command:49,stage:'attempted'}
+  ]);
+  assert.equal(JSON.stringify(f.db.prepare('SELECT * FROM fast_pay_v1_command_events').all()).includes('discarded-marker'),false);
+  assert.throws(() => f.db.exec('UPDATE fast_pay_v1_command_events SET command=53'));
+  assert.throws(() => f.db.exec('DELETE FROM fast_pay_v1_command_events'));
+  f.worker.stop();
+  const again = service(f.db,{...goodAdapter,registerSale() { assert.fail('claimed sale must not resend'); }});
+  t.after(() => again.worker.stop());
+  await delay(50);
+  assert.deepEqual(calls,[1,2]);
+  assert.equal(f.db.prepare('SELECT count(*) AS n FROM payments').get().n,2);
+});
+
 test('cash and card commit before printer I/O; replay, shifts, audit and full verified Z coverage',async t => {
   let count = 0, release;
   const first = new Promise(resolve => { release=resolve; });

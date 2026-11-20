@@ -1,0 +1,76 @@
+IMPORTANT: THE INTERRUPTED CARD A RECEIPT MUST BE RESOLVED FIRST
+
+Before installing, opening or restarting checkout, recover the existing
+interrupted Card A receipt using the reviewed recovery tool or established
+recovery route. Match its fiscal paper and Arra proof, and preserve the
+original payment, terminal record, paper and database. Check that starting
+checkout will not unexpectedly send unattempted queued Account A receipts.
+Keep existing historical holds in place. This update does not recover or
+complete the interrupted receipt.
+
+Arra POS 1.0.10 RC6 - Restaurant desktop edition
+
+Update the enrolled POS PC
+
+1. Sign in with the restaurant's usual Windows account. Close Arra POS.
+   Keep the existing verified restaurant data backup.
+2. Right-click the Arra POS desktop shortcut and choose Open file location.
+   This is the program folder containing Arra POS.exe. Note its full path.
+   If you used the command launcher before, use the folder containing
+   Open-Arra-Pay.cmd and the program subfolder.
+3. In File Explorer go up one level and rename the entire old program
+   folder to keep a backup. Create an empty folder with the original name.
+4. Right-click the RC6 ZIP, choose Extract All, and select that empty
+   folder. Arra POS.exe, Open-Arra-Pay.cmd and the program subfolder
+   should be directly inside it. The restaurant data and protected
+   printer settings are stored separately under the Windows account.
+5. Right-click Arra POS.exe, choose Properties > Details, and check
+   File version 1.0.10.6. If you already have the Arra POS desktop
+   shortcut, open it as usual.
+
+Create the desktop shortcut
+
+On the enrolled POS PC, double-click Arra POS.exe in the extracted folder.
+Enter the restaurant's existing PF700 settings, check "Enable live checkout
+from this desktop" and select "Save and create shortcut". The success
+message gives the shortcut name. Use that desktop icon for daily checkout.
+Starting checkout can send queued A receipts that have never been attempted.
+
+Waiter PINs
+
+Existing waiter PINs continue working. For faster table entry, a Combined
+administrator can reset each existing waiter's four-digit PIN in Employees.
+The waiter can keep the same digits.
+New and reset waiter PINs are readable in the local restaurant database
+and its backups. Limit access to those files to trusted staff.
+After creating or resetting waiter PINs, keep using RC6. If even one
+active waiter uses a new or reset PIN, opening RC4 can lock every waiter
+out of their tables. Contact support before switching to an older release
+so current sales and staff access are preserved.
+
+Checkout and printers
+
+Cash A - After receiving cash, select Cash A and press Pay once.
+Card A - Confirm approval on the separate terminal, select Card A and
+         press Pay once. For both A tenders Arra saves the payment, frees
+         the table and sends the fiscal receipt to the PF700 in the background.
+Cash B - After receiving cash, select the Arra logo at the top right
+         (Select Cash B), then press Pay once. The Bar printer receives
+         the itemized non-fiscal customer bill.
+
+To set the Bar printer, open Administration > Overview > Preparation tickets.
+Enter its exact Windows printer name in Bar queue and choose Save queue.
+The Bar station's preparation tickets use the same queue.
+
+If a Cash B bill is missing, check the printer and paper. An authorized B
+or Combined owner can open Administration > Overview > Account B bill / Bar,
+find the original bill number and choose Retry after checking. This resends
+the saved bill. A previous uncertain attempt may have printed.
+
+If Account A paper is missing, keep the bill number and check the printer.
+A Combined user can refresh Financial information > Print Account A bills
+to see the receipt status. An uncertain receipt may have printed. Keep its
+original payment and terminal record for reconciliation.
+
+Keep the previously printed, unresolved espresso bill for its existing
+recovery procedure. The existing fiscal daily-close hold still applies.

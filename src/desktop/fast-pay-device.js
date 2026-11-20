@@ -4,7 +4,7 @@
 // release's serial transport, frame checks and register-specific protocol.
 function createFastPrinter(profile, createDevice, cardEnrolled) {
   const cash = createDevice({ ...profile, supervisedCardTrial: false });
-  const card = createDevice({ ...profile, supervisedCardTrial: true });
+  const card = createDevice({ ...profile, supervisedCardTrial: true, fastPayCardCounters: true });
   let busy = false;
 
   function canRegister(receipt) {
@@ -43,9 +43,9 @@ function createFastPrinter(profile, createDevice, cardEnrolled) {
         return await device.registerSale(receipt, {
           ...context,
           async afterCommand(ack) {
-            await context.afterCommand?.(ack);
             // Fast cash uses the enrolled on-site firmware's lone TAB tender.
             if (ack.summary.identityMatched && !ack.summary.onsiteFirmware) throw Error('Unsupported checkout firmware');
+            await context.afterCommand?.(ack);
           }
         });
       } finally {
