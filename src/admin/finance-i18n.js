@@ -5,6 +5,22 @@ export function closeBlockMessage(code) {
 }
 
 const sq={
+'Periodic report':'Raport periodik',
+'Periodic fiscal report':'Raport fiskal periodik',
+'Print turnover and tax totals from closed fiscal days.':'Printo qarkullimin dhe totalet e tatimit nga ditët fiskale të mbyllura.',
+'Select by':'Zgjidh sipas',
+'Date range':'Intervali i datave',
+'Fiscal record numbers':'Numrat e regjistrave fiskalë',
+'From date':'Nga data',
+'To date':'Deri më datë',
+'First closure record':'Regjistri i parë i mbylljes',
+'Last closure record':'Regjistri i fundit i mbylljes',
+'Report format':'Formati i raportit',
+'Short totals':'Totalet e shkurtra',
+'Detailed by closure':'I detajuar sipas mbylljes',
+'Print periodic fiscal report':'Printo raportin fiskal periodik',
+'Periodic report request sent.':'Kërkesa për raportin periodik u dërgua.',
+'Could not confirm the periodic report request. Check the range and printer.':'Kërkesa për raportin periodik nuk u konfirmua. Kontrollo intervalin dhe printerin.',
 'Printer actions':'Veprimet e printerit',
 'Cash in / out':'Para brenda / jashte',
 'Register cash in or out':'Regjistro hyrjen ose daljen e parave',
