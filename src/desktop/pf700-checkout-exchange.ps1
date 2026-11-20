@@ -2,17 +2,18 @@
 # pipes. Running this helper with no valid identity probe opens no port.
 param([ValidateSet('Checkout', 'DailyReport', 'ReadDailyReport', 'ReadCheckout')][string]$Operation = 'Checkout')
 
-function Read-Pf700CheckoutReply($Port, $Deadline = 20000, $BusyLimit = 48) {
+function Read-Pf700CheckoutReply($Port, $Deadline = 20000) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $frame = [Collections.Generic.List[byte]]::new()
-    $busy = 0
     $expected = 0
     while ($clock.ElapsedMilliseconds -lt $Deadline) {
         try { $next = $Port.ReadByte() }
         catch [TimeoutException] { continue }
+        if ($clock.ElapsedMilliseconds -ge $Deadline) { break }
         if ($next -lt 0) { throw 'Incomplete frame' }
         if ($frame.Count -eq 0) {
-            if ($next -eq 0x16 -and $busy -lt $BusyLimit) { $busy++; continue }
+            # SYN means the command is still running. Keep its original reply deadline.
+            if ($next -eq 0x16) { continue }
             if ($next -eq 0x15) { return ,([byte[]]@(0x15)) }
             if ($next -ne 1) { throw 'Unexpected reply' }
         } elseif ($frame.Count -eq 1) {
@@ -76,7 +77,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             $Port.Write($request, 0, $request.Length)
             if ($request[3] -eq 69) {
                 # The printer may report busy every 60 ms while printing the Z report.
-                [byte[]]$reply = Read-Pf700CheckoutReply $Port 120000 2100
+                [byte[]]$reply = Read-Pf700CheckoutReply $Port 120000
             } else {
                 [byte[]]$reply = Read-Pf700CheckoutReply $Port
             }
