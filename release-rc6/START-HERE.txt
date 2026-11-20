@@ -72,5 +72,5 @@ A Combined user can refresh Financial information > Print Account A bills
 to see the receipt status. An uncertain receipt may have printed. Keep its
 original payment and terminal record for reconciliation.
 
-Keep the previously printed, unresolved espresso bill for its existing
-recovery procedure. The existing fiscal daily-close hold still applies.
+Keep the previously printed cash receipts with their existing payment
+records. The earlier fiscal daily-close hold still applies.
