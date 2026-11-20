@@ -16,7 +16,7 @@ const count = (db, table) => db.prepare('SELECT count(*) AS n FROM ' + table).ge
 
 // Run the normal main-process startup and IPC registrations. Substitute only
 // the window, sample identity and hardware boundaries. No printer or network.
-async function fixture(t, mode) {
+async function fixture(t, mode, printResult = () => 'accepted') {
   let actor = 1;
   const session = {currentUserId:() => actor, authenticatedUserId:() => actor};
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-s098-'));
@@ -49,7 +49,7 @@ async function fixture(t, mode) {
     function load(name) {
       if (name === 'electron') return electron;
       if (name === './session') return {registerSession:() => session};
-      if (name === './windows-test-printer') return {printTestJob(job) {output.push(job); return 'accepted';}};
+      if (name === './windows-test-printer') return {printTestJob(job) {output.push(job); return printResult(job);}};
       // The real commissioning launcher and its credentials are outside this
       // rehearsal. Only the approved production-mode selection is substituted.
       if (physical && name === './pf700-checkout-mode') return {selectPf700Checkout:() => ({
@@ -184,7 +184,7 @@ test('offline mixed rounds, cancellation and paper retries stay independent of t
   assert.deepEqual(f.output,[]);
 });
 
-test('routine startup routes Windows preparation only; supervised commissioning keeps it disabled', async t => {
+test('routine startup routes Windows preparation; supervised commissioning keeps it disabled', async t => {
   const f = await fixture(t,'routine');
   const {db,items,ok,status,call} = f;
   assert.equal(status().preparationMode,'routine');
@@ -219,6 +219,138 @@ test('routine startup routes Windows preparation only; supervised commissioning 
   assert.equal(f.output.length,2);
   assert.deepEqual(f.hardwareCalls,[]);
 });
+
+function generateBill(f) {
+  const review = f.ok('bill',{action:'review',orderId:1});
+  return f.ok('bill',{action:'generate',orderId:1,fingerprint:review.fingerprint});
+}
+
+test('routine Cash B sends one full non-fiscal bill to Bar and recovers the paper independently', async t => {
+  let outcome = 'lost reply';
+  const f = await fixture(t, 'routine', job => {
+    if (job.destination === 'bill' && outcome === 'lost reply') throw Error('Synthetic interruption');
+    return job.destination === 'bill' ? outcome : 'accepted';
+  });
+  const {db, items, ok, call, status} = f;
+  for (const [id,scope] of [[2,'B'],[3,'A'],[4,'combined']]) {
+    db.prepare('INSERT INTO local_users(id,username,salt,password_hash) SELECT ?,?,salt,password_hash FROM local_users WHERE id=1')
+      .run(id,'sample-owner-' + id);
+    db.prepare('INSERT INTO financial_scopes VALUES(?,?)').run(id,scope);
+    db.prepare("INSERT INTO user_permissions VALUES(?,'employees.view')").run(id);
+  }
+  // The account-B sample-bill printer and the restaurant Bar queue can differ.
+  db.exec("UPDATE bill_printer_queues SET queue='Sample copy' WHERE account='B'");
+  ok('test-printing',{action:'configure',destination:'bar',queue:'Bar by the till'});
+  items({action:'add',productId:'qebapa'});
+  items({action:'add',productId:'espresso'});
+  items({action:'send',requestId:'mixed'});
+  await tick();
+  const bill = generateBill(f);
+  const pay = {billId:bill.id,method:'cash',account:'B'};
+  const recorded = ok('payment',pay);
+  assert.deepEqual(ok('payment',pay),recorded);
+  assert.equal(call('payment',{...pay,method:'card'}).ok,false);
+  await tick();
+  assert.equal(f.output.length,3);
+  const copy = f.output.find(job => job.destination === 'bill');
+  assert.equal(copy.queue,'Bar by the till');
+  const {textForJob} = require('../src/desktop/windows-test-printer');
+  const text = textForJob(copy);
+  assert.match(text,/^NON-FISCAL CUSTOMER BILL/);
+  assert.match(text,/1 x Qebapa/);
+  assert.match(text,/1 x Espresso/);
+  assert.ok(text.includes('TOTAL: ' + bill.total + ' den'));
+  assert.match(text,/PAID - CASH/);
+  assert.equal(db.prepare('SELECT status FROM orders WHERE id=1').get().status,'completed');
+  assert.deepEqual(status().barBills,[]); // Waiter only sees preparation work.
+  const jobId = db.prepare('SELECT id FROM test_print_jobs WHERE bill_id=?').get(bill.id).id;
+  const retry = {action:'retry',jobId,requestId:'checked-copy',checked:true};
+  assert.equal(call('test-printing',retry).ok,false);
+  await f.restart();
+  assert.deepEqual(ok('payment',pay),recorded);
+  assert.equal(f.output.length,3);
+  f.as(3);
+  assert.deepEqual(status().barBills,[]);
+  assert.equal(call('test-printing',retry).ok,false);
+  f.as(4);
+  assert.equal(status().barBills[0].id,jobId);
+  f.as(2);
+  assert.equal(status().jobs.length,0);
+  assert.equal(status().barBills[0].result,'uncertain');
+  assert.equal(call('test-printing',{...retry,checked:false}).ok,false);
+  // Reconfiguration affects the next attempt. Earlier attempt evidence is immutable.
+  f.as(1);
+  ok('test-printing',{action:'configure',destination:'bar',queue:'Bar replacement'});
+  f.as(2);
+  outcome = 'failed';
+  ok('test-printing',retry);
+  await tick();
+  assert.equal(status().barBills[0].result,'failed');
+  ok('test-printing',retry);
+  await tick();
+  assert.equal(f.output.length,4);
+  outcome = 'accepted';
+  ok('test-printing',{...retry,requestId:'paper-checked-again'});
+  await tick();
+  assert.equal(status().barBills[0].result,'accepted');
+  assert.deepEqual(db.prepare('SELECT queue FROM test_print_attempts WHERE job_id=? ORDER BY id').all(jobId).map(a => a.queue),
+    ['Bar by the till','Bar replacement','Bar replacement']);
+  assert.equal(f.output.length,5);
+  assert.deepEqual(f.hardwareCalls,[]);
+  assert.equal(count(db,'fiscal_checkout_sales'),0);
+  assert.equal(count(db,'payments'),1);
+  await f.restart('sample');
+  assert.equal(status().jobs.some(job => job.id === jobId),false);
+  assert.equal(call('test-printing',retry).ok,false);
+  assert.equal(call('test-printing',{action:'bill',billId:bill.id,requestId:'sample-copy'}).ok,false);
+  await f.restart('routine');
+  db.prepare("INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(?,?,?,?)")
+    .run(recorded.id,4,Date.now(),'Sample correction');
+  for (const actor of [2,3,4]) {
+    f.as(actor);
+    assert.deepEqual(status().barBills,[]);
+    assert.equal(call('test-printing',{...retry,requestId:'after-correction'}).ok,false);
+  }
+  assert.equal(f.output.length,5);
+});
+
+test('routine Cash B preserves an existing unpaid bill print and never submits another on confirmation', async t => {
+  const f = await fixture(t,'sample');
+  f.items({action:'add',productId:'espresso'});
+  f.items({action:'send',requestId:'one-drink'});
+  const bill = generateBill(f);
+  f.ok('test-printing',{action:'bill',billId:bill.id,requestId:'existing-copy'});
+  await tick();
+  const saved = f.db.prepare('SELECT id,snapshot FROM test_print_jobs WHERE bill_id=?').get(bill.id);
+  assert.equal(f.output.length,2); // One drink ticket and one unpaid bill.
+  await f.restart('routine');
+  f.ok('payment',{billId:bill.id,method:'cash',account:'B'});
+  await tick();
+  f.db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1");
+  assert.deepEqual(f.status().barBills,[]);
+  assert.equal(f.call('test-printing',{action:'retry',jobId:saved.id,requestId:'legacy-copy',checked:true}).ok,false);
+  assert.deepEqual(f.db.prepare('SELECT id,snapshot FROM test_print_jobs WHERE bill_id=?').get(bill.id),saved);
+  assert.equal(f.output.length,2);
+  assert.equal(count(f.db,'payments'),1);
+});
+
+for (const mode of ['training','supervised']) {
+  test(mode + ' Cash B settles without a Windows bill or a recoverable routine Bar copy', async t => {
+    const f = await fixture(t,mode);
+    f.items({action:'add',productId:'espresso'});
+    f.items({action:'send',requestId:'one-drink'});
+    const bill = generateBill(f);
+    f.ok('payment',{billId:bill.id,method:'cash',account:'B'});
+    await tick();
+    assert.equal(f.output.length,0);
+    assert.equal(count(f.db,'payments'),1);
+    assert.equal(count(f.db,'fiscal_checkout_sales'),0);
+    assert.deepEqual(f.hardwareCalls,[]);
+    await f.restart('routine');
+    f.db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1");
+    assert.deepEqual(f.status().barBills,[]);
+  });
+}
 
 for (const [sent, reopened] of [['sample','training'],['training','sample']]) {
   test(`waiter and admin cancellations of a ${sent} ticket are deferred in ${reopened}`, async t => {

@@ -11,6 +11,8 @@ const errors = Object.freeze({
   profile: 'Reopen the original fiscal checkout profile for this bill.',
   scope: 'This bill is outside the commissioned checkout trial.',
   cardDisabled: 'Card checkout on the physical fiscal printer is not available.',
+  terminalUnknown: 'Check the result on the original card terminal. Do not take the payment again.',
+  cardTrialHold: 'The supervised card trial is on hold. Preserve the original bill and terminal slip.',
   approvalRequired: 'Confirm the simulated terminal approval first.',
   uncertain: 'The fiscal checkout outcome is unknown. Check the saved bill.',
   blocked: 'Another fiscal checkout has an unresolved result.',
@@ -43,7 +45,7 @@ function failure(fiscalStatus) {
   return { ok: false, fiscalStatus, error: errors[fiscalStatus] };
 }
 
-function readFiscalCheckout(db, billId) {
+function readFiscalCheckout(db, billId, journal = null) {
   const row = db.prepare(`SELECT s.mode,s.device_id AS deviceId,s.method,s.receipt,a.id AS attemptId,r.status,r.reference,r.evidence,b.previous_document AS previousDocumentNumber,
     EXISTS(SELECT 1 FROM payments WHERE bill_id=s.bill_id) AS paid
     FROM fiscal_checkout_sales s JOIN fiscal_checkout_attempts a ON a.bill_id=s.bill_id
@@ -52,13 +54,23 @@ function readFiscalCheckout(db, billId) {
     WHERE s.bill_id=? ORDER BY a.id DESC LIMIT 1`).get(billId);
   if (!row) return null;
   let status = row.status || (active.get(db)?.has(row.attemptId) ? 'pending' : 'uncertain');
+  // A crash can leave the final, validated document ACK in the journal before
+  // the sender saves its result. Bill review projects the evidence read-only.
+  const trace = status === 'uncertain' && row.mode === 'device' && row.method === 'cash'
+    ? journal || require('./pf700-closed-cash-trace').readClosedCashTrace(db, billId) : null;
+  if (trace) status = 'submitted';
   if (status === 'accepted' && !row.paid) status = 'submitted';
   const baseline = row.previousDocumentNumber ? {deviceId:row.deviceId,previousDocumentNumber:row.previousDocumentNumber,
     expectedDocumentNumber:String(Number(row.previousDocumentNumber)+1).padStart(7,'0')} : null;
-  const proof = row.evidence && JSON.parse(row.evidence);
-  return { mode: row.mode, status, reference: row.reference, method: row.method, receipt: JSON.parse(row.receipt),
+  const proof = trace?.evidence || (row.evidence && JSON.parse(row.evidence));
+  const evidence = proof?.kind === 'numbered-journal'
+    ? {kind:proof.kind, documentNumber:proof.documentNumber}
+    : proof && {documentNumber:proof.documentNumber, fiscalReceiptCount:proof.fiscalReceiptCount, reversalCount:proof.reversalCount};
+  const receipt = JSON.parse(row.receipt);
+  if (row.mode === 'device' && row.method === 'card' && ['submitted','accepted'].includes(status) && db.prepare('SELECT 1 FROM pf700_card_intents WHERE bill_id=?').get(billId) && proof?.debitAmountMinor !== receipt.total * 100) status = 'uncertain';
+  return { mode: row.mode, status, reference: trace?.reference ?? row.reference, method: row.method, receipt,
     ...(row.deviceId ? { deviceId: row.deviceId } : {}), ...(baseline ? {baseline} : {}),
-    ...(proof ? {evidence:{documentNumber:proof.documentNumber,fiscalReceiptCount:proof.fiscalReceiptCount,reversalCount:proof.reversalCount}} : {}) };
+    ...(evidence ? {evidence: {...evidence, ...(Number.isSafeInteger(proof?.debitAmountMinor) ? {debitAmountMinor:proof.debitAmountMinor} : {})}} : {}) };
 }
 
 function buildReceipt(db, billId, method, total, adapter) {
@@ -84,7 +96,8 @@ function buildReceipt(db, billId, method, total, adapter) {
 }
 
 // The caller holds BEGIN IMMEDIATE, and commits before contacting any adapter.
-function reserveSale(db, request, total, actor, prior, adapter) {
+function reserveSale(db, request, total, actor, prior, adapter, cardIntent) {
+  if (db.prepare('SELECT 1 FROM pf700_card_open_intents WHERE bill_id<>?').get(request.billId)) return failure('blocked');
   if (db.prepare(`SELECT 1 FROM fiscal_checkout_attempts a LEFT JOIN fiscal_checkout_verified_results r
       ON r.attempt_id=a.id WHERE r.attempt_id IS NULL LIMIT 1`).get()) return failure('blocked');
   // The only physical mode in this release is the single-sale commissioning
@@ -94,8 +107,11 @@ function reserveSale(db, request, total, actor, prior, adapter) {
       WHERE source=? AND status='accepted' LIMIT 1`).get('device-' + adapter.deviceId)) return failure('scope');
   const physicalIntent = request.physicalIntentId && db.prepare('SELECT * FROM pf700_cash_open_intents WHERE id=? AND bill_id=?')
     .get(request.physicalIntentId,request.billId);
-  const receipt = prior?.receipt || (physicalIntent && JSON.parse(physicalIntent.receipt)) || buildReceipt(db, request.billId, request.method, total, adapter);
+  const savedIntent = cardIntent || physicalIntent;
+  const receipt = prior?.receipt || (savedIntent && JSON.parse(savedIntent.receipt)) || buildReceipt(db, request.billId, request.method, total, adapter);
   if (receipt.ok === false) return receipt;
+  if (cardIntent && (cardIntent.outcome !== 'approved' || !adapter.cardDispatchAvailable(cardIntent.token) ||
+      cardIntent.receipt !== JSON.stringify(buildReceipt(db,request.billId,'card',total,adapter)))) return failure('cardTrialHold');
   if (physicalIntent && (adapter.mode !== 'device' || physicalIntent.device_id !== adapter.deviceId ||
       physicalIntent.receipt !== JSON.stringify(receipt))) return failure('selection');
   if (!require('./pf700-checkout-protocol').canEncodePf700Receipt(receipt)) return failure('unavailable');
@@ -104,8 +120,9 @@ function reserveSale(db, request, total, actor, prior, adapter) {
   if (adapter.canRegister && adapter.canRegister(receipt, prior) !== true) return failure('scope');
   const now = Date.now();
   if (!prior) db.prepare(`INSERT INTO fiscal_checkout_sales(bill_id,actor_id,mode,device_id,method,receipt,created_at)
-    VALUES(?,?,?,?,?,?,?)`).run(request.billId, physicalIntent?.actor_id ?? actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);
+    VALUES(?,?,?,?,?,?,?)`).run(request.billId, savedIntent?.actor_id ?? actor, adapter.mode, adapter.deviceId ?? null, request.method, JSON.stringify(receipt), now);
   const attemptId = db.prepare('INSERT INTO fiscal_checkout_attempts(bill_id,started_at) VALUES(?,?)').run(request.billId, now).lastInsertRowid;
+  if (cardIntent) adapter.claimCardDispatch(cardIntent.token);
   if (physicalIntent) db.prepare('INSERT INTO pf700_cash_dispatches(attempt_id,intent_id,created_at) VALUES(?,?,?)')
     .run(attemptId,physicalIntent.id,now);
   if (adapter.mode === 'simulation' && request.method === 'card' &&
@@ -130,10 +147,13 @@ function acceptedOutcome(adapter, receipt, result) {
   if (typeof result.reference !== 'string' || !/^[0-9]{7}$/.test(result.reference) ||
       !evidence || evidence.documentNumber !== result.reference ||
       !counter(evidence.fiscalReceiptCount) || !counter(evidence.reversalCount)) return null;
+  const supervisedDebit = adapter.supervisedCardTrial === true && receipt.method === 'card';
+  if (supervisedDebit && evidence.debitAmountMinor !== receipt.total * 100) return null;
   // Save only the validated protocol evidence. Never retain raw transport
   // replies, operator credentials or arbitrary properties returned by a driver.
   return { reference: result.reference, evidence: JSON.stringify({ documentNumber: evidence.documentNumber,
-    fiscalReceiptCount: evidence.fiscalReceiptCount, reversalCount: evidence.reversalCount }) };
+    fiscalReceiptCount: evidence.fiscalReceiptCount, reversalCount: evidence.reversalCount,
+    ...(supervisedDebit ? {debitAmountMinor:evidence.debitAmountMinor} : {}) }) };
 }
 
 async function submitSale(db, adapter, reservation) {
@@ -175,6 +195,13 @@ async function submitSale(db, adapter, reservation) {
     const source = adapter.mode === 'simulation' ? 'simulation' : 'device-' + adapter.deviceId;
     if (physicalTrace) db.exec('BEGIN IMMEDIATE');
     try {
+      // Another authorized session can finish the same complete trace while
+      // this sender is releasing its port after the last ACK.
+      if (physicalTrace && accepted && db.prepare(`SELECT 1 FROM fiscal_checkout_verified_results
+        WHERE attempt_id=? AND status='accepted' AND source=? AND reference=? AND evidence=?`)
+        .get(attemptId,source,accepted.reference,accepted.evidence)) {
+        db.exec('COMMIT'); return { ok:true };
+      }
       if (physicalTrace && db.prepare('SELECT 1 FROM pf700_command_seals WHERE attempt_id=?').get(attemptId)) {
         db.exec('ROLLBACK'); return failure('uncertain');
       }
@@ -190,4 +217,4 @@ async function submitSale(db, adapter, reservation) {
   }
 }
 
-module.exports = { offlineCheckoutRequested, createOfflineFiscalCheckout, validFiscalAdapter, readFiscalCheckout, buildReceipt, reserveSale, submitSale, failure };
+module.exports = { offlineCheckoutRequested, createOfflineFiscalCheckout, validFiscalAdapter, readFiscalCheckout, buildReceipt, reserveSale, submitSale, failure, acceptedOutcome };

@@ -19,6 +19,16 @@ const line = { itemId: 3, name: 'Coffee', unitPrice: 70, quantity: 1, modifiers:
 const bill = { id: 1, lines: [line], total: 70, fiscalMode: 'device', fiscalDomesticProduct: true, physicalCashControls: true };
 const fiscal = { mode: 'device', status: 'accepted', reference: '0001235', method: 'cash', receipt: { lines: [line], domesticProduct: true } };
 
+function button(node, label) {
+  if (!node || typeof node !== 'object') return null;
+  if (node.type === 'button' && node.children.includes(label)) return node;
+  for (const child of (node.children || []).flat()) {
+    const found = button(child, label);
+    if (found) return found;
+  }
+  return null;
+}
+
 test('training card requires an explicit simulated approval and a decline leaves the bill payable', async () => {
   let payments = 0;
   let training = { ...bill, fiscalMode: 'simulation' };
@@ -30,14 +40,6 @@ test('training card requires an explicit simulated approval and a decline leaves
     assert.equal(selection.intentId,42);
     return {ok:true,data:{fiscal:{...fiscal,mode:'simulation',method:'card',reference:'SIM-1'}}};
   }});
-  const button = (node, label) => {
-    if (!node || typeof node !== 'object') return null;
-    if (node.type === 'button' && node.children.includes(label)) return node;
-    for (const child of node.children || []) for (const item of Array.isArray(child) ? child : [child]) {
-      const found = button(item,label); if (found) return found;
-    }
-    return null;
-  };
   await view.review();
   view.selectMethod('card');
   await view.pay();
@@ -223,4 +225,212 @@ test('lost device Cash A bridge response warns and retains the locked original s
   await view.pay();
   assert.deepEqual(selections.map(({billId,method,account}) => [billId,method,account]), [[1,'cash','A']]);
   assert.deepEqual([view.paymentSelection.billId,view.paymentSelection.method,view.paymentSelection.account], [1,'cash','A']);
+});
+
+const trialBill = {...bill, physicalCashControls:false, physicalCardControls:true, physicalCardAvailable:true};
+const prepared = {id:2,status:'prepared',profileMatches:true,canDispatch:false};
+const approved = {...prepared,status:'approved',canDispatch:true};
+const cardFiscal = {...fiscal, method:'card', receipt:{...fiscal.receipt,billId:bill.id,total:bill.total,method:'card',account:'A'}};
+const payment = {billId:bill.id, method:'card', account:'A'};
+function trialView(data, pay, props) {
+  return dialog({bill:async()=>({ok:true,data:data()}),payment:pay},props);
+}
+
+test('a device needs both supervised Card A capabilities before offering terminal preparation', async () => {
+  for (const data of [bill, {...trialBill,physicalCardControls:false}, {...trialBill,physicalCardAvailable:false}]) {
+    const view = trialView(()=>data, ()=>assert.fail('No card request'));
+    await view.review();
+    assert.equal(button(view.render(),'Card').props.disabled,true);
+    view.selectMethod('card');
+    assert.equal(view.state.method,'');
+    await view.physicalCardAction('prepare');
+    assert.equal(button(view.render(),'Prepare Card A trial'),null);
+  }
+});
+
+test('a commissioned bill reopened without the adapter never offers a fresh or declined card payment',async()=>{
+  for (const priorTrial of [{},{physicalCardAvailable:false}]) {
+    const data={...bill,fiscalMode:undefined,physicalCashControls:undefined,physicalCardUnavailable:true,...priorTrial};
+    const view=trialView(()=>data,()=>assert.fail('No generic payment or terminal action'));
+    await view.review();
+    assert.equal(button(view.render(),'Card').props.disabled,true);
+    view.selectMethod('card');
+    assert.equal(view.state.method,'');
+    assert.doesNotMatch(JSON.stringify(view.render()),/Prepare Card A trial|Confirm bill|Use the separate terminal/);
+    view.setState({method:'card',account:'A'});
+    assert.equal(button(view.render(),'Confirm bill'),null);
+    await view.pay(true); await view.physicalCardAction('prepare');
+    await view.review();
+    assert.equal(view.state.method,'');
+    view.selectMethod('cash','B');
+    assert.equal(view.state.account,'B');
+  }
+});
+
+test('physical Card A saves intent, observed terminal approval and explicit fiscal confirmation in separate steps', async () => {
+  let data=trialBill, confirmed=0, handoffs=0;
+  const calls=[];
+  const view=trialView(()=>data,async request=>{
+    calls.push(JSON.parse(JSON.stringify(request)));
+    if (request.preparePhysicalCard) {
+      data={...data,physicalCardAvailable:false,physicalCardIntent:prepared};
+      return {ok:true,data:{intentId:prepared.id,declineToken:'test-only'}};
+    }
+    if (request.confirmPhysicalCard) {
+      data={...data,physicalCardIntent:approved};
+      return {ok:true};
+    }
+    data={...data,physicalCardIntent:undefined,fiscal:cardFiscal};
+    return {ok:true,data:{fiscal:cardFiscal}};
+  },{onConfirmed:()=>confirmed++,onPaid:()=>handoffs++});
+  await view.review();
+  view.selectMethod('card','B');
+  assert.equal(view.state.account,'A');
+  assert.match(JSON.stringify(view.render()),/before using the separate card terminal for 70 den/);
+  await view.pay(true);
+  assert.equal(calls.length,0);
+  await button(view.render(),'Prepare Card A trial').props.onClick();
+  assert.equal(calls.length,1);
+  assert.match(JSON.stringify(view.render()),/Use the separate terminal once for 70 den/);
+  assert.equal(button(view.render(),'Register real Card A sale on PF700'),null);
+  await view.physicalCardAction('register');
+  view.selectMethod('cash','B');
+  assert.equal(view.state.method,'card');
+  await button(view.render(),'Confirm observed terminal approval').props.onClick();
+  assert.equal(calls.length,2);
+  assert.match(JSON.stringify(view.render()),/terminal approved 70 den.*print a real PF700 receipt/);
+  assert.equal(button(view.render(),'Terminal declined or cancelled'),null);
+  assert.equal(confirmed,0);
+  await button(view.render(),'Register real Card A sale on PF700').props.onClick();
+  await view.physicalCardAction('register');
+  assert.deepEqual(calls,[{...payment,preparePhysicalCard:true},
+    {...payment,physicalCardIntentId:prepared.id,confirmPhysicalCard:true},
+    {...payment,physicalCardIntentId:prepared.id}]);
+  assert.equal(view.state.receipt.reference,cardFiscal.reference);
+  assert.equal(confirmed,1);
+  await Promise.all([view.finishReceipt(),view.finishReceipt()]);
+  assert.equal(handoffs,1);
+});
+
+test('only a fresh terminal session can record an observed decline and release this bill', async () => {
+  let data=trialBill;
+  const calls=[];
+  const view=trialView(()=>data,async request=>{
+    calls.push(JSON.parse(JSON.stringify(request)));
+    if (request.preparePhysicalCard) {
+      data={...data,physicalCardIntent:prepared,physicalCardAvailable:false};
+      return {ok:true,data:{intentId:prepared.id,declineToken:'test-only'}};
+    }
+    data={...trialBill,physicalCardAvailable:false};
+    return {ok:true};
+  });
+  await view.review(); view.selectMethod('card'); await view.physicalCardAction('prepare');
+  const reopened=trialView(()=>data,()=>assert.fail('Restart must not create another terminal instruction or release an ambiguous intent'));
+  await reopened.review();
+  assert.match(JSON.stringify(reopened.render()),/Check the original terminal transaction for 70 den/);
+  assert.doesNotMatch(JSON.stringify(reopened.render()),/Use the separate terminal once|Prepare Card A trial|Terminal declined or cancelled/);
+  await reopened.physicalCardAction('prepare'); await reopened.physicalCardAction('decline');
+  assert.ok(button(reopened.render(),'Confirm observed terminal approval'));
+  await button(view.render(),'Terminal declined or cancelled').props.onClick();
+  assert.deepEqual(calls.at(-1),{...payment,physicalCardIntentId:prepared.id,declineToken:'test-only'});
+  assert.equal(view.state.method,'');
+  view.selectMethod('cash','A');
+  assert.match(JSON.stringify(view.render()),/Cash checkout is unavailable/);
+  assert.doesNotMatch(JSON.stringify(view.render()),/Confirming Cash A will register a real sale/);
+  view.selectMethod('cash','B');
+  assert.equal(view.state.account,'B');
+});
+
+test('lost prepare or approval reply reopens only the original terminal result or fiscal step',async()=>{
+  let data=trialBill, writes=0;
+  const view=trialView(()=>data,async request=>{
+    writes++;
+    data={...data,physicalCardAvailable:false,physicalCardIntent:request.preparePhysicalCard ? prepared : approved};
+    throw Error('Lost reply');
+  });
+  await view.review(); view.selectMethod('card'); await view.physicalCardAction('prepare');
+  assert.match(JSON.stringify(view.render()),/Check the original terminal transaction/);
+  assert.doesNotMatch(JSON.stringify(view.render()),/Use the separate terminal once|Terminal declined or cancelled/);
+  await view.physicalCardAction('approve');
+  assert.equal(writes,2);
+  assert.match(JSON.stringify(view.render()),/terminal approved 70 den/);
+  assert.ok(button(view.render(),'Register real Card A sale on PF700'));
+  assert.equal(button(view.render(),'Finish recording payment'),null);
+});
+
+test('uncertain or already attempted Card A stays held across reload without any second terminal or fiscal sale', async () => {
+  for (const status of ['uncertain','pending','failed']) {
+    const data={...trialBill,physicalCardIntent:{...approved,canDispatch:false},fiscal:{...cardFiscal,status,reference:null}};
+    const view=trialView(()=>data,()=>assert.fail('No device or terminal retry'));
+    await view.review();
+    assert.ok(view.state.fiscalHold);
+    assert.match(JSON.stringify(view.render()),/terminal approved 70 den/);
+    assert.doesNotMatch(JSON.stringify(view.render()),/Register real Card A sale on PF700|Confirm observed terminal approval|Finish recording payment|retry the same payment method/i);
+    view.selectMethod('cash','B'); await view.pay(); await view.physicalCardAction('register');
+    await button(view.render(),'Reload saved bill').props.onClick();
+    assert.equal(view.state.method,'card');
+  }
+});
+
+test('card recovery finishes only the acknowledged local document and holds a mismatched reply or missing read',async()=>{
+  let data={...trialBill,fiscalMode:undefined,physicalCardControls:undefined,physicalCardUnavailable:true,
+    physicalCardIntent:{...approved,profileMatches:false},fiscal:{...cardFiscal,status:'submitted'}};
+  let reads=0,confirmed=0;
+  const calls=[];
+  const view=dialog({bill:async()=>{
+    if (++reads===2) throw Error('Lost review');
+    return {ok:true,data};
+  },payment:async req=>{
+    calls.push(JSON.parse(JSON.stringify(req)));
+    data={...data,fiscal:{...cardFiscal,reference:'0009999'}};
+    return {ok:true};
+  }},{onConfirmed:()=>confirmed++});
+  await view.review();
+  assert.ok(button(view.render(),'Finish recording payment'));
+  assert.equal(button(view.render(),'Register real Card A sale on PF700'),null);
+  await button(view.render(),'Finish recording payment').props.onClick();
+  await view.physicalCardAction('settle'); await view.pay();
+  assert.deepEqual(calls,[{...payment,acknowledgedDocument:cardFiscal.reference}]);
+  assert.equal(view.state.uncertain,true);
+  await button(view.render(),'Reload saved bill').props.onClick();
+  assert.equal(confirmed,0);
+  assert.equal(view.state.fiscalHold,true);
+  data={...data,physicalCardIntent:undefined,fiscal:cardFiscal};
+  await button(view.render(),'Reload saved bill').props.onClick();
+  assert.equal(confirmed,1);
+  assert.equal(calls.length,1);
+});
+
+test('a mismatched external ledger blocks payment and gives the original slip instruction in both languages',async()=>{
+  for (const [language,warning] of [['en',/Keep the original terminal slip/],['sq',/deshmine fillestare/]]) {
+    const view=trialView(()=>({...trialBill,physicalCardHold:true}),()=>assert.fail('Ledger mismatch must hold all payments'),{language});
+    await view.review();
+    assert.match(JSON.stringify(view.render()),warning);
+    view.selectMethod('cash','B'); view.selectMethod('card'); await view.pay(); await view.physicalCardAction('prepare');
+    assert.equal(view.state.account,'');
+  }
+});
+
+test('repeated clicks and identity loss during terminal preparation never reveal a new terminal instruction',async()=>{
+  let resolve,current=true,reads=0,writes=0,leases=0;
+  const view=dialog({bill:async()=>{reads++;return {ok:true,data:trialBill};},
+    payment:()=>{writes++;return new Promise(done=>{resolve=done;});}},
+    {isCurrent:()=>current,beginOperation:()=>{leases++;return {};},endOperation:()=>leases--});
+  await view.review(); view.selectMethod('card');
+  const first=view.physicalCardAction('prepare'); await view.physicalCardAction('prepare');
+  current=false;
+  resolve({ok:true,data:{intentId:prepared.id,declineToken:'test-only'}}); await first;
+  assert.equal(writes,1); assert.equal(reads,1); assert.equal(leases,0);
+  assert.doesNotMatch(JSON.stringify(view.render()),/Use the separate terminal once/);
+});
+
+test('a new ledger mismatch reported by Cash A preparation or an ordinary payment locks all tenders',async()=>{
+  for (const account of ['A','B']) {
+    let requests=0;
+    const view=trialView(()=>bill,async()=>{requests++;return {ok:false,fiscalStatus:'cardTrialHold'};});
+    await view.review(); view.selectMethod('cash',account); await view.pay();
+    assert.match(JSON.stringify(view.render()),/Payments are on hold.*Keep the original terminal slip/);
+    view.selectMethod('cash',account==='A'?'B':'A'); await view.pay();
+    assert.equal(view.state.account,account); assert.equal(requests,1);
+  }
 });

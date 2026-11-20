@@ -75,6 +75,10 @@ function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = (
         catch (error) { if(db.isTransaction) db.exec('ROLLBACK'); throw error; }
       }
       if (req.action === 'walletExecute') req=wallet.preparedOperation(db,req.requestId,actor);
+      if (['shiftClose','close','walletShiftClose','walletDayClose'].includes(req.action) &&
+          require('./supervised-card').blocksClose(db)) {
+        return {ok:false,error:scope === 'B' ? 'period-blocked' : 'checkout-unresolved'};
+      }
       if (req.action.startsWith('wallet') && req.action !== 'walletDayClose') return wallet.handle(req,db,scope,actor);
       if (req.action === 'shiftList') {
         const result=shifts.handle(req,db,session,scope,actor);

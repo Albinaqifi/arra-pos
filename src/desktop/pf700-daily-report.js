@@ -4,21 +4,10 @@ const { randomInt } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
 const { windowsPipe, probeIdentity, validSerial } = require('./pf700-windows-checkout');
+const { integer, hundredths, paymentRegisters } = require('./pf700-payment-registers');
 
 function requireMatch(condition) {
   if (!condition) throw Error('PF700 report evidence did not match');
-}
-
-function integer(field, width) {
-  requireMatch(typeof field === 'string' && field.length === width && /^ *[0-9]+$/.test(field));
-  return Number(field);
-}
-
-// The identified 1.00MK implementation uses implied hundredths in its
-// numeric replies. Accept only that representation on this protocol path.
-function hundredths(field) {
-  requireMatch(typeof field === 'string' && /^ *[+-]?[0-9]+$/.test(field) && field.length <= 13);
-  return Number(field);
 }
 
 function registerAmount(field) {
@@ -84,14 +73,14 @@ function readMemoryRecord(text) {
 }
 
 function checkRegisters(dailyTotals, paymentTotals, expected, closure) {
-  const totals = dailyTotals.split(','), paid = paymentTotals.split(',');
-  requireMatch(totals.length === 4 && paid.length === 6 &&
+  const totals = dailyTotals.split(','), paid = paymentRegisters(paymentTotals);
+  requireMatch(totals.length === 4 &&
     registerAmount(totals[0]) === expected.total * 100 && registerAmount(totals[1]) === 0 &&
     integer(totals[2], 4) === expected.receiptCount && integer(totals[3], 4) === 0);
   // Arra's card receipt uses D (debit). Credit and cheque are separate PF700 registers.
-  requireMatch(paid.slice(0, 4).map(hundredths).every((value, index) =>
+  requireMatch(paid.amounts.every((value, index) =>
     value === [expected.cash * 100, 0, expected.card * 100, 0][index]) &&
-    integer(paid[4], 4) === closure && integer(paid[5], 4) === expected.receiptCount + 1);
+    paid.closure === closure && paid.nextReceipt === expected.receiptCount + 1);
 }
 
 function checkTaxTotals(amounts, expected) {

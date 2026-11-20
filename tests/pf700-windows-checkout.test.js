@@ -254,36 +254,71 @@ test('PowerShell helper reads framed replies and disposes a synthetic port on su
   const helper = path.resolve(__dirname, '../src/desktop/pf700-checkout-exchange.ps1').replaceAll("'", "''");
   const probe = encodeRequest({ sequence: 32, command: 90, data: Buffer.from('0') }).toString('hex');
   const frame = wrapped(32, 90, false, '1.00 231014 1200,FFFF,0000,1,' + serial);
+  const close = encodeRequest({ sequence: 33, command: 56 }).toString('hex');
+  const closeFrame = wrapped(33, 56, false, '0003,0001');
   const script = `
     $ErrorActionPreference='Stop'
     . '${helper}'
     class FakePort {
       [int]$BytesToRead=0; [int]$Opens=0; [int]$Writes=0; [bool]$Disposed=$false
       [Collections.Generic.Queue[int]]$Bytes=[Collections.Generic.Queue[int]]::new()
+      [byte[]]$CloseReply=@()
+      [bool]$AlwaysBusy=$false
+      [int]$FinalByteDelay=0
       [void]Open() { $this.Opens++ }
-      [void]Write([byte[]]$bytes,[int]$start,[int]$length) { $this.Writes++ }
-      [int]ReadByte() { return $this.Bytes.Dequeue() }
+      [void]Write([byte[]]$bytes,[int]$start,[int]$length) {
+        $this.Writes++
+        if ($bytes[3] -eq 56) {
+          for ($i=0; $i -lt 49; $i++) { $this.Bytes.Enqueue(0x16) }
+          foreach ($b in $this.CloseReply) { $this.Bytes.Enqueue($b) }
+        }
+      }
+      [int]ReadByte() {
+        if ($this.AlwaysBusy) { return 0x16 }
+        if ($this.Bytes.Count -eq 0) { return -1 }
+        if ($this.Bytes.Count -eq 1 -and $this.FinalByteDelay) { [Threading.Thread]::Sleep($this.FinalByteDelay) }
+        return $this.Bytes.Dequeue()
+      }
       [void]Dispose() { $this.Disposed=$true }
     }
-    foreach ($case in @('valid','noise','oversized','busy','invalid-first','EOF')) {
+    foreach ($case in @('valid','noise','oversized','busy-EOF','invalid-first','EOF','slow-close','lost-close')) {
       $port=[FakePort]::new()
       $inputText='${probe}' + [Environment]::NewLine
-      if ($case -eq 'valid') { @(22,22,${[...frame].join(',')}) | ForEach-Object {$port.Bytes.Enqueue($_)} }
+      if ($case -in @('valid','slow-close','lost-close')) { @(22,22,${[...frame].join(',')}) | ForEach-Object {$port.Bytes.Enqueue($_)} }
+      if ($case -in @('slow-close','lost-close')) { $inputText += '${close}' + [Environment]::NewLine }
+      if ($case -eq 'slow-close') { $port.CloseReply=@(${[...closeFrame].join(',')}) }
       if ($case -eq 'noise') {$port.BytesToRead=1}
       if ($case -eq 'oversized') {$port.Bytes.Enqueue(1);$port.Bytes.Enqueue(255)}
-      if ($case -eq 'busy') {1..49 | ForEach-Object {$port.Bytes.Enqueue(22)}}
+      if ($case -eq 'busy-EOF') {1..49 | ForEach-Object {$port.Bytes.Enqueue(22)}}
       if ($case -eq 'invalid-first') {$inputText=$inputText.Replace('205a','2038')}
       if ($case -eq 'EOF') {$inputText=''}
       $writer=[IO.StringWriter]::new()
       Invoke-Pf700CheckoutPort $port ([IO.StringReader]::new($inputText)) $writer
       $reply=$writer.ToString().Trim()
       if (!$port.Disposed) {throw 'Leaked port'}
+      if ($case -in @('slow-close','lost-close')) {
+        $expected = if ($case -eq 'slow-close') { '${closeFrame.toString('hex').toUpperCase()}' } else { 'FAIL' }
+        if ($reply -cne ('${frame.toString('hex').toUpperCase()}' + [Environment]::NewLine + $expected) -or $port.Writes -ne 2) {
+          throw "$case did not return the expected result with exactly one close write"
+        }
+        continue
+      }
       if ($case -eq 'valid' -and ($reply -cne '${frame.toString('hex').toUpperCase()}' -or $port.Writes -ne 1)) {throw 'Invalid reply'}
       if ($case -notin @('valid','EOF') -and $reply -cne 'FAIL') {throw 'Accepted bad reply'}
       if ($case -in @('invalid-first','EOF') -and $port.Opens -ne 0) {throw 'Unexpected port open'}
       if ($case -eq 'noise' -and $port.Writes -ne 0) {throw 'Unexpected write'}
       if ($port.Writes -gt 1) {throw 'Unexpected replay'}
-    }`;
+    }
+    foreach ($case in @('endless-busy','late-final-byte')) {
+      $port=[FakePort]::new()
+      if ($case -eq 'endless-busy') { $port.AlwaysBusy=$true } else {
+        @(${[...closeFrame].join(',')}) | ForEach-Object {$port.Bytes.Enqueue($_)}
+        $port.FinalByteDelay=250
+      }
+      try { $null=Read-Pf700CheckoutReply $port 100; throw 'Accepted overdue reply' }
+      catch { if ($_.Exception.Message -cne 'Reply deadline exceeded') { throw } }
+    }
+    exit 0`;
   const shell = path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
   const result = spawnSync(shell, ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
     { encoding: 'utf8', windowsHide: true, timeout: 10000 });

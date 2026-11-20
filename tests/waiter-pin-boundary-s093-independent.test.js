@@ -6,7 +6,7 @@ const path = require('node:path');
 const { randomBytes, randomInt } = require('node:crypto');
 const { openDatabase } = require('../src/desktop/database');
 const { seedSampleIdentities } = require('../src/desktop/sample-accounts');
-const { createSession, hashPassword } = require('../src/desktop/session');
+const { createSession } = require('../src/desktop/session');
 const { registerEmployeeConfig } = require('../src/desktop/employee-config');
 
 test('valid direct PIN management requests require Combined and preserve the current entry flow', t => {
@@ -38,8 +38,8 @@ test('valid direct PIN management requests require Combined and preserve the cur
   assert.equal(call(reset, {}).ok, false);
   assert.equal(call(reset).ok, true);
   const stored = db.prepare('SELECT pin_salt, pin_hash FROM local_users WHERE id=?').get(waiter);
-  assert.deepEqual(Buffer.from(stored.pin_hash), hashPassword(replacement, stored.pin_salt));
-  assert.notDeepEqual(Buffer.from(stored.pin_hash), Buffer.from(replacement));
+  assert.equal(stored.pin_salt.length, 0);
+  assert.deepEqual(Buffer.from(stored.pin_hash), Buffer.from(replacement));
   const listed = call({ action: 'list' }).data;
   assert.deepEqual(Object.keys(listed.users.find(user => user.id === waiter)).sort(),
     ['active', 'hasPin', 'id', 'isTransfer', 'pending', 'pinVerified', 'restaurant', 'scope', 'username'].sort());

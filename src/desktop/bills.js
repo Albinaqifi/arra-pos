@@ -31,10 +31,18 @@ function snapshot(db, orderId) {
   return { ...data, fingerprint: createHash('sha256').update(JSON.stringify(data)).digest('hex') };
 }
 function attachFiscalPreview(db, bill, adapter) {
+  require('./supervised-card').attachPreview(db,bill,adapter);
   if (!adapter) return;
   bill.fiscalMode = adapter.mode;
+  if (adapter.fastPayVersion === 1) {
+    bill.fastPayVersion = 1;
+    if (bill.id && db.prepare('SELECT 1 FROM fast_pay_v1_legacy_bills WHERE bill_id=?').get(bill.id)) bill.fastPayLegacyHeld = true;
+  }
   if (adapter.mode === 'simulation' && adapter.simulationRecoveryControls === true && !isCommissioned(db)) bill.simulationRecoveryControls = true;
-  if (adapter.mode === 'device') { bill.fiscalDomesticProduct = adapter.domesticProduct; bill.physicalCashControls = true; }
+  if (adapter.mode === 'device') {
+    bill.fiscalDomesticProduct = adapter.domesticProduct;
+    if (!adapter.supervisedCardTrial) bill.physicalCashControls = true;
+  }
   if (adapter.requireOrigins) bill.fiscalRequiresOrigins = true;
   const groups = new Map(db.prepare(`SELECT t.item_id, t.tax_group FROM order_item_fiscal_tax t
     JOIN order_items i ON i.id=t.item_id WHERE i.order_id=?`).all(bill.orderId).map(row => [row.item_id, row.tax_group]));
@@ -47,7 +55,7 @@ function attachFiscalPreview(db, bill, adapter) {
   }
 }
 
-function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = null) {
+function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = null, journalRecovery = null) {
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       !['review','generate'].includes(request.action) || !Number.isSafeInteger(request.orderId) || request.orderId <= 0 ||
@@ -63,9 +71,14 @@ function registerBills(ipcMain, isAllowedSender, db, session, fiscalCheckout = n
           if (request.action === 'generate' && existing.fingerprint !== request.fingerprint) throw Error('Bill already generated');
           const bill = db.prepare('SELECT id, order_id AS orderId, total, generated_at AS generatedAt, fingerprint FROM bills WHERE id=?').get(existing.id);
           bill.lines = db.prepare('SELECT item_id AS itemId, name, unit_price AS unitPrice, quantity, modifiers FROM bill_lines WHERE bill_id=? ORDER BY id').all(existing.id).map(l => ({ ...l, modifiers: JSON.parse(l.modifiers) }));
-          attachFiscalPreview(db, bill, fiscalCheckout);
-          const fiscal = readFiscalCheckout(db, bill.id);
+          const journal = journalRecovery?.(db, bill.id);
+          if (journalRecovery && !journal) {
+            db.exec('ROLLBACK');
+            return {ok:false,error:'Could not match the approved receipt to this bill. Ask for help.'};
+          }
+          const fiscal = readFiscalCheckout(db, bill.id, journal);
           if (fiscal) bill.fiscal = fiscal;
+          attachFiscalPreview(db, bill, fiscalCheckout);
           if (db.prepare('SELECT 1 FROM simulated_card_approvals WHERE bill_id=?').get(bill.id)) bill.simulatedCardApproval = true;
           const intent = db.prepare('SELECT id FROM simulated_card_open_intents WHERE bill_id=?').get(bill.id);
           if (intent) bill.simulatedCardIntent = {id:intent.id};

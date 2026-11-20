@@ -133,6 +133,8 @@ export class QueueJobs extends React.Component {
       return h('details', { style: { padding: '6px 20px', maxHeight: 180, overflow: 'auto' } },
         h('summary', null, this.t(title), issues ? ' · ' + this.t('{count} need attention', { count: issues }) : ''), controls);
     }
-    return h('section', { style: { padding: 12, background: '#fff7ed' } }, settings, h('strong', null, this.t(title)), controls);
+    return h('section', { style: { padding: 12, background: '#fff7ed' } }, settings, h('strong', null, this.t(title)), controls,
+      d?.barBills?.length > 0 && h('section', null, h('strong', null, this.t('Account B bill'), ' · ', this.t('Bar')),
+        d.barBills.map(job => this.renderJob(job, false))));
   }
 }

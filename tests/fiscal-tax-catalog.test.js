@@ -23,15 +23,16 @@ function fixture(t, open = openDatabase) {
   };
 }
 
-test('105 dine-in seed products carry the confirmed VAT group, including both groups at the bar', t => {
+test('103 dine-in seed products carry the confirmed VAT group, including both groups at the bar', t => {
   const { db } = fixture(t);
   seedArraMenu(db);
   const groups = db.prepare(`SELECT p.destination, t.tax_group, count(*) AS n FROM menu_products p
     LEFT JOIN menu_product_fiscal_tax t ON t.product_id=p.id GROUP BY p.destination, t.tax_group ORDER BY 1,2`).all();
   assert.deepEqual(groups.map(g => [g.destination, g.tax_group, g.n]),
-    [['bar', 'А', 16], ['bar', 'В', 27], ['kitchen', 'В', 62]]);
-  for (const row of db.prepare('SELECT p.category_id, t.tax_group FROM menu_products p JOIN menu_product_fiscal_tax t ON p.id=t.product_id').all()) {
-    assert.equal(row.tax_group, ['arra-category-12', 'arra-category-13', 'arra-category-14', 'arra-category-15'].includes(row.category_id) ? 'А' : 'В');
+    [['bar', 'А', 16], ['bar', 'В', 25], ['kitchen', 'В', 23], ['kitchen2', 'В', 39]]);
+  for (const row of db.prepare(`SELECT p.name, c.name AS category, t.tax_group FROM menu_products p
+    JOIN menu_categories c ON c.id=p.category_id JOIN menu_product_fiscal_tax t ON p.id=t.product_id`).all()) {
+    assert.equal(row.tax_group, row.category === 'Alcoholic Drinks' ? 'А' : 'В', row.name);
   }
 });
 
@@ -127,10 +128,11 @@ test('origin classification is authorized, audited and frozen on order entry', t
 });
 
 test('v46 upgrade leaves existing bill origins unknown and preserves its lines', t => {
-  const f=fixture(t,historicalDatabase(46).openDatabase); seedArraMenu(f.db);
+  const f=fixture(t,historicalDatabase(46).openDatabase); seedArraMenu(f.db, { applyOrigins: false });
   f.db.exec("INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO bill_lines(bill_id,item_id,name,unit_price,quantity,modifiers) VALUES(1,1,'Espresso',70,1,'[]')");
   f.reopen();
-  assert.equal(f.db.prepare('SELECT count(*) n FROM menu_product_fiscal_origin').get().n,0);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM menu_product_fiscal_origin').get().n,103);
+  assert.equal(f.db.prepare("SELECT domestic FROM menu_product_fiscal_origin WHERE product_id='arra-product-11-0'").get().domestic,1);
   assert.equal(f.db.prepare('SELECT count(*) n FROM order_item_fiscal_origin').get().n,0);
   assert.equal(f.db.prepare('SELECT total FROM bills WHERE id=1').get().total,70);
   const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
@@ -152,7 +154,7 @@ test('v46 upgrade leaves existing bill origins unknown and preserves its lines',
 });
 
 test('an existing fiscal attempt freezes even missing origin and hides the classification action', t => {
-  const f=fixture(t); const db=f.db; seedArraMenu(db);
+  const f=fixture(t); const db=f.db; seedArraMenu(db, { applyOrigins: false });
   db.exec("UPDATE financial_scopes SET scope='combined' WHERE user_id=1; INSERT INTO user_permissions VALUES(1,'menu.change'); INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'); INSERT INTO order_items(id,order_id,product_id,name,unit_price,quantity,status) VALUES(1,1,'arra-product-11-0','Espresso',70,1,'sent'); INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,70,'old'); INSERT INTO fiscal_checkout_sales VALUES(1,1,'simulation',NULL,'cash','{}',1); INSERT INTO fiscal_checkout_attempts VALUES(1,1,1)");
   const handlers={}, event={}, ipc={handle:(channel,fn)=>handlers[channel]=fn};
   const session={currentUserId:()=>1,authenticatedUserId:()=>1};

@@ -1,0 +1,22 @@
+Arra original espresso recovery check
+
+Use the Windows account that ran the original espresso recovery. Close Arra
+and its recovery tools. Extract this entire ZIP into its own folder and
+double-click Check-Original-Recovery.cmd. You can use it with the printer
+disconnected. Share only the single result line shown on screen.
+
+The check reads the original local records. A MATCH means the original bill,
+receipt evidence and Cash A payment agree across both files. The recovery
+journal has four stages:
+
+1. The finisher had matched the open unpaid totals and saved its intent to
+   tender cash. At that point cash acceptance was still pending.
+2. Before requesting closure it had checked the cash response and read back
+   one item with its full amount tendered.
+3. It had received the printer's close acknowledgement with its counters.
+4. It had checked the closed, paid state and the next document number.
+
+These are historical checks on one supervised sale. The files contain no
+electronic-journal text from the open receipt. If the result is MISSING,
+INCOMPLETE or INCONCLUSIVE, preserve the files and report that result.
+You can leave the business day open.

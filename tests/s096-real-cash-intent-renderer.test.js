@@ -98,12 +98,81 @@ test('a stale identity response cannot start the device after preparation',async
   assert.equal(calls.length,1);assert.equal(calls[0].preparePhysicalCash,true);assert.equal(starts,ends);
 });
 
-test('a saved acknowledged physical receipt finalizes locally without a new preparation',async()=>{
-  const calls=[];const view=dialog({bill:async()=>({ok:true,data:{...base,fiscal:{...fiscal,status:'submitted'}}}),payment:async request=>{
-    calls.push(keys(request));return {ok:true,data:{fiscal}};
-  }});
+for (const profile of ['device','different device','no printer','simulation']) {
+  test(`saved physical acknowledgement finishes locally after a lost settlement reply with ${profile}`,async()=>{
+    const calls=[];
+    const data={...base, fiscalMode:profile==='different device'?'device':profile==='no printer'?undefined:profile,
+      physicalCashIntent:{...intent,profileMatches:profile==='device'}, simulationRecoveryControls:profile==='simulation',
+      fiscal:{...fiscal,status:'submitted'}};
+    const view=dialog({bill:async()=>({ok:true,data}),payment:async request=>{
+      calls.push(keys(request));
+      if (calls.length===1) throw Error('Lost local response');
+      return {ok:true,data:{fiscal}};
+    }});
+    await view.review();
+    for (let i=0;i<2;i++) {
+      const output=JSON.stringify(view.render());
+      assert.doesNotMatch(output,/Register cash sale|Check printer status|Cancel prepared checkout|uses a simulated printer|Check simulated receipt/);
+      const finish=find(view.render(),'button',n=>n.children.includes('Finish recording payment'));
+      assert.ok(finish && !finish.props.disabled);
+      view.selectMethod('cash','B');
+      assert.equal(view.state.account,'A');
+      await finish.props.onClick();
+    }
+    const localRequest={billId:1,method:'cash',account:'A',acknowledgedDocument:fiscal.reference};
+    assert.deepEqual(calls,[localRequest,localRequest]);
+    assert.equal(view.state.receipt.status,'accepted');
+  });
+}
+
+test('local settlement retains its document on a mismatched reply and clears the bill when access is withdrawn',async()=>{
+  const calls=[], locks=[];
+  const data={...base,physicalCashIntent:intent,fiscal:{...fiscal,status:'submitted'}};
+  const view=dialog({bill:async()=>({ok:true,data}),payment:async request=>{
+    calls.push(keys(request));
+    return calls.length===1 ? {ok:true,data:{fiscal:{...fiscal,reference:'0000009'}}} : {ok:false,error:'Access denied'};
+  }},{onUncertain:value=>locks.push(value)});
   await view.review();await view.pay();
-  assert.deepEqual(calls,[{billId:1,method:'cash',account:'A'}]);assert.equal(view.state.receipt.status,'accepted');
+  assert.equal(view.state.uncertain,true);
+  assert.equal(view.state.receipt,undefined);
+  await view.pay();
+  assert.deepEqual(calls[0],calls[1]);
+  assert.equal(calls[1].acknowledgedDocument,fiscal.reference);
+  assert.equal(view.state.data,null);
+  assert.equal(view.state.error,'Access denied');
+  assert.equal(locks.at(-1),false);
+});
+
+test('the waiter reopens the journal-confirmed Cash A receipt and retries only its local finish', async () => {
+  const calls = [];
+  const lines = [{...line,name:'Espresso',unitPrice:70,domesticProduct:true},
+    {...line,itemId:4,name:'Macchiato',unitPrice:80,domesticProduct:true}];
+  const confirmed = {...fiscal, reference:'0000030',receipt:{domesticProduct:false,lines},
+    evidence:{kind:'numbered-journal',documentNumber:'0000030'}};
+  // The recovery package has no active printer profile. Bill review still
+  // includes the frozen receipt with both original VAT groups and origins.
+  const data = {id:2,total:150,lines:lines.map(({taxRate,taxGroup,domesticProduct,...billLine}) => billLine),
+    physicalCashIntent:{...intent,profileMatches:false},fiscal:{...confirmed,status:'submitted'}};
+  const view = dialog({bill:async () => ({ok:true,data}), payment:async request => {
+    calls.push(keys(request));
+    if (calls.length === 1) throw Error('Lost local response');
+    return {ok:true,data:{id:1,fiscal:confirmed}};
+  }});
+  await view.review();
+  assert.equal(calls.length,0);
+  for (let i = 0; i < 2; i++) {
+    const output = JSON.stringify(view.render());
+    assert.match(output,/journal confirms receipt 0000030/);
+    assert.match(output,/150 den/);
+    assert.equal(output.match(/Macedonian-product mark included/g)?.length,2);
+    assert.equal(output.match(/VAT 10%/g)?.length,2);
+    assert.doesNotMatch(output,/acknowledged|Check printer status|Register cash sale|Macedonian-product mark omitted/i);
+    const button = find(view.render(),'button',n => n.children.includes('Finish recording payment'));
+    assert.ok(button && !button.props.disabled);
+    await button.props.onClick();
+  }
+  assert.deepEqual(calls,Array(2).fill({billId:2,account:'A',method:'cash',acknowledgedDocument:'0000030'}));
+  assert.equal(view.state.receipt.status,'accepted');
 });
 
 test('a definitely failed historic attempt is prepared again before another printer request',async()=>{

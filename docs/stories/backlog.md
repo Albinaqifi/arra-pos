@@ -1,5 +1,25 @@
 # Development backlog
 
+### S-103 — Open restaurant RC4 from a desktop icon
+
+For the existing enrolled RC4 installation, provide a Windows application that creates a desktop shortcut and opens the POS from that shortcut. An operator enters their existing PF700 settings and authorizes live startup once in a graphical setup screen. Protect the saved settings for the original Windows user. Starting from the icon opens the same checkout with no console or repeated setup. Reopening setup allows the operator to update the settings. Preserve the original restaurant data, receipt recovery, payment routes and Bar queue. Verify with disposable settings, an actual Windows shortcut and the RC4 package.
+
+### S-102 — Print confirmed Cash B bills on the bar printer
+
+In the restaurant checkout, confirming a new Cash B payment sends the full non-fiscal customer bill once to the Windows queue configured for Bar. Use the existing Bar queue setting. Sending an order still prints its separate preparation tickets.
+
+Repeat confirmation and restart must preserve one payment and avoid automatic duplicate paper. A failed or uncertain print must leave the paid table released and allow an authorized operator to check the paper and retry just that bill. Preserve account access, corrections, historical records and the behavior of training and commissioning modes. The owner requested one Windows package combining this change with the S-100 and S-101 Pay button. Verify immediate local settlement for both A tenders, background PF700 receipts, and Cash B paper from the same release.
+
+### S-100 — Pay Cash A immediately and send one fiscal receipt
+
+For a new, eligible Account A bill on the enrolled Windows POS, the waiter chooses Cash A and presses Pay. In one local transaction, record one cash payment for the bill, assign it to the shift and business day, complete the order, and save its fiscal receipt for dispatch. Dismiss the bill and free the table as soon as the transaction succeeds. Preserve owner checks, tax groups, origin and quantities. A failed transaction must leave the bill available and send nothing.
+
+Submit the receipt in the background on the enrolled PF700. Keep a durable claim before the first printer operation. Repeated clicks, competing sessions, crashes and a missing printer reply must never produce a second payment or repeat an attempted receipt. A distinct new bill can proceed when the printer confirms it is idle. Show unresolved receipts in the Combined Account A preview. Preserve already printed legacy bills and fiscal day-close evidence.
+
+### S-101 — Pay Card A with a separate card terminal
+
+Use the S-100 Pay flow for Card A. Record the full amount as card on Account A and exclude it from expected cash. The waiter handles the bank payment separately at the physical terminal. Arra can complete the order without terminal approval and sends a single card-tender receipt to the enrolled PF700. Exercise duplicate and conflicting tenders, uncertain printer results, terminal independence, and amounts in Account A reporting. Preserve Cash B and existing card-trial history.
+
 ### S-087 — Make closing the shared business day clear
 
 **Goal:** Simplify the shared business-day close into a clear review, confirmation and completion flow. The operator should know which day is being closed, what needs attention, and whether the day and its restaurant report have succeeded. **Depends on:** existing S-026, S-057, S-058 and S-061 behavior; inspect their implementation and outstanding verification before starting. Preserve the existing worktree, including any uncommitted S-058 recovery changes.
@@ -808,6 +828,7 @@ The [plan and design brief](optional-shifts-plan.md) applies to S-088–S-091. S
 
 **Owner decisions and transition**
 
+- Owner-requested performance follow-up: new or reset waiter PINs may be stored directly for fast local matching. Existing salted waiter PINs remain usable until reset, including a reset to the same digits. This supersedes the waiter-PIN plaintext restriction below; passwords and manager/owner PINs retain their existing hashing. Preserve uniqueness and all authorization checks across both formats.
 - This request supersedes the earlier FLOOR 02 baseline that any waiter may serve any table. There is no waiter-to-waiter table handover in this story. The Manager button opens only the existing restricted cash B-to-A correction workflow; it does not authorize a handover. Keep Combined-only staff credential management and existing owner financial scopes.
 - Ask for the PIN when a table is selected from the grid. On successful send or payment, return to the table grid in place of the former waiter-selection screen. A subsequent table selection asks for a PIN. Preserve the existing recovery flow when an operation fails or its outcome is unknown.
 - Existing open orders may not have a reliable assigned waiter, because the current system permits several waiters to use one order. Preserve these orders, provide a safe documented transition, and do not silently infer ownership from incomplete history. Resolve an owner decision only if an actual transition constraint cannot be handled safely.

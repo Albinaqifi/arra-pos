@@ -1,4 +1,12 @@
 const { seedFiscalTax } = require('./fiscal-tax-v44');
+const { arraDestination } = require('./arra-menu-v52');
+const { applyArraOrigins } = require('./arra-origin-v53');
+
+// The VAT catalog uses the original product IDs even when drinks share a menu category.
+function drinksFromSection(section, products) {
+ return products.map(([name, price], index) => [name, price, `arra-product-${section}-${index}`]);
+}
+
 // Menu transcribed from the supplied Arra menus; prices are whole denars.
 const sections = [
  ['Sallata', [['Sallatë Arra',490],['Sallatë Caesar',390],['Sallatë Caprese',330],['Sallatë e Gjelbër',320],['Sallatë Greke',280],['Sallatë Panxhar',240],['Taratur',200],['Domate me Qepë',170]]],
@@ -10,12 +18,24 @@ const sections = [
  ['Supa', [['Supë Viçi',190],['Supë Domatesh',170]]], ['Për Fëmijë', [['Gishtërinjë Pule',220],['Pizza për Fëmijë',180]]],
  ['Ëmbëlsira', [['Veri / Jug',250],['Bakllavë me Akullore',190],['Mollë në Avull',130]]],
  ['Shtesa', [['Spec Djegës',50],['Ullinj',50],['Sos me Piper të Gjelbër',100],['Sos me Kërpudha',100],['Sos Chimichurri',100],['Krem Gorgonzola',200]]],
- ['Pije Freskuese', [['Ujë pa Gaz 0.75 l',150],['Ujë pa Gaz 0.25 l',60],['Ujë me Gaz 0.25 l',60],['Coca-Cola Classic',100],['Coca-Cola Zero',100],['Schweppes Bitter Lemon',100],['Schweppes Zero',100],['Schweppes Tonic',100],['Schweppes Grapefruit',100],['Fanta Orange',100],['Fanta Shokata',100],['Sprite',100],['Ice Tea',120],['Lëng Mollë',120],['Lëng Portokall',120],['Lëng Pjeshkë',120],['Lëng Fruta Mali',120],['Lëng Natyral Portokall',180],['Lëng Natyral Mollë',180],['Lëng Natyral Limon',180],['Red Bull',200]]],
+ ['Pije Freskuese', [['Ujë pa Gaz 0.75 l',150],['Ujë pa Gaz 0.25 l',60],['Ujë me Gaz 0.25 l',60],['Coca-Cola Classic',100],['Coca-Cola Zero',100],['Schweppes Bitter Lemon',100],['Schweppes Zero',100],['Schweppes Tonic',100],['Schweppes Grapefruit',100],['Fanta Orange',100],['Fanta Shokata',100],['Sprite',100],['Ice Tea',120],['Lëng Mollë',120],['Lëng Portokall',120],['Lëng Pjeshkë',120],['Lëng Fruta Mali',120],['Leng I shtrydhur',180],['Red Bull',200,'arra-product-10-20']]],
  ['Kafe & Çaj', [['Espresso',70],['Macchiato',80],['Macchiato e Madhe',90],['Cappuccino',100],['Nescafé',100],['Çaj me Mjaltë',80]]],
- ['Birrë', [['Heineken',180],['Peja',180]]], ['Verë', [['Muskat Temjanika e bardhë 0.20 l',420],['Muskat Temjanika e bardhë 0.70 l',1850],['Alexandria Cuvée e bardhë 0.20 l',360],['Alexandria Cuvée e bardhë 0.70 l',1400],['Cabernet Sauvignon e kuqe 0.20 l',420],['Cabernet Sauvignon e kuqe 0.70 l',1850],['Alexandria Cuvée Rosé 0.20 l',360],['Alexandria Cuvée Rosé 0.70 l',1400]]],
- ['Raki', [['Raki Rrushi Bovin',110],['Raki Ftoi Akov',200]]], ['Pije të Forta', [['Chivas Regal',320],["Jack Daniel's",300],['Hennessy',330],['Jägermeister',200]]]
+ ['Alcoholic Drinks', [
+   ...drinksFromSection(12, [['Heineken',180],['Peja',180]]),
+   ...drinksFromSection(13, [['Muskat Temjanika e bardhë 0.20 l',420],['Muskat Temjanika e bardhë 0.70 l',1850],['Alexandria Cuvée e bardhë 0.20 l',360],['Alexandria Cuvée e bardhë 0.70 l',1400],['Cabernet Sauvignon e kuqe 0.20 l',420],['Cabernet Sauvignon e kuqe 0.70 l',1850],['Alexandria Cuvée Rosé 0.20 l',360],['Alexandria Cuvée Rosé 0.70 l',1400]]),
+   ...drinksFromSection(14, [['Raki Rrushi Bovin',110],['Raki Ftoi Akov',200]]),
+   ...drinksFromSection(15, [['Chivas Regal',320],["Jack Daniel's",300],['Hennessy',330],['Jägermeister',200]])
+ ]]
 ];
-function seedArraMenu(db) {
+
+const steaks = new Set(['Ribeye Black Angus', 'Tomahawk Viçi', 'Biftek Viçi']);
+const doneness = ['doneness', 'Doneness', ['Rare', 'Medium rare', 'Medium', 'Medium well', 'Well done']];
+const grillGroups = [
+ ['group-0', 'Shoqëruesit', ['Zarzavate', 'Patate të pjekura', 'Patatina të ëmbla', 'Bagetë me hudhër', 'Pa shoqërues']],
+ ['group-1', 'Sosërat', ['Pepe verde', 'Sos me kërpudha', 'Krem gorgonzola', 'Sos chimichurri', 'Pa sos']]
+];
+
+function seedArraMenu(db, { applyOrigins = true } = {}) {
  db.exec('BEGIN IMMEDIATE');
  try {
   const category = db.prepare('INSERT INTO menu_categories(id,name,active,parent_id,sort_order) VALUES(?,?,1,?,?)');
@@ -25,19 +45,28 @@ function seedArraMenu(db) {
   category.run('arra-food','Food',null,0);
   category.run('arra-drinks','Drinks',null,1);
   sections.forEach(([name,items], i) => {
-   const categoryId = `arra-category-${i}`; category.run(categoryId,name,i >= 10 ? 'arra-drinks' : 'arra-food',i >= 10 ? i - 10 : i);
-   items.forEach(([label,price], j) => {
-    const id = `arra-product-${i}-${j}`; product.run(id,categoryId,label,price,j,i >= 10 ? 'bar' : 'kitchen');
+   const categoryId = `arra-category-${i}`;
+   const rootId = i >= 10 ? 'arra-drinks' : 'arra-food';
+   category.run(categoryId,name,rootId,i >= 10 ? i - 10 : i);
+   items.forEach(([label,price,originalId], j) => {
+    const id = originalId ?? `arra-product-${i}-${j}`;
+    product.run(id,categoryId,label,price,j,arraDestination(rootId,categoryId,id));
     seedFiscalTax(db, id);
     if (i === 2) {
       const groupId = `${id}-pasta`; group.run(groupId,id,'Lloji i pastës');
       ['Shpageti','Taljatele'].forEach((choice,k) => option.run(`${groupId}-${k}`,groupId,choice));
     }
-    if (i === 4) [['Shoqëruesit',['Zarzavate','Patate të pjekura','Patatina të ëmbla','Bagetë me hudhër','Pa shoqërues']],['Sosërat',['Pepe verde','Sos me kërpudha','Krem gorgonzola','Sos chimichurri','Pa sos']]].forEach(([title,choices],g) => {
-      const groupId = `${id}-group-${g}`; group.run(groupId,id,title); choices.forEach((choice,k) => option.run(`${groupId}-option-${k}`,groupId,choice));
-    });
+    if (name === 'Në Zgarë & Klasike' && label !== 'Fileto Salmoni') {
+      const groups = steaks.has(label) ? [doneness, ...grillGroups] : grillGroups;
+      for (const [suffix, title, choices] of groups) {
+        const groupId = `${id}-${suffix}`;
+        group.run(groupId,id,title);
+        choices.forEach((choice,k) => option.run(`${groupId}-option-${k}`,groupId,choice));
+      }
+    }
    });
   });
+  if (applyOrigins) applyArraOrigins(db);
   db.exec('COMMIT');
  } catch (error) { db.exec('ROLLBACK'); throw error; }
 }

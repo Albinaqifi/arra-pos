@@ -1,7 +1,7 @@
 const { recordAudit } = require('./audit');
-const { randomBytes, timingSafeEqual } = require('node:crypto');
+const { randomBytes } = require('node:crypto');
 const { hasPermissions } = require('./permissions');
-const { hashPassword, validUsername, validPassword } = require('./session');
+const { hashPassword, matchesPin, waiterPinCredential, validUsername, validPassword } = require('./session');
 const CHANNEL = 'arra:employee-config';
 // Financial access is managed separately by Combined.
 const PERMISSIONS = ['tables.view', 'tables.change', 'menu.view', 'menu.change', 'orders.view', 'orders.change', 'employees.view', 'employees.change', 'orders.correct_sent'];
@@ -10,11 +10,10 @@ const keys = (x, names) => Reflect.ownKeys(x).length === names.length && names.e
 const validId = x => Number.isSafeInteger(x) && x > 0;
 const validPin = (x, length) => typeof x === 'string' && (length === 6 ? /^\d{6}$/ : /^\d{4}$/).test(x);
 function credential(value) { const salt = randomBytes(16); return [salt, hashPassword(value, salt)]; }
-// Compare against all eligible staff and owners, including inactive and legacy accounts. The
-// salted hashes cannot be compared to each other without the proposed PIN.
+// Reserve credentials of inactive and legacy staff as well as owners.
 function waiterPinAvailable(db, pin, exceptId = 0) {
   const rows = db.prepare("SELECT u.pin_salt, u.pin_hash FROM local_users u WHERE u.id<>? AND u.pin_salt IS NOT NULL AND u.pin_hash IS NOT NULL AND NOT EXISTS (SELECT 1 FROM restaurant_accounts r WHERE r.user_id=u.id) AND NOT EXISTS (SELECT 1 FROM transfer_managers t WHERE t.user_id=u.id)").all(exceptId);
-  return rows.every(row => { const expected = Buffer.from(row.pin_hash), actual = hashPassword(pin, row.pin_salt); return expected.length === actual.length && !timingSafeEqual(actual, expected); });
+  return rows.every(row => !matchesPin(pin, row.pin_salt, row.pin_hash, true));
 }
 function usableAdministrator(db) {
   const requireCombined = !!db.prepare("SELECT 1 FROM financial_scopes WHERE scope='combined' LIMIT 1").get();
@@ -99,7 +98,7 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
       }
       if (req.action === 'create' && keys(req, ['action', 'username', 'password', 'pin']) && validUsername(req.username) && validPassword(req.password) && validPin(req.pin, 4)) {
         if (scopeOf(db, actor) !== 'combined') return { ok: false, error: 'Access denied' };
-        const [salt, hash] = credential(req.password); const [pinSalt, pinHash] = req.pin ? credential(req.pin) : [null, null];
+        const [salt, hash] = credential(req.password); const [pinSalt, pinHash] = waiterPinCredential(req.pin);
         db.exec('BEGIN IMMEDIATE');
         try {
           if (!waiterPinAvailable(db, req.pin)) { db.exec('ROLLBACK'); return { ok: false, error: 'This PIN is already in use. Choose a different PIN.' }; }
@@ -134,7 +133,7 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
         const isRestaurant = !!db.prepare('SELECT 1 FROM restaurant_accounts WHERE user_id=?').get(req.id);
         if ((!isTransfer && !canManageTarget(db, actor, req.id)) || (isTransfer && req.password !== null) || (req.pin !== null && (isRestaurant || (!isTransfer && scopeOf(db, req.id) !== 'waiter') || !validPin(req.pin, isTransfer ? 6 : 4)))) return { ok: false, error: 'Access denied' };
         const password = req.password !== null ? credential(req.password) : null;
-        const pin = req.pin !== null ? credential(req.pin) : null;
+        const pin = req.pin !== null ? (isTransfer ? credential(req.pin) : waiterPinCredential(req.pin)) : null;
         db.exec('BEGIN IMMEDIATE');
         try {
           if (pin && !isTransfer && !waiterPinAvailable(db, req.pin, req.id)) { db.exec('ROLLBACK'); return { ok: false, error: 'This PIN is already in use. Choose a different PIN.' }; }
@@ -172,6 +171,15 @@ function registerEmployeeConfig(ipcMain, isAllowedSender, db, session) {
           const old = scopeOf(db, req.id);
           if (!old) throw new Error('Missing account');
           if (old !== 'waiter' && req.scope === 'waiter' && db.prepare('SELECT active FROM local_users WHERE id=?').get(req.id).active) { db.exec('ROLLBACK'); return { ok: false, error: 'Deactivate this account before changing it to staff. Then reset its PIN and reactivate it.' }; }
+          if (old === 'waiter' && req.scope !== 'waiter') {
+            const direct = db.prepare('SELECT pin_hash FROM local_users WHERE id=? AND length(pin_salt)=0').get(req.id);
+            if (direct) {
+              // Preserve the PIN reservation, but only waiters store their PIN directly.
+              const pin = Buffer.from(direct.pin_hash).toString('utf8');
+              if (!validPin(pin, 4)) throw new Error('Invalid waiter PIN credential');
+              db.prepare('UPDATE local_users SET pin_salt=?, pin_hash=? WHERE id=?').run(...credential(pin), req.id);
+            }
+          }
           if (old !== req.scope) db.prepare('DELETE FROM verified_waiter_pins WHERE user_id=?').run(req.id);
           const oldClose = !!db.prepare("SELECT 1 FROM user_permissions WHERE user_id=? AND permission='business_days.close'").get(req.id);
           db.prepare('UPDATE financial_scopes SET scope=? WHERE user_id=?').run(req.scope, req.id);

@@ -52,7 +52,8 @@ function textForJob(job) {
   }
   let rows;
   if (job.destination === 'bill') {
-    rows = ['TEST BILL - NOT A FISCAL RECEIPT', 'Bill #' + s.id, 'Table ' + s.tableId];
+    rows = [s.billPrinter === 'bar' ? 'NON-FISCAL CUSTOMER BILL' : 'TEST BILL - NOT A FISCAL RECEIPT',
+      'Bill #' + s.id, 'Table ' + s.tableId];
   } else {
     const station = {kitchen:'KITCHEN 1', kitchen2:'KITCHEN 2', bar:'BAR'}[job.destination];
     if (!station) throw Error('Invalid preparation destination');
@@ -66,7 +67,8 @@ function textForJob(job) {
     for (const m of l.modifiers) rows.push('  ' + m.groupName + ': ' + m.optionName);
     if (l.note) rows.push('  Note: ' + l.note);
   }
-  if (job.destination === 'bill') rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den', 'NO PAYMENT OR CHARGE BY PRINTING');
+  if (job.destination === 'bill') rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den',
+    s.billPrinter === 'bar' ? 'PAID - CASH' : 'NO PAYMENT OR CHARGE BY PRINTING');
   // The visible guide after the feed makes the driver render the blank area.
   // Actual feed distance still depends on the Windows driver and paper settings.
   return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';

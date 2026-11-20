@@ -204,7 +204,8 @@ test('Windows report exchange restricts command and payload, permits a long busy
   skip: process.platform !== 'win32'
 }, () => {
   const helper = path.resolve(__dirname, '../src/desktop/pf700-checkout-exchange.ps1').replaceAll("'", "''");
-  const packet = (command, value) => encodeRequest({ sequence: 32, command, data: Buffer.from(value) }).toString('hex');
+  const packet = (command, value) => encodeRequest({ sequence: 32, command, data: Buffer.from(value),
+    allowedControls: command === 53 ? [9] : [] }).toString('hex');
   const probe = packet(90, '0'), report = packet(69, '0'), read = packet(64, '');
   // This dot-sources the helper and passes a memory object. Its executable
   // entry point, which constructs a real SerialPort, is never called.
@@ -237,6 +238,14 @@ test('Windows report exchange restricts command and payload, permits a long busy
       ['ReadDailyReport', [probe, read], 2, false],
       ['ReadDailyReport', [probe, report], 1, true],
       ['Checkout', [probe, report], 1, true],
+      ['Checkout', [probe, packet(110, '')], 1, true],
+      ['Checkout', [probe, packet(53, '\t'), packet(53, '\tP140')], 3, false],
+      ['Checkout', [probe, packet(53, '\tD140')], 1, true],
+      ['CardTrial', [probe, packet(110, ''), packet(53, '\tD140')], 3, false],
+      ['CardTrial', [probe, packet(53, '\t')], 1, true],
+      ['CardTrial', [probe, packet(53, '\tP140')], 1, true],
+      ['CardTrial', [probe, packet(110, '0')], 1, true],
+      ['CardTrial', [probe, report], 1, true],
       ['DailyReport', [report], 0, true]
     ].map(([operation, lines, count, denied]) => 'Check-Frames ' + operation + " @('" +
       lines.join("','") + "') " + count + ' $' + denied)

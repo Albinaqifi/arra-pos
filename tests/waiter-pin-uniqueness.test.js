@@ -59,7 +59,17 @@ test('unique staff PIN provisioning, legacy transition and role conversion survi
   assert.equal(call({ action: 'credential', id: first, password: null, pin: thirdPin }).ok, false);
   db.exec('DROP TRIGGER fail_pin_audit');
   assert.equal(call({ action: 'create', username: 'reserved', password: secret(), pin }).ok, false, 'failed reset leaves old credential intact');
-  assert.equal(call({ action: 'financialAccess', id: second, scope: 'A', close: false }).ok, true);
+  const promotion = { action: 'financialAccess', id: second, scope: 'A', close: false };
+  const storedPin = db.prepare('SELECT pin_salt, pin_hash FROM local_users WHERE id=?');
+  db.exec("CREATE TRIGGER fail_promotion BEFORE INSERT ON application_audit WHEN NEW.action='financial_access' BEGIN SELECT RAISE(ABORT, 'failure'); END");
+  assert.equal(call(promotion).ok, false);
+  assert.equal(storedPin.get(second).pin_salt.length, 0, 'failed promotion restores the waiter credential');
+  db.exec('DROP TRIGGER fail_promotion');
+  assert.equal(call(promotion).ok, true);
+  const ownerPin = storedPin.get(second);
+  assert.equal(ownerPin.pin_salt.length, 16);
+  assert.ok(hashPassword(secondPin, ownerPin.pin_salt).equals(ownerPin.pin_hash));
+  assert.equal(call({ action: 'create', username: 'owner-collision', password: secret(), pin: secondPin }).ok, false);
   assert.equal(call({ action: 'financialAccess', id: second, scope: 'waiter', close: false }).ok, false);
   assert.equal(call({ action: 'account', id: second, username: 'second', active: false }).ok, true);
   assert.equal(call({ action: 'financialAccess', id: second, scope: 'waiter', close: false }).ok, true);

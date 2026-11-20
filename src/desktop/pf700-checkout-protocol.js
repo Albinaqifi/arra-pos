@@ -2,6 +2,7 @@
 // exclusive device access, durable intent and commissioning of the device profile.
 const { randomInt, createHash } = require('node:crypto');
 const { encodeRequest, decodeResponse } = require('./pf700-frame');
+const { paymentRegisters } = require('./pf700-payment-registers');
 
 const MAX_AMOUNT = 99999999;
 // The on-site receipt-state field holds nine digits in hundredths of MKD.
@@ -44,6 +45,10 @@ function prepare(snapshot, domesticProduct, maxTotal) {
   });
   requireMatch(sums.reduce((a, b) => a + b, 0) === snapshot.total);
   return { items, sums, total: snapshot.total, method: snapshot.method };
+}
+
+function onsiteReceiptItems(snapshot) {
+  return prepare(snapshot, snapshot.domesticProduct, MAX_ONSITE_TOTAL).items;
 }
 
 function canEncodePf700Receipt(snapshot) {
@@ -150,10 +155,21 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     }));
     requireMatch(Number(priorDocument) < 9999999);
 
+    let priorRegisters;
+    if (operator.supervisedCardTrial) {
+      requireMatch(onsiteFirmware && method === 'card');
+      await send(110, undefined, false, [], data => {
+        priorRegisters = paymentRegisters(data.toString('latin1'));
+        requireMatch(priorRegisters.nextReceipt > 0 && priorRegisters.nextReceipt < 9999);
+        return {cardRegistersRead:true};
+      });
+    }
+
     if (operator.beforeOpen) await operator.beforeOpen({ previousDocumentNumber: priorDocument });
     openAttempted = true;
     const before = counters(await send(48, ascii([operatorNumber, operatorPassword, tillNumber].join(',')), true, [], data => {
-      const pair=counters(data); requireMatch(pair[0]<9999); return {fiscalReceiptCount:pair[0],reversalCount:pair[1]};
+      const pair=counters(data); requireMatch(pair[0]<9999 && (!priorRegisters || priorRegisters.nextReceipt === pair[0] + 1));
+      return {fiscalReceiptCount:pair[0],reversalCount:pair[1]};
     }));
     requireMatch(before[0] < 9999);
     for (const item of items) {
@@ -183,8 +199,17 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     const reference = documentNumber(await send(113, undefined, false, [], data => { const number=documentNumber(data);
       requireMatch(Number(number)===Number(priorDocument)+1); return {documentNumber:number}; }));
     requireMatch(Number(reference) === Number(priorDocument) + 1);
+    if (priorRegisters) {
+      await send(110, undefined, false, [], data => {
+        const current = paymentRegisters(data.toString('latin1'));
+        requireMatch(current.closure === priorRegisters.closure && current.nextReceipt === after[0] + 1 &&
+          current.amounts.every((amount, index) => amount === priorRegisters.amounts[index] + (index === 2 ? total * 100 : 0)));
+        return {cardTenderMatched:true};
+      });
+    }
     return { status: 'accepted', reference, evidence: {
-      documentNumber: reference, fiscalReceiptCount: after[0], reversalCount: after[1]
+      documentNumber: reference, fiscalReceiptCount: after[0], reversalCount: after[1],
+      ...(priorRegisters ? {debitAmountMinor: total * 100} : {})
     } };
   } catch {
     return { status: openAttempted ? 'uncertain' : 'failed' };
@@ -250,4 +275,4 @@ async function registerSimulatedPf700Sale(snapshot) {
   return result.status === 'accepted' ? { status: 'accepted', reference: 'SIM-' + billId } : result;
 }
 
-module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt, simulatedResponse };
+module.exports = { executePf700Checkout, registerSimulatedPf700Sale, canEncodePf700Receipt, onsiteReceiptItems, simulatedResponse };
