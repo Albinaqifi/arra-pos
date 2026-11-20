@@ -52,7 +52,7 @@ function textForJob(job) {
   }
   let rows;
   if (job.destination === 'bill') {
-    rows = [s.billPrinter === 'bar' ? 'NON-FISCAL CUSTOMER BILL' : 'TEST BILL - NOT A FISCAL RECEIPT',
+    rows = [s.billPrinter === 'bar' ? 'RESTAURANT ARRA' : 'TEST BILL - NOT A FISCAL RECEIPT',
       'Bill #' + s.id, 'Table ' + s.tableId];
   } else {
     const station = {kitchen:'KITCHEN 1', kitchen2:'KITCHEN 2', bar:'BAR'}[job.destination];
@@ -60,6 +60,12 @@ function textForJob(job) {
     const prefix = s.preparationMode === 'routine' ? '' : 'TEST ';
     rows = [prefix + station + (job.cancellation ? ' CANCELLATION' : ' TICKET'), 'Table ' + s.tableId, 'Round ' + s.round];
     if (job.cancellation) rows.unshift('*** CANCELLATION ***');
+    else {
+      // Old snapshots predate these fields. Never substitute the retry time or
+      // the current user, since either could misidentify the original send.
+      if (typeof s.sentTime === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(s.sentTime)) rows.push('Time: ' + s.sentTime);
+      if (typeof s.waiterName === 'string' && s.waiterName.trim()) rows.push('Waiter: ' + s.waiterName.replace(/[\x00-\x1f\x7f-\x9f\u2028\u2029]/g, ' '));
+    }
   }
   rows.push('--------------------------------');
   for (const l of s.lines) {
@@ -69,11 +75,31 @@ function textForJob(job) {
   }
   if (job.destination === 'bill') rows.push('--------------------------------', 'TOTAL: ' + s.total + ' den',
     s.billPrinter === 'bar' ? 'PAID - CASH' : 'NO PAYMENT OR CHARGE BY PRINTING');
+  if (job.destination === 'bill' && s.billPrinter === 'bar') rows.push('Thank you');
   // The visible guide after the feed makes the driver render the blank area.
   // Actual feed distance still depends on the Windows driver and paper settings.
   return rows.join('\n') + '\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
 }
 const escape = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function htmlForJob(job) {
+  const text = textForJob(job);
+  let content = escape(text);
+  let extraStyle = '';
+  if (job.destination === 'bill' && job.snapshot.billPrinter === 'bar') {
+    const title = 'RESTAURANT ARRA';
+    const total = 'TOTAL: ' + job.snapshot.total + ' den';
+    const afterTotal = '\nPAID - CASH\nThank you\n' + ' \n'.repeat(12) + '--- CUT HERE ---';
+    // The generated footer is at the end of the text; item names cannot be
+    // mistaken for the total, even when they contain line breaks or markup.
+    const footer = total + afterTotal;
+    if (!text.startsWith(title + '\n') || !text.endsWith(footer)) throw Error('Invalid customer bill');
+    const body = text.slice(title.length, -footer.length);
+    content = '<span class="bill-title">' + escape(title) + '</span>' + escape(body) +
+      '<span class="bill-total">' + escape(total) + '</span>' + escape(afterTotal);
+    extraStyle = '.bill-title,.bill-total{font-size:22px;font-weight:bold}';
+  }
+  return '<!doctype html><meta charset="utf-8"><style>body{font:16px monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere}' + extraStyle + '</style><pre>' + content + '</pre>';
+}
 // Render Unicode locally with the same Windows drawing API used by the
 // physically checked printer diagnostic. Input and output stay on pipes.
 const rasterScript = String.raw`
@@ -206,7 +232,7 @@ async function printTestJob(job) {
       const raster=await renderRaster(ticketText);
       return await printRawCancellation(job,rasterBands(raster));
     }
-    const html = '<!doctype html><meta charset="utf-8"><style>body{font:16px monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><pre>' + escape(textForJob(job)) + '</pre>';
+    const html = htmlForJob(job);
     await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
     // A callback success is only Windows queue acceptance, never paper proof.
     return await new Promise((resolve,reject) => {

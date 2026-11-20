@@ -9,7 +9,9 @@ const preparationDestination = s => ['kitchen', 'kitchen2', 'bar'].includes(s);
 const inFlight = new Set();
 
 function createPreparationJob(db, ticketId, preparationMode) {
-  const ticket = db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round FROM preparation_tickets t JOIN preparation_rounds r ON r.id=t.round_id WHERE t.id=?`).get(ticketId);
+  const ticket = db.prepare(`SELECT t.destination, r.table_id AS tableId, r.number AS round, r.sent_at AS sentAt, u.username AS waiterName FROM preparation_tickets t JOIN preparation_rounds r ON r.id=t.round_id JOIN local_users u ON u.id=r.actor_id WHERE t.id=?`).get(ticketId);
+  const sentAt = new Date(ticket.sentAt);
+  ticket.sentTime = String(sentAt.getHours()).padStart(2, '0') + ':' + String(sentAt.getMinutes()).padStart(2, '0');
   const lines = db.prepare(`SELECT i.id, i.name, i.note, ti.quantity FROM preparation_ticket_items ti JOIN order_items i ON i.id=ti.item_id WHERE ti.ticket_id=? ORDER BY i.id`).all(ticketId);
   for (const line of lines) line.modifiers = db.prepare('SELECT group_name AS groupName, option_name AS optionName FROM order_item_modifiers WHERE item_id=? ORDER BY rowid').all(line.id);
   return db.prepare('INSERT INTO test_print_jobs(destination,ticket_id,snapshot,created_at) VALUES(?,?,?,?)').run(ticket.destination, ticketId, JSON.stringify({ ...ticket, lines, preparationMode }), Date.now()).lastInsertRowid;

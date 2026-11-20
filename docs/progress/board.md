@@ -4,6 +4,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-109 | In progress | Suggested notes removed; review and focused tests passed. PR merge remains. [Handoff](handoffs/S-109.md) |
+| S-108 | In progress | Cash B bill updated; review and focused tests passed. PR merge and physical paper check remain. [Handoff](handoffs/S-108.md) |
+| S-107 | In progress | Preparation ticket time and waiter added; review and focused tests passed. PR merge and physical paper check remain. [Handoff](handoffs/S-107.md) |
 | S-106 | In progress | Independent review and focused offline tests passed; PR merge and physical printer verification remain open. [Handoff](handoffs/S-106.md) |
 | S-105 | In progress | Independent review and focused offline tests passed; PR merge and physical printer verification remain open. [Handoff](handoffs/S-105.md) |
 | S-104 | In progress | Focused checks passed on `5ffa168`. Owner deferred two admin message fixes and printer-tab navigation so the next story can proceed. PR merge and physical printer verification remain open. [Deferred TODOs](handoffs/S-104.md#deferred-review-todos) |

@@ -138,7 +138,7 @@ test('note save locks its payload and pending-only commands reject sent items', 
   app.pending.openNote(1); app.pending.setNoteText('  Less salt  ');
   const saving = app.pending.saveNote();
   assert.equal(requests[0].value.note, 'Less salt');
-  app.pending.setNoteText('Different'); app.pending.toggleNoteChip('No onions');
+  app.pending.setNoteText('Different');
   assert.equal(app.pending.dismiss(), false);
   await app.pending.incItem(1); app.pending.openNote(2);
   assert.equal(app.pending.state.dialog.text, '  Less salt  ');
