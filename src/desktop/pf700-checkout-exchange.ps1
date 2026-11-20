@@ -68,6 +68,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
                 if ($request[3] -eq 90 -and !$identified -and $payload -ceq '0') { }
                 elseif ($request[3] -eq 69 -and $identified -and !$reportSent -and $payload -ceq '2') { $reportSent = $true }
+                elseif ($request[3] -eq 70 -and $identified -and !$reportSent -and $payload.Length -le 9 -and $payload -cmatch '\A-?(?:0|[1-9][0-9]*)\.[0-9]{2}\z' -and $payload -cmatch '[1-9]') { $reportSent = $true }
                 else { throw 'Invalid printer control command' }
             } else {
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
