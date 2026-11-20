@@ -10,10 +10,10 @@ import { BillHistory } from './BillHistory.js';
 import { PaymentLists, FinancialDetail } from './FinancialDetails.js';
 import { ShiftClose } from './ShiftClose.js';
 export class FinancialVisibility extends React.Component {
-  constructor(props) { super(props); this.state={view:null,records:[],unpaid:null,totals:null,detail:null,error:'',loading:false,dayRevision:0,accountACloseAvailable:false,accountAProbeError:false,accountABillsAvailable:false,accountABillsProbeError:false,walletStartAvailable:false}; this.sequence=0; this.mounted=false; }
+  constructor(props) { super(props); this.state={view:null,records:[],unpaid:null,totals:null,detail:null,error:'',loading:false,dayRevision:0,accountACloseAvailable:false,accountAProbeError:false,accountABillsAvailable:false,accountAPrinterAvailable:false,accountABillsProbeError:false,walletStartAvailable:false}; this.sequence=0; this.mounted=false; }
   componentDidMount() { this.mounted=true; this.probeAccountA(); this.probeAccountABills(); this.probeWallet(); }
   async probeWallet() { try { const r=await window.arra.businessDays({action:'walletStatus'}); if(this.mounted) this.setState({walletStartAvailable:r?.ok===true && r.data?.available!==false && r.data?.baseline==null}); } catch (_) { if(this.mounted) this.setState({walletStartAvailable:false}); } }
-  async probeAccountABills() { try { const r=await window.arra.businessDays({action:'accountABillsList'}); if(this.mounted) this.setState({accountABillsAvailable:r.ok===true,accountABillsProbeError:!r.ok && r.denied!==true}); } catch (_) { if(this.mounted) this.setState({accountABillsAvailable:false,accountABillsProbeError:true}); } }
+  async probeAccountABills() { try { const r=await window.arra.businessDays({action:'accountABillsList'}); if(this.mounted) this.setState({accountABillsAvailable:r.ok===true,accountAPrinterAvailable:r.ok===true && r.data?.canPrintFiscalControl===true,accountABillsProbeError:!r.ok && r.denied!==true}); } catch (_) { if(this.mounted) this.setState({accountABillsAvailable:false,accountAPrinterAvailable:false,accountABillsProbeError:true}); } }
   async probeAccountA() {
     try {
       const r=await window.arra.businessDays({action:'accountAList'});
@@ -46,7 +46,7 @@ export class FinancialVisibility extends React.Component {
     const options=[['performance',activityText(this.props.language,'Waiter performance'),activityText(this.props.language,'Review sales, payments and cancellations by waiter')],['billHistory',t('Bill history'),t('Review paid bills by business day')],['today',t("Current day turnover"),t("See today’s payments and totals")],['reports',t("Previous days & reports"),t("Review a closed day or date range")],['history',t("Payment history"),t("Find payments and unpaid bills")],['shift',t('Close shift'),t('Review this shift and start the next one.')],['close',t("Close current day"),t("Review outstanding orders before closing")]];
     if(s.walletStartAvailable) options.push(['walletStart',t('Start shift'),t('Count the shared cash wallet')]);
     if(s.accountABillsAvailable) options.push(['accountABills',t('Print Account A bills'),t('Preview paid bills and totals by day')]);
-    if(s.accountACloseAvailable) options.push(['accountAPrinter',t('Account A fiscal printer'),t('Print the daily fiscal control')]);
+    if(s.accountAPrinterAvailable || s.accountACloseAvailable) options.push(['accountAPrinter',t('Account A fiscal printer'),t('Print the daily fiscal control')]);
     if(s.accountACloseAvailable) options.push(['accountAClose',t('Close Account A'),t('Review and close Account A for a closed day')]);
     const title=options.find(x=>x[0]===s.view)?.[1];
     return h('main',{className:'finance-home'},h('button',{className:'finance-back',onClick:s.view?()=>this.selectView(null):this.props.onBack},s.view?t("← Financial information"):t("← Back to administration")),

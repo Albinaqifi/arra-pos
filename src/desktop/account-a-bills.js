@@ -30,7 +30,7 @@ async function handle(event,req,allowed,db,session,adapter) {
       if(scope!=='combined' || !hasPermissions(db,session,'business_days.close')) return {ok:false,denied:true};
       db.prepare('UPDATE account_a_bill_print_settings SET queue=? WHERE id=1').run(req.queue); return {ok:true};
     }
-    if(req.action==='accountABillsList') return {ok:true,data:{days:db.prepare('SELECT id,opened_at AS openedAt,closed_at AS closedAt FROM business_days ORDER BY id DESC').all(),queue:db.prepare('SELECT queue FROM account_a_bill_print_settings WHERE id=1').get().queue,canConfigure:scope==='combined' && hasPermissions(db,session,'business_days.close')}};
+    if(req.action==='accountABillsList') return {ok:true,data:{days:db.prepare('SELECT id,opened_at AS openedAt,closed_at AS closedAt FROM business_days ORDER BY id DESC').all(),queue:db.prepare('SELECT queue FROM account_a_bill_print_settings WHERE id=1').get().queue,canConfigure:scope==='combined' && hasPermissions(db,session,'business_days.close'),canPrintFiscalControl:scope==='A' || (scope==='combined' && hasPermissions(db,session,'business_days.close'))}};
     const data=report(db,req.dayId), hash=digest(data);
     if(req.action==='accountABillsPreview') {
       const preview = scope === 'combined' ? require('./fast-pay-preview').attachReceiptStatuses(db,data) : data;

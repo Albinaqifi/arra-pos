@@ -112,3 +112,22 @@ test('simultaneous direct requests do not issue a second print',async()=>{
   release(); assert.equal(await first,'accepted');
   assert.deepEqual(frames,[90,69]);
 });
+test('Account A owner can print, while other scopes and revoked A access cannot',async t=>{
+  const db=new DatabaseSync(':memory:'); t.after(()=>db.close()); migrate(db);
+  db.exec(`INSERT INTO local_users(id,username,salt,password_hash) VALUES(1,'a',x'00',x'00'),(2,'b',x'00',x'00'),(3,'waiter',x'00',x'00'),(4,'combined',x'00',x'00');
+    INSERT INTO financial_scopes VALUES(1,'A'),(2,'B'),(3,'waiter'),(4,'combined');
+    INSERT INTO user_permissions VALUES(1,'employees.view'),(2,'employees.view'),(3,'employees.view'),(4,'employees.view');`);
+  let actor=1,handler,release;const frames=[];
+  const adapter=createPf700PrinterControl({expectedSerial:serial,openPipe:async()=>({exchange:async frame=>{
+    frames.push(frame[3]); if(frame[3]===90) { await new Promise(resolve=>{release=resolve;}); return reply(frame[2],90,'1.00 231014 1230,ABCD,0011,1,'+serial); }
+    assert.equal(frame.subarray(4,-6).toString(),'2'); return reply(frame[2],69,'tax totals');
+  },close:async()=>{}})});
+  registerBusinessDays({handle:(_,fn)=>handler=fn},()=>true,db,{currentUserId:()=>actor,authenticatedUserId:()=>actor},undefined,null,adapter);
+  const request={action:'accountAPrinterDailyControl'};
+  for(actor of [2,3,4]) assert.equal((await handler({},request)).ok,false);
+  actor=1; assert.equal((await handler({}, {action:'accountABillsList'})).data.canPrintFiscalControl,true);
+  actor=4; assert.equal((await handler({}, {action:'accountABillsList'})).data.canPrintFiscalControl,false);
+  actor=1; let pending=handler({},request); await new Promise(setImmediate); release(); assert.equal((await pending).ok,true); assert.deepEqual(frames,[90,69]);
+  frames.length=0; pending=handler({},request); await new Promise(setImmediate); db.exec("DELETE FROM user_permissions WHERE user_id=1 AND permission='employees.view'"); release(); assert.equal((await pending).ok,false); assert.deepEqual(frames,[90]);
+  frames.length=0; assert.equal((await handler({},request)).ok,false); assert.deepEqual(frames,[]);
+});
