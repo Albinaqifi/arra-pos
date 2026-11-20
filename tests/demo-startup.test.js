@@ -53,6 +53,42 @@ test('startup captures the bridge, mounts once, and cleans up its language liste
   assert.equal(failed.mounts, 0);
 });
 
+test('desktop printer warning survives a stale snapshot and language changes without interrupting the app', async () => {
+  let finishSnapshot, notifyWaiting, disposed = false;
+  const result = await start('desktop', {
+    getApplicationInfo: async () => ({ ok: true, data: { name: 'Arra POS' } }),
+    onFiscalPrinterWaiting(listener) { notifyWaiting = listener; return () => { disposed = true; }; },
+    getFiscalPrinterWaiting: () => new Promise(resolve => { finishSnapshot = resolve; }),
+  });
+  assert.equal(result.mounts, 1);
+  notifyWaiting(true);
+  finishSnapshot(false);
+  await new Promise(setImmediate);
+  assert.equal(result.status.role, 'alert');
+  assert.equal(result.status.textContent, 'Waiting for printer response');
+  result.events['arra-language-changed']({ detail: 'sq' });
+  assert.equal(result.status.textContent, 'Ne pritje te pergjigjes se printerit');
+  notifyWaiting(false);
+  assert.equal(result.status.role, 'status');
+  assert.equal(result.status.textContent, 'Arra POS · Zhvillim');
+  result.events.pagehide();
+  assert.equal(disposed, true);
+  notifyWaiting(true);
+  assert.equal(result.status.role, 'status');
+  assert.equal(result.mounts, 1);
+});
+
+test('desktop opens with a printer warning when a receipt is already waiting', async () => {
+  const result = await start('desktop', {
+    getApplicationInfo: async () => ({ ok: true, data: { name: 'Arra POS' } }),
+    onFiscalPrinterWaiting: () => () => {},
+    getFiscalPrinterWaiting: async () => true,
+  });
+  assert.equal(result.status.role, 'alert');
+  assert.equal(result.status.textContent, 'Waiting for printer response');
+  assert.equal(result.mounts, 1);
+});
+
 test('renderer entry bundles all app modules locally and mounts the explicit demo', async () => {
   const bundled = moduleSource(require.resolve('../src/renderer-entry.js'));
   assert.doesNotMatch(bundled, /\bimport\s*\(/);

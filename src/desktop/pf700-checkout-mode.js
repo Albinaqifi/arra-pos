@@ -4,6 +4,7 @@ const { createHash } = require('node:crypto');
 const { offlineCheckoutRequested } = require('./fiscal-checkout');
 const { createTrainingPf700 } = require('./training-pf700');
 const { createWindowsPf700PrinterControl } = require('./pf700-printer-control');
+const { createFastPayPrinterAccess } = require('./fast-pay-printer-access');
 const { createWindowsPf700DailyReport } = require('./pf700-daily-report');
 const { isCommissionedDirectory, deviceTrial, cardTrialLedger } = require('./pf700-commissioning');
 const { createWindowsPf700Checkout } = require('./pf700-windows-checkout');
@@ -68,6 +69,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
     }
   }
   const cardLedger = cardTrialLedger();
+  const printerWait = createFastPayPrinterAccess();
   const adapter = createDevice({
     operatorNumber: profile.operatorNumber, operatorPassword: profile.operatorPassword,
     tillNumber: profile.tillNumber, expectedSerial: profile.expectedSerial, domesticProduct: profile.domesticProduct,
@@ -90,7 +92,8 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
       claimCardDispatch: token => cardLedger.dispatch(profile.expectedSerial, token)
     } : {}),
     dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
-    printerControl: createWindowsPf700PrinterControl({ expectedSerial: profile.expectedSerial }),
+    printerWait,
+    printerControl: createWindowsPf700PrinterControl({ expectedSerial: profile.expectedSerial, printerWait }),
     canRegister(receipt, prior) {
       if (isCardTrial) return receipt.account === 'A' && receipt.method === 'card' &&
         receipt.lines.length > 0 && receipt.lines.every(line => typeof line.domesticProduct === 'boolean');

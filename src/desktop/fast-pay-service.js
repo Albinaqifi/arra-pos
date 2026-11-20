@@ -2,7 +2,7 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const {createHash,randomUUID} = require('node:crypto');
-const { DatabaseSync } = require('node:sqlite');
+const {createFastPayPrinterAccess, ledgerDirectory} = require('./fast-pay-printer-access');
 const { registerPayments, recordPayment } = require('./payments');
 const { hasPermissions } = require('./permissions');
 const { ownsOrder } = require('./order-ownership');
@@ -104,11 +104,6 @@ function response(id, request, receiptStatus) {
   return {ok:true,data:{id,billId:request.billId,method:request.method,account:'A',receiptStatus}};
 }
 
-function ledgerDirectory() {
-  if (!process.env.LOCALAPPDATA || !path.isAbsolute(process.env.LOCALAPPDATA)) throw Error('Receipt ledger unavailable');
-  return path.join(process.env.LOCALAPPDATA,'Arra POS','PF700 commissioning','fast-pay-v1');
-}
-
 function attemptedOrder(key) {
   try { fs.lstatSync(path.join(ledgerDirectory(),key+'.order')); return true; }
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
@@ -182,20 +177,23 @@ function publishProofs(db) {
 
 function receiptWorker(db, adapter) {
   let timer = null, working = false, stopped = false;
+  const printer = adapter.printerWait || createFastPayPrinterAccess();
+  const nextReceipt = db.prepare(`SELECT j.payment_id,j.job_token,j.order_key,j.receipt FROM fast_pay_v1_jobs j
+    WHERE j.device_id=? AND NOT EXISTS
+      (SELECT 1 FROM fast_pay_v1_claims c WHERE c.payment_id=j.payment_id) ORDER BY j.payment_id LIMIT 1`);
+  const unfinishedReport = db.prepare(`SELECT 1 FROM fiscal_daily_current d LEFT JOIN fiscal_daily_confirmations c USING(day_id)
+    WHERE c.day_id IS NULL LIMIT 1`);
   function wake(delay = 0) {
     if (timer || working || stopped) return;
     timer = setTimeout(() => { timer = null; void drain(); },delay);
   }
   function claim() {
     return transaction(db, () => {
-      const row = db.prepare(`SELECT j.payment_id,j.job_token,j.order_key,j.receipt FROM fast_pay_v1_jobs j
-        WHERE j.device_id=? AND NOT EXISTS
-          (SELECT 1 FROM fast_pay_v1_claims c WHERE c.payment_id=j.payment_id) ORDER BY j.payment_id LIMIT 1`).get(adapter.deviceId);
+      const row = nextReceipt.get(adapter.deviceId);
       if (!row) return null;
       // No receipt may cross an unfinished Z report. Recheck outstanding
       // work even if the operator never presses Pay again.
-      if (db.prepare(`SELECT 1 FROM fiscal_daily_current d LEFT JOIN fiscal_daily_confirmations c USING(day_id)
-        WHERE c.day_id IS NULL LIMIT 1`).get()) return {waitingForReport:true};
+      if (unfinishedReport.get()) return {waitingForReport:true};
       db.prepare('INSERT INTO fast_pay_v1_claims(payment_id,claimed_at) VALUES(?,?)').run(row.payment_id,Date.now());
       return {id:row.payment_id,token:row.job_token,orderKey:row.order_key,receipt:JSON.parse(row.receipt)};
     });
@@ -236,9 +234,9 @@ function receiptWorker(db, adapter) {
       // SQLite releases this separate lock on process death. Financial writes
       // stay available while an exclusive serial operation is in progress.
       const folder = ledgerDirectory();
-      fs.mkdirSync(folder,{recursive:true});
-      lock = new DatabaseSync(path.join(folder,'worker.sqlite'));
-      lock.exec('BEGIN IMMEDIATE');
+      lock = await printer.acquire(() => !stopped && !!nextReceipt.get(adapter.deviceId) && !unfinishedReport.get());
+      if (stopped) return;
+      if (!lock) { retry = true; return; } // An idle worker still needs to publish saved receipt proofs.
       publishProofs(db);
       while (!stopped) {
         const job = claim();
@@ -259,6 +257,7 @@ function receiptWorker(db, adapter) {
         }
         await dispatch(job);
         if (!stopped) publishProofs(db);
+        if (printer.isWaiting()) { retry = true; break; }
       }
     } catch (error) {
       retry = error.errcode === 5 || error.errcode === 6;

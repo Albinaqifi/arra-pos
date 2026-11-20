@@ -30,8 +30,12 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
     $opened = $false
     $identified = $false
     $reportSent = $false
+    $cashRequest = $false
+    $cashWriteStarted = $false
     try {
         while ($null -ne ($line = $InputReader.ReadLine())) {
+            $cashRequest = $false
+            $cashWriteStarted = $false
             # Acquire the serial handle without writing a device command. The
             # caller then atomically seals the checkout before any observation.
             if ($Operation -eq 'ReadCheckout' -and !$opened -and $line -ceq 'OPEN') {
@@ -47,6 +51,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             [byte[]]$request = @(for ($i = 0; $i -lt $line.Length; $i += 2) {
                 [Convert]::ToByte($line.Substring($i, 2), 16)
             })
+            $cashRequest = $Operation -eq 'PrinterControl' -and $request[3] -eq 70
             if ($request[0] -ne 1 -or $request[1] -ne $request.Length + 26 -or $request[-1] -ne 3) {
                 throw 'Invalid frame'
             }
@@ -68,6 +73,9 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
                 if ($request[3] -eq 90 -and !$identified -and $payload -ceq '0') { }
                 elseif ($request[3] -eq 69 -and $identified -and !$reportSent -and $payload -ceq '2') { $reportSent = $true }
+                elseif ($request[3] -eq 70 -and $identified -and !$reportSent -and $payload.Length -le 9 -and $payload -cmatch '\A-?(?:0|[1-9][0-9]*)\.[0-9]{2}\z' -and $payload -cmatch '[1-9]') { $reportSent = $true }
+                elseif ($request[3] -in @(79,94) -and $identified -and !$reportSent -and $payload -cmatch '\A[0-9]{6},[0-9]{6}\z') { $reportSent = $true }
+                elseif ($request[3] -in @(95,73) -and $identified -and !$reportSent -and $payload -cmatch '\A[0-9]{4},[0-9]{4}\z') { $reportSent = $true }
                 else { throw 'Invalid printer control command' }
             } else {
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
@@ -86,6 +94,7 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             }
             if (!$identified -and ($request[3] -ne 90 -or $request.Length -ne 11 -or $request[4] -ne 0x30)) { throw 'Identity probe required' }
             if ($Port.BytesToRead -ne 0) { throw 'Unexpected pending input' }
+            if ($cashRequest) { $cashWriteStarted = $true }
             $Port.Write($request, 0, $request.Length)
             if ($request[3] -eq 69) {
                 # The printer may report busy every 60 ms while printing the Z report.
@@ -99,7 +108,9 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
             $identified = $true
         }
     } catch {
-        $OutputWriter.WriteLine('FAIL')
+        # This marker is emitted only while processing command 70 and only
+        # before calling SerialPort.Write. Once Write starts its outcome is unknown.
+        $OutputWriter.WriteLine($(if ($cashRequest -and !$cashWriteStarted) { 'FAIL_NOT_SENT' } else { 'FAIL' }))
         $OutputWriter.Flush()
     } finally {
         $Port.Dispose()

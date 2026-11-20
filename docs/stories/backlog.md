@@ -8,7 +8,7 @@ Replace the existing heading on the Cash B customer bill with RESTAURANT ARRA, a
 
 Print the local send time and sending waiter's name on new kitchen preparation tickets, including the other preparation stations that share their format. Capture both in the durable ticket snapshot so retries retain the original values. Preserve existing orders, historical jobs, routing and retry behavior; older snapshots without the fields remain printable. Verify multiple stations, later rounds, retries and legacy snapshots with sample data.
 
-### S-106 — Remove item-note suggestions
+### S-109 — Remove item-note suggestions
 
 Show a single typed note field without suggested notes or an example placeholder. Preserve saving, editing, clearing and recovery of pending-item notes, including existing busy and failure handling. Verify both languages and the affected note workflow.
 

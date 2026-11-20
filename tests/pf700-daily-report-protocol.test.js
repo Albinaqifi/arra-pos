@@ -231,10 +231,29 @@ test('Windows report exchange restricts command and payload, permits a long busy
     '}',
     ...[
       ['PrinterControl', [probe, packet(69, '2')], 2, false],
+      ['PrinterControl', [probe, packet(70, '2000.00')], 2, false],
+      ['PrinterControl', [probe, packet(70, '-500.00')], 2, false],
+      ['PrinterControl', [probe, packet(70, '0.00')], 1, true],
+      ['PrinterControl', [probe, packet(70, '-100000.00')], 1, true],
+      ['PrinterControl', [probe, packet(70, '1.000')], 1, true],
+      ['PrinterControl', [probe, packet(70, '1.00'), packet(70, '1.00')], 2, true],
+      ['PrinterControl', [probe, packet(69, '2'), packet(70, '1.00')], 2, true],
       ['PrinterControl', [probe, packet(69, '2'), packet(69, '2')], 2, true],
       ['PrinterControl', [probe, report], 1, true],
       ['PrinterControl', [probe, read], 1, true],
       ['PrinterControl', [packet(69, '2')], 0, true],
+      ...[79, 94].flatMap(command => [
+        ['PrinterControl', [probe, packet(command, '291114,301114')], 2, false],
+        ['PrinterControl', [probe, packet(command, '291114,30111')], 1, true],
+        ['PrinterControl', [packet(command, '291114,301114')], 0, true],
+        ['PrinterControl', [probe, packet(command, '291114,301114'), packet(command, '291114,301114')], 2, true]
+      ]),
+      ...[95, 73].flatMap(command => [
+        ['PrinterControl', [probe, packet(command, '0001,0002')], 2, false],
+        ['PrinterControl', [probe, packet(command, '0001,000x')], 1, true],
+        ['PrinterControl', [packet(command, '0001,0002')], 0, true],
+        ['PrinterControl', [probe, packet(command, '0001,0002'), packet(command, '0001,0002')], 2, true]
+      ]),
       ['DailyReport', [probe, read, packet(65, ''), report], 4, false],
       ['DailyReport', [probe, report, report], 2, true],
       ['DailyReport', [probe, packet(69, '2')], 1, true],
