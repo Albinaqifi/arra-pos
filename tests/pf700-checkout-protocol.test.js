@@ -194,11 +194,11 @@ test('simulator issues only SIM references and handles the full two-line label a
     { status: 'accepted', reference: 'SIM-23' });
 });
 
-test('all 105 packaged product names fit the two-line profile, including wine size suffixes and Albanian accents', async () => {
-  const lines = sections.flatMap(([, products], index) => products.map(([name, unitPrice]) => ({
-    name, unitPrice, quantity: 1, taxGroup: index < 12 ? 'В' : 'А', taxRate: index < 12 ? 10 : 18
+test('all 103 packaged product names fit the two-line profile, including wine size suffixes and Albanian accents', async () => {
+  const lines = sections.flatMap(([section, products]) => products.map(([name, unitPrice]) => ({
+    name, unitPrice, quantity: 1, taxGroup: section === 'Alcoholic Drinks' ? 'А' : 'В', taxRate: section === 'Alcoholic Drinks' ? 18 : 10
   })));
-  assert.equal(lines.filter(line => line.taxGroup === 'В').length, 89);
+  assert.equal(lines.filter(line => line.taxGroup === 'В').length, 87);
   assert.equal(lines.filter(line => line.taxGroup === 'А').length, 16);
   const total = lines.reduce((sum, line) => sum + line.unitPrice, 0);
   assert.deepEqual(await registerSimulatedPf700Sale({ ...sale, lines, total }), { status: 'accepted', reference: 'SIM-23' });

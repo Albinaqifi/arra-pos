@@ -146,6 +146,7 @@ test('settling a numbered journal keeps the original verification contract and a
   const proof = {kind:'numbered-journal', documentNumber:'0000030', binding:candidate.binding,
     captureHash:'a'.repeat(64), journalHash:'b'.repeat(64), responseHash:'c'.repeat(64)};
   const original = originalVerifiedView(db);
+  const originalVersion = db.prepare('PRAGMA user_version').get().user_version;
   assert.ok(original);
   const schema = () => db.prepare("SELECT sql FROM sqlite_schema WHERE name='fiscal_checkout_verified_results'").get().sql;
   const witnessExists = () => !!db.prepare("SELECT 1 FROM sqlite_schema WHERE name='pf700_bill2_numbered_journal'").get();
@@ -176,7 +177,7 @@ test('settling a numbered journal keeps the original verification contract and a
   persistNumberedJournal(db, candidate, proof);
   db.exec('COMMIT');
   assert.ok(schema().startsWith(original));
-  assert.equal(db.prepare('PRAGMA user_version').get().user_version, 50);
+  assert.equal(db.prepare('PRAGMA user_version').get().user_version, originalVersion);
   assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
   const result = db.prepare('SELECT status,source,reference,evidence FROM fiscal_checkout_verified_results').all();
   assert.equal(result.length, 1);

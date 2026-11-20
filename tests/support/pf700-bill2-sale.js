@@ -33,7 +33,7 @@ async function lostClose(t, fault, {otherTax = false, reverse = false, imported 
     INSERT INTO orders(id,table_id,opened_at,status) VALUES(1,1,1,'open'),(2,2,2,'open');
     INSERT INTO bills(id,order_id,actor_id,generated_at,total,fingerprint) VALUES(1,1,1,1,0,'unused');
     INSERT INTO order_waiter_ownership VALUES(2,1,1,1,'open');
-    INSERT INTO menu_product_fiscal_origin VALUES('arra-product-11-0',1),('arra-product-11-1',1)`);
+    UPDATE menu_product_fiscal_origin SET domestic=1 WHERE product_id IN ('arra-product-11-0','arra-product-11-1')`);
   const profile = {
     mode:'device', deviceId:device.serial, domesticProduct:false, requireOrigins:true,
     async registerSale(receipt, journal) {

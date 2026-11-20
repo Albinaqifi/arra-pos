@@ -5,6 +5,7 @@ const { markService, assignPayment } = require('./shifts');
 const { createBillJob, reserveAttempt, dispatch } = require('./test-printing');
 const { validFiscalAdapter, readFiscalCheckout, buildReceipt, reserveSale, submitSale, failure } = require('./fiscal-checkout');
 const { isCommissioned } = require('./pf700-commissioning');
+const supervisedCard = require('./supervised-card');
 const CHANNEL = 'arra:payment';
 
 function success(id, fiscal) {
@@ -24,19 +25,19 @@ function recoverLegacyPayment(db, orderId, actor, request) {
 
 function recordPayment(db, request, bill, actor, printing, fiscal) {
   const paidAt = Date.now();
-  const cashSale = db.prepare(`SELECT s.actor_id AS originalActor,s.mode FROM fiscal_checkout_sales s
-    WHERE s.bill_id=? AND s.method='cash' AND (s.mode='device' OR EXISTS(
-      SELECT 1 FROM fiscal_checkout_attempts a JOIN simulated_cash_attempts t ON t.attempt_id=a.id WHERE a.bill_id=s.bill_id))`).get(request.billId);
+  const originalSale = db.prepare(`SELECT s.actor_id AS originalActor,s.mode FROM fiscal_checkout_sales s
+    WHERE s.bill_id=? AND (s.mode='device' OR (s.method='cash' AND EXISTS(
+      SELECT 1 FROM fiscal_checkout_attempts a JOIN simulated_cash_attempts t ON t.attempt_id=a.id WHERE a.bill_id=s.bill_id)))`).get(request.billId);
   const physicalCash = db.prepare('SELECT id FROM pf700_cash_open_intents WHERE bill_id=?').get(request.billId);
   const id = db.prepare('INSERT INTO payments(bill_id,actor_id,paid_at,amount,method,account) VALUES(?,?,?,?,?,?)')
-    .run(request.billId, cashSale?.originalActor ?? actor, paidAt, bill.total, request.method, request.account).lastInsertRowid;
+    .run(request.billId, originalSale?.originalActor ?? actor, paidAt, bill.total, request.method, request.account).lastInsertRowid;
   if (physicalCash) db.prepare("INSERT INTO pf700_cash_intent_results(intent_id,actor_id,status,created_at) VALUES(?,?,'paid',?)")
     .run(physicalCash.id,actor,paidAt);
   markService(db, paidAt);
   assignPayment(db, id, paidAt);
   db.prepare("UPDATE orders SET status='completed' WHERE id=? AND status='open' AND retired_empty=0").run(bill.orderId);
   recordAudit(db, actor, 'record', 'payment', id, bill.orderId, {});
-  if (cashSale?.mode === 'simulation') recordAudit(db, actor, 'recover', 'simulated_fiscal_checkout', request.billId, bill.orderId, {});
+  if (originalSale?.mode === 'simulation') recordAudit(db, actor, 'recover', 'simulated_fiscal_checkout', request.billId, bill.orderId, {});
   // Keep ordinary non-fiscal bill jobs separate from the fiscal journal. A
   // previously printed unpaid bill is never automatically printed again.
   let attempt = null;
@@ -110,7 +111,8 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
     return {response:failure('uncertain')};
   }
   const fiscal = readFiscalCheckout(db, request.billId, journal);
-  if (request.acknowledgedDocument && (fiscal?.mode !== 'device' || fiscal.method !== 'cash' ||
+  if (request.method === 'card' && request.acknowledgedDocument && (fiscal?.mode !== 'device' || fiscal.method !== 'card' || !db.prepare('SELECT 1 FROM pf700_card_intents WHERE bill_id=?').get(request.billId))) return {response:{ok:false,error:'Invalid request'}};
+  if (request.acknowledgedDocument && (fiscal?.mode !== 'device' || fiscal.method !== request.method ||
       fiscal.reference !== request.acknowledgedDocument || !['submitted','accepted'].includes(fiscal.status))) {
     return {response:failure('uncertain')};
   }
@@ -126,6 +128,20 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
     return { response: success(existing.id, fiscal) };
   }
   if (bill.status !== 'open' || bill.retired) return { response: { ok: false, error: 'Bill unavailable' } };
+  const cardIntent = db.prepare('SELECT * FROM pf700_card_open_intents WHERE bill_id=?').get(request.billId);
+  if (cardIntent) {
+    if (request.method !== 'card' || request.account !== 'A') return {response:failure('selection')};
+    if (cardIntent.outcome !== 'approved') return {response:failure('terminalUnknown')};
+    if (fiscal?.status === 'submitted') {
+      if (!request.acknowledgedDocument && !completingSubmission) return {response:failure('submitted')};
+      if (fiscal.deviceId !== cardIntent.device_id || JSON.stringify(fiscal.receipt) !== cardIntent.receipt ||
+          !supervisedCard.matchesBill(db,cardIntent,bill.total)) return {response:failure('cardTrialHold')};
+    } else {
+      if (!supervisedCard.supervised(adapter) || adapter.deviceId !== cardIntent.device_id) return {response:failure('profile')};
+      if (fiscal) return {response:failure(fiscal.status === 'failed' ? 'cardTrialHold' : fiscal.status)};
+      if (request.physicalCardIntentId !== cardIntent.id) return {response:failure('selection')};
+    }
+  } else if (request.physicalCardIntentId) return {response:failure('selection')};
   if (physicalIntent && (request.method!=='cash' || request.account!=='A')) return {response:failure('selection')};
   if (physicalIntent && fiscal?.status!=='submitted' && (adapter?.mode!=='device' || adapter.deviceId!==physicalIntent.deviceId)) return {response:failure('profile')};
   if (adapter?.mode==='device' && request.method==='cash' && request.account==='A' && fiscal?.status!=='submitted' &&
@@ -135,10 +151,7 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
   if (cashIntent && !fiscal && (request.intentId!==cashIntent.id || request.simulateInterrupt!==cashIntent.interruption)) return {response:failure('selection')};
   if (request.simulateInterrupt && (!cashIntent || request.intentId!==cashIntent.id || request.simulateInterrupt!==cashIntent.interruption)) return {response:failure('selection')};
   if ((approval || intent) && (request.method !== 'card' || request.account !== 'A')) return { response: failure('selection') };
-  // Card tender on a physical PF700 stays disabled until its interrupted-sale
-  // recovery has been verified. This guard is independent of adapter policy.
-  // An already acknowledged historical sale may still finish locally below.
-  if (request.method === 'card' && adapter?.mode === 'device' && fiscal?.status !== 'submitted') {
+  if (request.method === 'card' && adapter?.mode === 'device' && !cardIntent && fiscal?.status !== 'submitted') {
     return { response: failure('cardDisabled') };
   }
   if (fiscal) {
@@ -167,7 +180,7 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
       .run(request.billId, intent.actorId, bill.total, Date.now());
   }
   if (adapter && request.account === 'A' && fiscal?.status !== 'submitted') {
-    const reserved = reserveSale(db, request, bill.total, actor, fiscal, adapter);
+    const reserved = reserveSale(db, request, bill.total, actor, fiscal, adapter, cardIntent);
     return reserved.ok === false ? { response: reserved } : { reservation: reserved };
   }
   try {
@@ -178,7 +191,7 @@ function preparePayment(db, session, request, actor, printing, adapter, completi
     const payment = recordPayment(db, request, bill, actor, printing, fiscal);
     // A later invocation that settles an existing receipt is recovery, even
     // when an older client repeats its normal Cash A or saved-intent request.
-    if (settlingPhysicalCash && !completingSubmission) {
+    if (fiscal?.mode === 'device' && fiscal.status === 'submitted' && !completingSubmission) {
       recordAudit(db, actor, 'recover', 'fiscal_checkout', request.billId, bill.orderId, {});
     }
     return payment;
@@ -310,6 +323,7 @@ function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = 
   if (fiscalCheckout && !validFiscalAdapter(fiscalCheckout)) {
     throw Error('Unsupported fiscal checkout adapter');
   }
+  const declineCapability = {};
   ipcMain.handle(CHANNEL, (event, request) => {
     if (!isAllowedSender(event) || !request || typeof request !== 'object' || Array.isArray(request) || Object.getPrototypeOf(request) !== Object.prototype ||
       ![3,4,5].includes(Reflect.ownKeys(request).length) || !['billId', 'method', 'account'].every(k => Object.hasOwn(request, k)) ||
@@ -317,7 +331,10 @@ function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = 
       !['A', 'B'].includes(request.account) || (request.method === 'card' && request.account !== 'A') ||
       (Reflect.ownKeys(request).length === 4 && !(
         (request.method === 'card' && ((Object.hasOwn(request,'prepareSimulated') && request.prepareSimulated === true) ||
-          (Object.hasOwn(request,'recoverSimulated') && request.recoverSimulated === true))) ||
+          (Object.hasOwn(request,'recoverSimulated') && request.recoverSimulated === true) ||
+          (Object.hasOwn(request,'preparePhysicalCard') && request.preparePhysicalCard === true) ||
+          (Object.hasOwn(request,'physicalCardIntentId') && Number.isSafeInteger(request.physicalCardIntentId) && request.physicalCardIntentId > 0) ||
+          (Object.hasOwn(request,'acknowledgedDocument') && typeof request.acknowledgedDocument === 'string' && /^[0-9]{7}$/.test(request.acknowledgedDocument)))) ||
         (request.method === 'cash' && request.account === 'A' &&
           ((Object.hasOwn(request,'preparePhysicalCash') && request.preparePhysicalCash === true) ||
            (Object.hasOwn(request,'releasePhysicalCash') && request.releasePhysicalCash === true) ||
@@ -327,6 +344,9 @@ function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = 
            (Object.hasOwn(request,'checkSimulated') && request.checkSimulated === true) ||
            (Object.hasOwn(request,'finishSimulated') && request.finishSimulated === true))))) ||
       (Reflect.ownKeys(request).length === 5 && !(
+        (request.method==='card' && Object.hasOwn(request,'physicalCardIntentId') && Number.isSafeInteger(request.physicalCardIntentId) &&
+          request.physicalCardIntentId>0 && ((Object.hasOwn(request,'confirmPhysicalCard') && request.confirmPhysicalCard===true) ||
+          (Object.hasOwn(request,'declineToken') && typeof request.declineToken==='string' && /^[0-9a-f]{64}$/.test(request.declineToken)))) ||
         (request.method==='cash' && request.account==='A' && request.inspectPhysicalCash===true && request.checkedNoOtherActivity===true &&
           Object.hasOwn(request,'inspectPhysicalCash') && Object.hasOwn(request,'checkedNoOtherActivity')) ||
         (Object.hasOwn(request,'intentId') &&
@@ -355,6 +375,10 @@ function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = 
             step = request.billId === 2 && request.acknowledgedDocument === '0000030'
               ? preparePayment(db,session,request,actor,printing,fiscalCheckout,false,journalRecovery)
               : {response:failure('selection')};
+          }
+          else if (!supervisedCard.ledgerMatches(db,fiscalCheckout)) step = {response:failure('cardTrialHold')};
+          else if (request.preparePhysicalCard || request.confirmPhysicalCard || request.declineToken) {
+            step = {response:supervisedCard.terminalAction(db,session,request,actor,fiscalCheckout,declineCapability)};
           }
           else if (request.preparePhysicalCash) step = {response:preparePhysicalCash(db,session,request,actor,fiscalCheckout)};
           else if (request.releasePhysicalCash) step = {response:releasePhysicalCash(db,session,request,actor)};
@@ -441,4 +465,4 @@ function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = 
     return execute();
   });
 }
-module.exports = { CHANNEL, registerPayments };
+module.exports = { CHANNEL, registerPayments, recordPayment };

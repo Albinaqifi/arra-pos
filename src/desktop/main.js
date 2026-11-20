@@ -8,7 +8,7 @@ const { registerTableConfig } = require('./table-config');
 const { registerOrders } = require('./orders');
 const { registerLegacyOrderAssignment } = require('./legacy-order-assignment');
 const { registerBills } = require('./bills');
-const { registerPayments } = require('./payments');
+const { registerFastPayments } = require('./fast-pay-service');
 const { selectPf700Checkout } = require('./pf700-checkout-mode');
 const { registerActivityReport } = require('./activity-report');
 const { registerOperationalReports } = require('./operational-reports');
@@ -31,6 +31,7 @@ const { selectPreparationPrinting } = require('./preparation-printing');
 const { printTestJob } = require('./windows-test-printer');
 
 let database;
+let fastPayments;
 let mainWindow;
 let session;
 
@@ -58,7 +59,9 @@ app.whenReady().then(() => {
   try {
     const directory = dataDirectory(process.argv, app.getPath('userData'));
     try {
-      fiscalCheckout = selectPf700Checkout(process.argv, directory);
+      fiscalCheckout = process.argv.includes('--arra-fast-pay')
+        ? require('./fast-pay-device').selectFastPayCheckout(process.argv, directory)
+        : selectPf700Checkout(process.argv, directory);
     } catch {
       dialog.showErrorBox('PF700 checkout',
         'Arra could not start the selected PF700 mode. Check the launcher, data folder and local settings.\n\nArra nuk mund te hape menyren e zgjedhur per PF700. Kontrolloni programin nises, dosjen e te dhenave dhe cilesimet lokale.');
@@ -88,7 +91,8 @@ app.whenReady().then(() => {
   const preparation = selectPreparationPrinting(process.argv, database, fiscalCheckout, windowsPrinter);
   const localPrinter = fiscalCheckout ? null : windowsPrinter;
   const cashBBarPrinter = preparation?.preparationMode === 'routine' ? windowsPrinter : null;
-  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout, null, cashBBarPrinter);
+  fastPayments = registerFastPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout, cashBBarPrinter);
+  if (fastPayments) require('./fast-pay-report-guard').installFastReportGuard(database);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session,
@@ -113,6 +117,7 @@ app.whenReady().then(() => {
 });
 
 app.on('will-quit', () => {
+  fastPayments?.stop();
   if (database) database.close();
 });
 

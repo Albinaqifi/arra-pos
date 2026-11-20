@@ -55,6 +55,7 @@ function handleAccountA(event, req, allowed, db, session, adapter, dailyAdapter)
   try {
     const actor = session.currentUserId();
     if (!actor || actor !== session.authenticatedUserId() || db.prepare('SELECT scope FROM financial_scopes WHERE user_id=?').get(actor)?.scope !== 'combined' || !hasPermissions(db,session,'business_days.close')) return {ok:false,denied:true};
+    if (req.action === 'accountAClose' && require('./supervised-card').blocksClose(db)) return {ok:false,error:'unresolved'};
     if (fiscalRequest) {
       const day=db.prepare(`SELECT j.snapshot AS source,c.id AS closeId,c.snapshot FROM business_days d JOIN day_print_jobs j ON j.day_id=d.id
         LEFT JOIN account_a_closes c ON c.day_id=d.id

@@ -1,5 +1,16 @@
 import { financeText } from './finance-i18n.js';
 const h=React.createElement;
+function receiptStatusText(row, language) {
+  const labels = {
+    queued: ['Fiscal receipt queued', 'Kuponi fiskal në pritje'],
+    unconfirmed: ['Fiscal receipt unconfirmed', 'Kuponi fiskal i pakonfirmuar'],
+    acknowledged: ['Fiscal receipt acknowledged', 'Kuponi fiskal i konfirmuar'],
+  };
+  if (!Object.hasOwn(labels, row.receiptStatus)) return '';
+  const label = labels[row.receiptStatus][language === 'sq' ? 1 : 0];
+  return row.receiptStatus === 'acknowledged' && typeof row.documentNumber === 'string' && /^[0-9]{7}$/.test(row.documentNumber)
+    ? label + ' · ' + row.documentNumber : label;
+}
 export class AccountABills extends React.Component {
   constructor(props) { super(props); this.state={data:null,preview:null,dayId:'',busy:false,notice:'',error:''}; this.active=false; this.sequence=0; this.busy=false; }
   componentDidMount(){this.active=true;this.load();}
@@ -37,7 +48,7 @@ export class AccountABills extends React.Component {
         !p&&!s.error&&s.dayId&&h('p',{role:'status'},t('Loading…')),
         p&&h('div',{className:'finance-day'},h('h3',null,t('Business day #{id}',{id:p.id})),
           h('p',{className:'history-muted'},t('Amount (minor units)')),
-          p.records.length?h('ul',{className:'history-items account-a-bill-list'},p.records.map(r=>h('li',{key:r.billId},h('span',null,h('strong',null,t('Bill #{id}',{id:r.billId}))),h('strong',null,r.amount.toLocaleString())))):h('p',{className:'floor-empty'},t('No paid Account A bills for this day.')),
+          p.records.length?h('ul',{className:'history-items account-a-bill-list'},p.records.map(r=>h('li',{key:r.billId},h('span',null,h('strong',null,t('Bill #{id}',{id:r.billId})),r.receiptStatus&&h('small',null,receiptStatusText(r,this.props.language))),h('strong',null,r.amount.toLocaleString())))):h('p',{className:'floor-empty'},t('No paid Account A bills for this day.')),
           h('div',{className:'finance-metrics'},[['Total',p.total],['Cash',p.cash],['Card',p.card]].map(([label,value])=>h('div',{key:label},h('span',null,t(label)),h('strong',null,value.toLocaleString())))),
           h('div',{className:'floor-actions'},h('button',{className:'floor-primary',disabled:s.busy,onClick:()=>this.print()},t('Print Account A bills')),h('button',{disabled:s.busy,onClick:()=>this.preview(s.dayId)},t('Refresh preview')))),
         s.data.canConfigure&&h('details',{className:'day-details'},h('summary',null,t('Account A bills printer settings')),h('form',{className:'report-form account-a-printer-form',key:s.data.queue,onSubmit:e=>{e.preventDefault();this.configure(e.currentTarget.elements.queue.value);}},h('label',null,t('Printer queue '),h('input',{name:'queue',required:true,maxLength:255,defaultValue:s.data.queue})),h('button',{type:'submit',disabled:s.busy},t('Save printer queue'))))));

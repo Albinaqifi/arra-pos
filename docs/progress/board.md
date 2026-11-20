@@ -4,13 +4,13 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
-| S-103 | In progress | Windows launcher built and reviewed. A disposable desktop shortcut opened verified RC4 checkout without a console. Restaurant installation and PR merge remain open. [Handoff](handoffs/S-103.md) |
+| S-103 | In progress | Windows launcher and RC5 source integration are under review. Restaurant installation and PR merge remain open. [Integration handoff](handoffs/RC5-integration.md) |
 | S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |
 | S-101 | In progress | Separate-terminal Card A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-101.md) |
 | S-100 | In progress | Immediate Cash A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-100.md) |
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |
-| S-097 | In progress | Simulated Card A approval, durable hold and training receipt recovery reviewed and tested. Physical Card A remains disabled pending S-096. [Handoff](handoffs/S-097.md) |
+| S-097 | In progress | Historical supervised Card A trial remains available for recovery; RC5 fast Pay records new Card A payments after the separate terminal approval. Physical integration verification remains open. [Handoff](handoffs/S-097.md) |
 | S-096 | In progress | Bill #2 recovered with one 150 den Cash A payment and no reprint. The operator reported a full paper receipt and an unresolved payment on the third espresso sale. The fiscal daily close is on hold. [Handoff](handoffs/S-096.md) |
 | S-095 | In progress | Routine Cash A checkout reviewed and automated tests passed; offline desktop and physical PF700 checks remain. [Handoff](handoffs/S-095.md) |
 | S-093 | In progress | Restaurant RC5 desktop upgrade, mixed PINs, backup restore and three payment routes verified with synthetic data. Restaurant hardware check and PR merge remain open. [Handoff](handoffs/S-093.md) |
@@ -109,7 +109,7 @@ S-052's local recovery exercise is complete. The owner cannot test on another ma
 | S-075 | In progress | PR #102 merged into S-074 branch as 0f08803; not yet on main. Owner reports printer flow works; detailed physical/offline checks and prerequisite verification outstanding. |
 | S-076 | Done | Independent review and tests passed; owner confirmed setup, restart, offline workflows and upgrade data; PR #106 merged as `851ce22`. |
 
-| S-077 | In progress | PR #110 merged as `e963ab6`; independent review, full-suite completion and target-machine verification outstanding. |
+| S-077 | In progress | PR #110 merged as `e963ab6`. POS kit 1.0.10 includes PR #153's preparation routes and fiscal origin settings for all 103 items (85 Yes, 18 No). Target-PC verification is pending. [Handoff](handoffs/S-077.md) |
 | S-078 | In progress | PR #112 merged; independent code review and focused tests found no defects, but rendered review and desktop verification remain outstanding. |
 
 | S-079 | Done | PR #114 merged as `e7f382c`; independent review and tests passed; owner reports all detailed checks passed. |

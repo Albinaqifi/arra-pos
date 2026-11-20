@@ -121,11 +121,12 @@ test('every supervised-card file or inspection error holds a previously reviewed
   assert.equal(session.review().ok,false);
   assert.equal(session.pay(finish).ok,false);
   guard.mock.restore();
-  f.db.exec('SAVEPOINT changed; PRAGMA user_version=53');
+  f.db.exec('SAVEPOINT changed; DROP VIEW pf700_card_open_intents');
   assert.equal(session.pay(finish).ok,false,'v53 cannot omit the supervised-card tables');
   f.db.exec('ROLLBACK TO changed; RELEASE changed');
-  f.db.exec('CREATE TABLE pf700_card_intents(id INTEGER PRIMARY KEY)');
+  f.db.exec('SAVEPOINT changed; PRAGMA user_version=50');
   assert.equal(session.review().ok,false,'a v50 database cannot have a partial supervised-card schema');
+  f.db.exec('ROLLBACK TO changed; RELEASE changed');
   assert.deepEqual(totals(f.db),initial);
   assert.deepEqual(session.writes,[]);
 });

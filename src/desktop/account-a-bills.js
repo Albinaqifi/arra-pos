@@ -32,7 +32,10 @@ async function handle(event,req,allowed,db,session,adapter) {
     }
     if(req.action==='accountABillsList') return {ok:true,data:{days:db.prepare('SELECT id,opened_at AS openedAt,closed_at AS closedAt FROM business_days ORDER BY id DESC').all(),queue:db.prepare('SELECT queue FROM account_a_bill_print_settings WHERE id=1').get().queue,canConfigure:scope==='combined' && hasPermissions(db,session,'business_days.close')}};
     const data=report(db,req.dayId), hash=digest(data);
-    if(req.action==='accountABillsPreview') return {ok:true,data:{...data,digest:hash}};
+    if(req.action==='accountABillsPreview') {
+      const preview = scope === 'combined' ? require('./fast-pay-preview').attachReceiptStatuses(db,data) : data;
+      return {ok:true,data:{...preview,digest:hash}};
+    }
     if(hash!==req.digest) return {ok:false,stale:true};
     if(flights.has(db)) return {ok:false,busy:true};
     const queue=db.prepare('SELECT queue FROM account_a_bill_print_settings WHERE id=1').get().queue;
