@@ -11,6 +11,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve,ms));
 const kit = path.resolve(process.env.QA_PAY_KIT || process.argv[2]);
 const desktop = path.join(kit,'program','resources','app','src','desktop');
 const mod = name => require(path.join(desktop,name));
+const barQueue = 'Sample restaurant Bar';
 const location = () => path.join(process.env.APPDATA,'Arra POS PF700 Commissioning');
 const dbfile = () => path.join(location(),'arra.sqlite');
 const plain = rows => rows.map(row=>({...row}));
@@ -23,6 +24,8 @@ function fixtures(keys) {
     mod('pf700-commissioning').deviceTrial(createStatefulPf700().serial).claim();
     mod('tables').seedTables(db);
     mod('arra-menu').seedArraMenu(db,{applyOrigins:false});
+    db.prepare("UPDATE test_printer_queues SET queue=? WHERE destination='bar'").run(barQueue);
+    db.prepare("UPDATE bill_printer_queues SET queue='Other sample bill printer' WHERE account='B'").run();
     db.exec("INSERT INTO menu_product_fiscal_origin VALUES ('arra-product-11-0',1),('arra-product-12-0',0)");
     const user = name=>db.prepare('SELECT id FROM local_users WHERE username=?').get(name).id;
     const id=user('sample-waiter');
@@ -153,6 +156,7 @@ async function desktopPhase() {
   app.commandLine.appendSwitch('disable-background-networking');
   process.argv.push('--arra-fast-pay','--pf700-routine-checkout');
   const ops=[],calls=[];
+  const barOutput=[];
   const deny=name=>()=>{calls.push(name);throw Error('Unexpected IO: '+name);};
   for(const key of ['spawnSync','exec','execSync','execFile','execFileSync','fork'])cp[key]=deny(key);
   cp.spawn=(exe,args)=>{
@@ -175,6 +179,24 @@ async function desktopPhase() {
   const main=path.join(desktop,'main.js');
   const electron=require('electron'),Module=require('node:module'),load=Module._load;
   Module._load=function(id,parent,...rest) {
+    if(id==='electron' && parent?.filename===path.join(desktop,'windows-test-printer.js')) {
+      // Exercise the packaged formatter and adapter without enumerating or
+      // submitting anything to the host's Windows printers.
+      return {BrowserWindow:class {
+        constructor() {
+          this.webContents={
+            getPrintersAsync:async()=>[{name:barQueue}],
+            print:(options,callback)=>{
+              barOutput.push({options,html:this.html});
+              callback(phase!=='pay'); // The original bill's acknowledgement is lost.
+            }
+          };
+        }
+        async loadURL(url){this.html=decodeURIComponent(url.slice(url.indexOf(',')+1));}
+        isDestroyed(){return false;}
+        destroy(){}
+      }};
+    }
     if(id==='electron' && parent?.filename===main)return new Proxy(electron,{get(target,key){
       if(key==='BrowserWindow')return class extends BrowserWindow{constructor(opts){super({...opts,show:false,webPreferences:{...opts.webPreferences,offscreen:true,backgroundThrottling:false}});}};
       return target[key];
@@ -231,6 +253,10 @@ async function desktopPhase() {
       const [same,conflict]=await Promise.all([record(1,'cash'),record(1,'card')]);
       assert.equal(same.ok,true);assert.equal(conflict.ok,false);
       assert.equal((await call('payment',{billId:2,method:'card',account:'B'})).ok,false);
+      const cashB={billId:3,method:'cash',account:'B'};
+      assert.equal((await call('payment',cashB)).ok,true);
+      await waitFor(()=>barOutput.length===1,'first Cash B Windows submission');
+      assert.equal((await call('testPrinting',{action:'list'})).data.barBills.length,0);
       assert.deepEqual(statuses(),['queued','queued']);
     } else if(phase==='recover') {
       await waitFor(()=>statuses().join()==='unconfirmed,acknowledged','startup receipt dispatch');
@@ -239,6 +265,14 @@ async function desktopPhase() {
       assert.deepEqual(ops.map(row=>[row.method,row.fake.state.tenders,row.fake.state.closes]),[['cash',1,1],['card',1,1],['cash',1,1]]);
       assert.equal(ops[0].fake.transcript.at(-1).effect,'executed-reply-lost');
       assert.equal((await call('signIn','sample-combined',keys.passwords[3])).ok,true);
+      const list=(await call('testPrinting',{action:'list'})).data;
+      assert.deepEqual(list.barBills.map(job=>[job.billId,job.result,job.attempts]),[[3,'uncertain',1]]);
+      assert.ok(list.jobs.every(job=>!job.billId));
+      const retry={action:'retry',jobId:list.barBills[0].id,requestId:'inspected-paper',checked:true};
+      assert.equal((await call('testPrinting',{...retry,checked:false})).ok,false);
+      assert.equal((await call('testPrinting',retry)).ok,true);
+      await waitFor(()=>observe(db=>db.prepare("SELECT count(*) n FROM test_print_results WHERE result='accepted'").get().n)===1,'checked Bar copy');
+      assert.equal((await call('testPrinting',retry)).ok,true);
       const report=await call('businessDays',{action:'accountABillsPreview',dayId:1});
       assert.equal(report.ok,true);assert.deepEqual([report.data.cash,report.data.card,report.data.total],[500,250,750]);
       assert.deepEqual(report.data.records.map(r=>r.receiptStatus),statuses());
@@ -282,12 +316,25 @@ async function desktopPhase() {
       fs.writeFileSync(path.join(root,phase+'.ready'),'');
       await waitFor(()=>fs.existsSync(path.join(root,'race.go')),'race release');
       let response=await record(billId,method);
-      if(response.error==='Could not record payment. Retry the same selection.')response=await record(billId,method);
-      raceWon=response.ok;
-      if(!raceWon)assert.equal(response.error,'Bill already paid with a different selection');
+      fs.writeFileSync(path.join(root,phase+'.returned'),'');
+      await waitFor(()=>['cash','card'].every(tender=>fs.existsSync(path.join(root,'race-'+tender+'.returned'))),'both initial Pay responses');
+      const saved=observe(db=>db.prepare('SELECT method FROM payments WHERE bill_id=?').get(billId));
+      assert.ok(saved,'one of the original competing Pay requests must commit');
+      raceWon=saved.method===method;
+      assert.equal(response.ok,raceWon);
+      // Both first requests raced. Serialize only the later operator retries so
+      // that they inspect the committed result instead of racing a second time.
+      if(!raceWon) {
+        await waitFor(()=>fs.existsSync(path.join(root,'race-winner-replayed')),'winning payment replay');
+        if(response.error==='Could not record payment. Retry the same selection.')response=await record(billId,method);
+        assert.equal(response.error,'Bill already paid with a different selection');
+      }
       const repeated=await record(billId,method);
       assert.equal(repeated.ok,raceWon);
-      if(raceWon)assert.equal(repeated.data.id,response.data.id);
+      if(raceWon) {
+        assert.equal(repeated.data.id,response.data.id);
+        fs.writeFileSync(path.join(root,'race-winner-replayed'),'');
+      } else assert.equal(repeated.error,'Bill already paid with a different selection');
     } else if(phase==='restore-before-pay') {
       await waiterIPC();
       const id=await generate(1);
@@ -300,9 +347,22 @@ async function desktopPhase() {
       await delay(250);
     } else throw Error('Unknown test phase');
     if(phase!=='recover')assert.equal(ops.length,0,'unexpected synthetic device operation');
+    assert.equal(barOutput.length,['pay','recover'].includes(phase)?1:0,'unexpected Windows submission');
+    for(const paper of barOutput) {
+      assert.equal(paper.options.deviceName,barQueue);
+      assert.equal(paper.options.silent,true);
+      assert.match(paper.html,/NON-FISCAL CUSTOMER BILL/);
+      assert.match(paper.html,/Bill #3/);
+      assert.match(paper.html,/Table 3/);
+      const lines=observe(db=>db.prepare('SELECT name,quantity,unit_price AS price FROM bill_lines WHERE bill_id=3 ORDER BY id').all());
+      assert.equal(lines.length,2);
+      for (const line of lines) assert.ok(paper.html.includes(line.quantity+' x '+line.name+'  '+line.quantity*line.price+' den'));
+      assert.match(paper.html,/TOTAL: 250 den/);
+      assert.match(paper.html,/PAID - CASH/);
+    }
     assert.deepEqual(calls,[]);
-    pass({pay:'Pay closed three bills and freed their tables before any device operation; Cash B, retry and conflicting tender checked',
-      recover:'startup delivered both queued receipts; lost cash close reply held, next card + cash each acknowledged. Account A 500 cash / 250 card, wallet 850 from opening 100',
+    pass({pay:'Pay freed three tables, queued two fiscal receipts and sent one Cash B bill to the configured Bar. A payment replay printed no duplicate.',
+      recover:'Recovered queued A receipts and retried only the checked Cash B paper. Account A 500 cash / 250 card, wallet 850 from opening 100',
       restart:'paid bills replayed safely, original three receipt outcomes preserved',
       rollback:'injected queue failure rolled back payment and preserved unpaid bill; Combined payment and B preview denied; A preview retained existing scope',
       'race-cash':'independent cash session and same-selection retry returned a consistent result',

@@ -1,11 +1,13 @@
-// Run against the extracted RC2 renderer bundle supplied to the packager.
+// By default exercise the transformation on RC2. With --packaged exercise the
+// actual renderer shipped inside the restaurant ZIP.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { patchRenderer } = require('./renderer.cjs');
-const original = fs.readFileSync(process.argv[2]);
-const patched = patchRenderer(original);
+const packaged = process.argv[2] === '--packaged';
+const input = fs.readFileSync(process.argv[packaged ? 3 : 2]);
+const patched = packaged ? input.toString('utf8') : patchRenderer(input);
 const startup = 'startRenderer(() => Promise.resolve().then(() => (init_App(), App_exports)));';
 assert.ok(patched.includes(startup));
 const compiled = new vm.Script(patched.replace(startup,
@@ -170,7 +172,9 @@ test('unmarked bills use the original RC2 module and mismatched kits are rejecte
   await instance.review();
   assert.ok(button(instance, 'Cash'));
   assert.ok(!button(instance, 'Cash A'));
-  assert.throws(() => patchRenderer(Buffer.concat([original, Buffer.from('\n')])), /Expected the original RC2/);
+  const mismatched = Buffer.concat([input, Buffer.from('\n')]);
+  assert.throws(() => patchRenderer(mismatched), /Expected the original RC2/);
+  assert.throws(() => patchRenderer(mismatched, true), /Expected the Cash B Bar RC3/);
 });
 test('Account A preview shows receipt state only on enriched rows and a verified document on acknowledgement', () => {
   const { Admin } = fixture();

@@ -1,4 +1,4 @@
-"""Build the Windows Pay trial from the restaurant's exact schema-53 RC2 ZIP."""
+"""Build Arra Pay from the exact restaurant RC2 or Cash B Bar RC3 ZIP."""
 
 import argparse
 import hashlib
@@ -11,6 +11,7 @@ import zipfile
 
 SOURCE = Path(__file__).resolve().parent
 RC2 = "a364c984c39624fdbc718ef085d62ec6d5ce3ba47410f55ecf03beb8529302be"
+RC3 = "05bd033f27c3bf1d360afe650dfdc4d674d7402bb221106f2eb7bebc86e6d0fc"
 DESKTOP = "program/resources/app/src/desktop/"
 RENDERER = "program/resources/app/dist/renderer-entry.js"
 LAUNCHER = "program/start-supervised-pf700.ps1"
@@ -29,7 +30,7 @@ def replace_once(data, before, after):
     return data.replace(before, after)
 
 
-def patches(archive, temp):
+def patches(archive, temp, cash_b_bar):
     def edit(name, replacements):
         data = archive.read(name).decode("utf-8")
         for before, after in replacements:
@@ -88,26 +89,34 @@ def patches(archive, temp):
     }
     original, patched = temp / "rc2.js", temp / "pay.js"
     original.write_bytes(archive.read(RENDERER))
-    subprocess.run(["node", str(SOURCE / "renderer.cjs"), str(original), str(patched)], check=True)
+    command = ["node", str(SOURCE / "renderer.cjs"), str(original), str(patched)]
+    if cash_b_bar:
+        command.append("--cash-b-bar")
+    subprocess.run(command, check=True)
     result[RENDERER] = patched.read_bytes()
     result.update({name: (SOURCE / src).read_bytes() for src, name in FILES.items()})
+    if cash_b_bar:
+        result["START-HERE.txt"] = (SOURCE / "START-HERE-PAY-AND-BAR.txt").read_bytes()
     return result
 
 
-def build(base, output, unpacked=False):
+def build(base, output, unpacked=False, cash_b_bar=False):
     if not base.is_file():
-        raise ValueError("RC2 ZIP not found")
+        raise ValueError("Restaurant source ZIP not found")
     with base.open("rb") as stream:
-        if hashlib.file_digest(stream, "sha256").hexdigest() != RC2:
-            raise ValueError("Use the original RC2 Windows ZIP")
+        if hashlib.file_digest(stream, "sha256").hexdigest() != (RC3 if cash_b_bar else RC2):
+            expected = "Cash B Bar RC3" if cash_b_bar else "RC2"
+            raise ValueError(f"Use the verified {expected} Windows ZIP")
     if output.exists():
         raise FileExistsError(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as directory:
         temp = Path(directory)
         with zipfile.ZipFile(base) as original:
-            changes = patches(original, temp)
+            changes = patches(original, temp, cash_b_bar)
             omit = {"Arra-Cash-A.cmd", "Arra-Card-A-Trial.cmd", "READ-BEFORE-USE.txt"}
+            if cash_b_bar:
+                omit.add(LAUNCHER)
             retained = [info for info in original.infolist() if info.filename not in changes
                         and info.filename not in omit and not info.filename.startswith("Recovery/")]
             if unpacked:
@@ -143,7 +152,8 @@ def build(base, output, unpacked=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--unpacked", action="store_true", help="write a test folder without creating a ZIP")
-    parser.add_argument("rc2", type=Path)
+    parser.add_argument("--cash-b-bar", action="store_true", help="build combined Pay and Bar output from verified RC3")
+    parser.add_argument("restaurant_zip", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
-    build(args.rc2, args.output, unpacked=args.unpacked)
+    build(args.restaurant_zip, args.output, unpacked=args.unpacked, cash_b_bar=args.cash_b_bar)

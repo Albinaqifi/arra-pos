@@ -1,0 +1,37 @@
+Arra POS 1.0.10 RC4 - Pay and Bar printing
+
+Extract the entire ZIP into a new folder on the restaurant PC. Keep the
+previous program folder and verified backup. Close any running Arra window.
+Use the original Windows account and open Open-Arra-Pay.cmd in the new
+folder. This uses the restaurant's existing data and PF700 printer profile.
+Starting Arra can send queued Account A receipts that have never been attempted.
+
+On the bill review screen for a new order, select the tender and press Pay
+once. Pay records the payment and releases the table.
+For Cash A and Card A, Arra sends the fiscal receipt to the PF700 in the
+background.
+
+Cash A - After receiving the cash, select Cash A and press Pay.
+Card A - Confirm approval on the separate card terminal, select Card A
+         and press Pay.
+Cash B - After receiving cash, select the Arra logo at the top right
+         (Select Cash B), then press Pay. The Bar printer receives the
+         itemized non-fiscal customer bill.
+
+To set the Bar printer, open Administration > Overview > Preparation tickets.
+Enter the exact Windows printer name in Bar queue and choose Save queue.
+The Bar station's preparation tickets use this same queue.
+
+If a Cash B bill is missing, check the printer and paper. An authorized B
+or Combined owner can open Administration > Overview > Account B bill / Bar,
+find the original bill number, and choose Retry after checking. This sends
+only the saved bill. A previous uncertain attempt may have printed.
+
+If Account A paper is missing, keep the bill number and check the printer.
+A Combined user can refresh Financial information > Print Account A bills
+to see the receipt status. An uncertain receipt may have printed. Keep its
+original payment and terminal record for reconciliation. Arra can send a
+queued receipt after restart if it has never attempted it.
+
+Keep the previously printed, unresolved espresso bill for its existing
+recovery procedure. The existing fiscal daily-close hold still applies.

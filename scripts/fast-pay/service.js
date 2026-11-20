@@ -271,8 +271,8 @@ function receiptWorker(db, adapter) {
   return {wake,stop() { stopped = true; clearTimeout(timer); }};
 }
 
-function registerFastPayments(ipcMain, isAllowedSender, db, session, printing = null, adapter = null) {
-  if (adapter?.fastPayVersion !== 1) return registerPayments(ipcMain,isAllowedSender,db,session,printing,adapter);
+function registerFastPayments(ipcMain, isAllowedSender, db, session, printing = null, adapter = null, cashBBarPrinter = null) {
+  if (adapter?.fastPayVersion !== 1) return registerPayments(ipcMain,isAllowedSender,db,session,printing,adapter,cashBBarPrinter);
   if (!validFiscalAdapter(adapter) || adapter.mode !== 'device' || typeof adapter.canRegister !== 'function' ||
       adapter.requireOrigins !== true || !isCommissioned(db)) {
     throw Error('Invalid fast payment trial profile');
@@ -310,7 +310,7 @@ function registerFastPayments(ipcMain, isAllowedSender, db, session, printing = 
         return result;
       } catch { return {ok:false,error:'Could not record payment. Retry the same selection.'}; }
     });
-  }},isAllowedSender,db,session,printing,adapter);
+  }},isAllowedSender,db,session,printing,adapter,cashBBarPrinter);
   worker.wake();
   return worker;
 }

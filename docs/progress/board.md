@@ -4,9 +4,9 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
-| S-102 | In progress | The owner requested one restaurant package with Cash B Bar printing and both A Pay flows. [Handoff](handoffs/S-102.md) |
-| S-101 | In progress | Separate-terminal Card A verified offline on Windows. Included in the S-102 release work. [Handoff](handoffs/S-101.md) |
-| S-100 | In progress | Immediate Cash A verified offline on Windows. The owner requested the Pay ZIP as part of S-102. [Handoff](handoffs/S-100.md) |
+| S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |
+| S-101 | In progress | Separate-terminal Card A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-101.md) |
+| S-100 | In progress | Immediate Cash A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-100.md) |
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |
 | S-097 | In progress | Simulated Card A approval, durable hold and training receipt recovery reviewed and tested. Physical Card A remains disabled pending S-096. [Handoff](handoffs/S-097.md) |
