@@ -91,7 +91,7 @@ function selectPf700Checkout(args, directory, readProfile = readLocalProfile, cr
       },
       claimCardDispatch: token => cardLedger.dispatch(profile.expectedSerial, token)
     } : {}),
-    dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial }),
+    dailyReport: createWindowsPf700DailyReport({ expectedSerial: profile.expectedSerial, printerWait }),
     printerWait,
     printerControl: createWindowsPf700PrinterControl({ expectedSerial: profile.expectedSerial, printerWait }),
     canRegister(receipt, prior) {

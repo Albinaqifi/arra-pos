@@ -2,6 +2,8 @@
 
 Record issues found outside the current story in one short line: date, story, issue and why it matters. Do not silently expand the current story. Promote an item to the backlog when appropriate.
 
+- 2026-11-20, S-084: The global Albanian spelling test forbids `ë` in the finance dictionary. Existing cash movement and periodic report tests expect that spelling. The global test fails on baseline `7d0e4e7`; align those requirements separately.
+
 - 2026-11-09, S-046: Existing full-suite failures: application-info's expected bridge list omits `adminAccess`; bills-renderer and session-independent evaluate the admin-dependent renderer without loading `ArraComponents`, obscuring unrelated regression checks.
 - 2026-11-09, S-042: Concurrent-payment test failed during the full suite but passed in isolation; investigate possible load-related flakiness.
 - 2026-11-18, S-088: Concurrent-payment test workers can race in database migration startup and hit `database is locked`, leaving the other worker waiting at the barrier; investigate the existing test/startup race.

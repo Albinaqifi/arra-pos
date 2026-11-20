@@ -66,10 +66,17 @@ function payment(db,id,{kind='device',method='cash',amount=70,receiptCount=1,doc
   if (kind==='corrected') db.prepare("INSERT INTO payment_account_corrections(payment_id,actor_id,occurred_at,reason) VALUES(?,1,1,'sample')").run(id);
 }
 
-function device(issueDailyReport,reconcileDailyReport=()=>{throw Error('No read expected');}) {
-  return {mode:'device',deviceId:'sample-device',issueDailyReport,reconcileDailyReport};
+const ready = () => ({status:'ready', ...baseline});
+function device(issueDailyReport,reconcileDailyReport=()=>{throw Error('No recovery expected');},checkDailyReport=ready) {
+  return {mode:'device',deviceId:'sample-device',checkDailyReport,issueDailyReport,reconcileDailyReport};
 }
-const issue = dayId=>({action:'accountAFiscalClose',mode:'device',dayId,confirmed:true});
+const inspect = dayId=>({action:'accountAFiscalCheck',mode:'device',dayId});
+const issue = dayId=>({action:'accountAFiscalClose',mode:'device',dayId,confirmed:true,checkId:'00000000-0000-0000-0000-000000000000'});
+async function checked(call, dayId, options={}) {
+  const result = await call({...inspect(dayId),...options});
+  assert.equal(result.outcome,'ready');
+  return {...issue(dayId),...options,checkId:result.checkId,...(result.printerDocument ? {warningDocument:result.printerDocument} : {})};
+}
 const check = dayId=>({action:'accountAFiscalReconcile',mode:'device',dayId});
 const internal = dayId=>({action:'accountAClose',dayId,language:'en'});
 const notIssued = {status:'not-issued',evidence:{
@@ -85,7 +92,7 @@ test('only matching read-only nonissuance proof releases checkout and permits on
   const f=fixture(t,adapter);
   payment(f.db,1);
   const dayId=await f.closeDay();
-  const original=issue(dayId);
+  const original=await checked(f.call,dayId);
   assert.deepEqual(await f.call(original),{ok:false,error:'uncertain'});
   for (const evidence of [null,{...notIssued.evidence,closure:13},
     {...notIssued.evidence,documentNumber:'0000023'},{...notIssued.evidence,deviceDate:'000000'}]) {
@@ -112,7 +119,7 @@ test('only matching read-only nonissuance proof releases checkout and permits on
     assert.equal((await f.call(request)).ok,false);
   }
   assert.equal(sends,1);
-  const retry={...original,retryAfter};
+  const retry=await checked(f.call,dayId,{retryAfter});
   assert.deepEqual(await f.call(retry),{ok:true});
   assert.deepEqual(await f.call(retry),{ok:true});
   assert.equal(sends,2);
@@ -129,7 +136,7 @@ test('only matching read-only nonissuance proof releases checkout and permits on
 
 test('a delayed recovery on a second connection cannot clear or confirm the next attempt with identical device counters',async t=>{
   for (const lateResult of [notIssued,accepted]) {
-    let sends=0,resolveOldRead;
+    let sends=0,resolveOldRead,canReadOld;
     const adapter=device((_expected,{beforeIssue})=>{
       beforeIssue(baseline);
       return ++sends<3 ? {status:'uncertain'} : accepted;
@@ -137,15 +144,20 @@ test('a delayed recovery on a second connection cannot clear or confirm the next
     const f=fixture(t,adapter);
     payment(f.db,1);
     const dayId=await f.closeDay();
-    assert.equal((await f.call(issue(dayId))).error,'uncertain');
+    assert.equal((await f.call(await checked(f.call,dayId))).error,'uncertain');
     const otherDb=openDatabase(f.dir);
     try {
-      const other=f.connect(otherDb,device(assert.fail,()=>new Promise(resolve=>{resolveOldRead=resolve;})));
+      const other=f.connect(otherDb,device(assert.fail,(_expected,_baseline,mayRead)=>{
+        canReadOld=mayRead;
+        return new Promise(resolve=>{resolveOldRead=resolve;});
+      }));
       const delayed=other(check(dayId));
+      assert.equal(canReadOld(),true);
       assert.deepEqual(await f.call(check(dayId)),{ok:true,outcome:'not-issued'});
       const firstToken=f.list()[0].fiscal.retryAfter;
-      const oldConfirmation={...issue(dayId),retryAfter:firstToken};
+      const oldConfirmation=await checked(f.call,dayId,{retryAfter:firstToken});
       assert.equal((await f.call(oldConfirmation)).error,'uncertain');
+      assert.equal(canReadOld(),false);
       resolveOldRead(lateResult);
       assert.deepEqual(await delayed,{ok:false,error:'uncertain'});
       assert.equal(f.list()[0].fiscal.status,'uncertain');
@@ -157,7 +169,7 @@ test('a delayed recovery on a second connection cannot clear or confirm the next
       assert.equal((await f.call(oldConfirmation)).ok,false);
       assert.equal((await f.call(issue(dayId))).ok,false);
       assert.equal(sends,2);
-      assert.equal((await f.call({...issue(dayId),retryAfter:nextToken})).ok,true);
+      assert.equal((await f.call(await checked(f.call,dayId,{retryAfter:nextToken}))).ok,true);
       assert.equal(sends,3);
       assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_nonissuances').get().n,2);
       assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_confirmations').get().n,1);
@@ -167,8 +179,10 @@ test('a delayed recovery on a second connection cannot clear or confirm the next
 
 test('a confirmation already in preflight must still match the last resolved attempt at the write boundary',async t=>{
   let allowPreflight, localWrites=0, parallelWrites=0;
-  const local=device(async (_expected,{beforeIssue})=>{
+  const local=device(async (_expected,{beforeIssue,mayRead})=>{
+    assert.equal(mayRead(),true);
     await new Promise(resolve=>{allowPreflight=resolve;});
+    assert.equal(mayRead(),false);
     beforeIssue(baseline);
     localWrites++;
     return accepted;
@@ -176,13 +190,13 @@ test('a confirmation already in preflight must still match the last resolved att
   const f=fixture(t,local);
   payment(f.db,1);
   const dayId=await f.closeDay();
-  const delayed=f.call(issue(dayId));
+  const delayed=f.call(await checked(f.call,dayId));
   const otherDb=openDatabase(f.dir);
   try {
     const other=f.connect(otherDb,device((_expected,{beforeIssue})=>{
       beforeIssue(baseline); parallelWrites++; return {status:'uncertain'};
     },()=>notIssued));
-    assert.equal((await other(issue(dayId))).error,'uncertain');
+    assert.equal((await other(await checked(other,dayId))).error,'uncertain');
     assert.deepEqual(await other(check(dayId)),{ok:true,outcome:'not-issued'});
     allowPreflight();
     assert.equal((await delayed).ok,false);
@@ -208,15 +222,18 @@ test('explicit Combined confirmation issues only aggregate data for both tenders
   for (const req of [internal(id),check(id),{...issue(id),confirmed:false},{...issue(id),mode:'simulation'},{...issue(id),other:1},
     {action:'accountARetry',dayId:id,checked:true,requestId:'ignored'}]) assert.equal((await f.call(req)).ok,false);
   assert.equal((await f.call(issue(id),{})).ok,false);
+  assert.equal((await f.call(inspect(id),{})).ok,false);
   for (const user of [2,3]) {
     f.switchActor(user);
     assert.equal((await f.call(issue(id))).ok,false);
+    assert.equal((await f.call(inspect(id))).ok,false);
     assert.equal((await f.call(check(id))).ok,false);
   }
   f.switchActor(1);
   assert.equal(writes,0);
-  assert.equal((await f.call(issue(id))).ok,true);
-  assert.equal((await f.call(issue(id))).ok,true);
+  const confirmed=await checked(f.call,id);
+  assert.equal((await f.call(confirmed)).ok,true);
+  assert.equal((await f.call(confirmed)).ok,true);
   assert.equal(writes,1);
   f.restart(null);
   assert.deepEqual(f.list()[0].fiscal,{mode:'device',status:'complete',reportNumber:'0013'});
@@ -240,7 +257,7 @@ test('unknown and malformed acknowledgements never resend, exclude a concurrent 
   const f=fixture(t,adapter);
   payment(f.db,1);
   const id=await f.closeDay();
-  const initial=f.call(issue(id));
+  const initial=f.call(await checked(f.call,id));
   assert.equal(f.list()[0].fiscal.status,'pending');
   const parallel=openDatabase(f.dir);
   try {
@@ -274,7 +291,8 @@ test('unknown and malformed acknowledgements never resend, exclude a concurrent 
 
 test('empty days, uncovered corrections, same-valued sales on other days and interrupted checkouts block before preflight',async t=>{
   let probes=0;
-  const adapter=device(()=>{probes++;});
+  const probe=()=>{probes++;};
+  const adapter=device(probe,probe,probe);
   for(const reason of ['empty','coverage','period','unresolved']){
     const f=fixture(t,adapter);
     if(reason!=='empty') payment(f.db,1);
@@ -284,6 +302,7 @@ test('empty days, uncovered corrections, same-valued sales on other days and int
     if(reason==='unresolved') payment(f.db,2,{kind:'unresolved'});
     assert.equal(f.list()[0].fiscal.reason,reason);
     assert.equal((await f.call(issue(id))).error,reason);
+    assert.equal((await f.call(inspect(id))).error,reason);
     if(reason==='period') {
       const next=await f.closeDay();
       assert.deepEqual(f.list().map(d=>d.fiscal.reason),['period','period']);
@@ -304,11 +323,11 @@ test('preflight validates clock and repeats proof and authorization before the i
   const f=fixture(t,adapter);
   payment(f.db,1);
   const id=await f.closeDay();
-  assert.equal((await f.call(issue(id))).error,'preflight');
+  assert.equal((await f.call(await checked(f.call,id))).error,'review');
   scenario='identity';
-  assert.equal((await f.call(issue(id))).denied,true);
+  assert.equal((await f.call(await checked(f.call,id))).denied,true);
   f.switchActor(1);scenario='selection';
-  assert.equal((await f.call(issue(id))).error,'preflight');
+  assert.equal((await f.call(await checked(f.call,id))).error,'review');
   assert.equal(writes,0);
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
 });
@@ -321,6 +340,7 @@ test('a physical receipt from a longer period and an incomplete or reordered tra
 
   let first=null;
   const adapter={mode:'simulation',simulatedDocumentNumber:id=>id===1?first:'0000022',
+    checkDailyReport(){throw Error('No preflight');},
     issueDailyReport(){throw Error('No preflight');},reconcileDailyReport(){throw Error('No query');}};
   const sim=fixture(t,adapter);
   payment(sim.db,1,{kind:'simulation'});payment(sim.db,2,{kind:'simulation'});
@@ -368,8 +388,9 @@ test('a v45 internally closed fiscal day gains a separately confirmed Z without 
   assert.deepEqual(f.list()[0].fiscal,{mode:'device',status:'blocked',reason:'unavailable'});
   f.restart(adapter);
   assert.deepEqual([f.list()[0].status,f.list()[0].fiscal.status,f.list()[0].closedBy],['complete','ready',3]);
-  assert.equal((await f.call(issue(dayId))).ok,true);
-  assert.equal((await f.call(issue(dayId))).ok,true);
+  const confirmed = await checked(f.call,dayId);
+  assert.equal((await f.call(confirmed)).ok,true);
+  assert.equal((await f.call(confirmed)).ok,true);
   assert.deepEqual({...f.db.prepare('SELECT day_id,actor_id,closed_at,snapshot FROM account_a_closes').get()},
     {day_id:dayId,actor_id:3,closed_at:1111,snapshot:original});
   assert.deepEqual({...f.db.prepare('SELECT close_id,actor_id,report_number FROM fiscal_daily_confirmations').get()},
@@ -400,6 +421,7 @@ test('equal total in a historical summary for another receipt cannot authorize t
 test('legacy simulated receipts absent from the new printer do not contaminate a later registered training day',async t=>{
   let writes=0;
   const adapter={mode:'simulation',simulatedDocumentNumber:id=>id===2?'0000022':null,
+    checkDailyReport:ready,
     issueDailyReport(expected,{beforeIssue}){beforeIssue(baseline);writes++;return accepted;},reconcileDailyReport(){throw Error('No read');}};
   const f=fixture(t,null,historicalDatabase(45).openDatabase);
   payment(f.db,1,{kind:'simulation'});
@@ -407,7 +429,7 @@ test('legacy simulated receipts absent from the new printer do not contaminate a
   payment(f.db,2,{kind:'simulation'});
   const id=await f.closeDay();
   assert.equal(f.list()[0].fiscal.status,'ready');
-  assert.equal((await f.call({...issue(id),mode:'simulation'})).ok,true);
+  assert.equal((await f.call(await checked(f.call,id,{mode:'simulation'}))).ok,true);
   assert.equal(writes,1);
 });
 
@@ -426,11 +448,77 @@ test('permanently enrolled databases reject local-only closes even for corrected
 });
 test('document warning is rejected when the printer date or authorization is stale',async t=>{
   let date='000000';
-  const f=fixture(t,device(expected=>({status:'document-warning',saleDocument:expected.lastDocumentNumber,printerDocument:'0000023',deviceDate:date})));
+  const f=fixture(t,device(assert.fail,assert.fail,()=>({...ready(),previousDocumentNumber:'0000023',deviceDate:date})));
   payment(f.db,1); const id=await f.closeDay();
-  assert.equal((await f.call(issue(id))).error,'preflight');
-  date=localDate(); const warning=await f.call(issue(id));
-  assert.equal(warning.error,'document-warning');
-  f.switchActor(3); assert.equal((await f.call({...issue(id),warningDocument:'0000023'})).ok,false);
+  assert.deepEqual(await f.call(inspect(id)),{ok:false,error:'preflight',detail:{code:'clock'}});
+  date=localDate(); const request=await checked(f.call,id);
+  assert.equal(request.warningDocument,'0000023');
+  f.switchActor(3); assert.equal((await f.call(request)).ok,false);
+  f.switchActor(1); assert.equal((await f.call(request)).error,'review');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
+});
+
+test('a read-only check never reserves a Z, and only its current observation can reach the writer',async t=>{
+  let checks=0, writes=0, baselineAtIssue=baseline, preview=ready();
+  const adapter=device((_expected,{beforeIssue})=>{
+    beforeIssue(baselineAtIssue);
+    writes++;
+    return accepted;
+  },assert.fail,()=>{ checks++; return preview; });
+  const f=fixture(t,adapter);
+  payment(f.db,1); const dayId=await f.closeDay();
+  for (const extra of [{confirmed:true},{warningDocument:'0000022'},{retryAfter:0},{checkId:issue(dayId).checkId}]) {
+    assert.deepEqual(await f.call({...inspect(dayId),...extra}),{ok:false});
+  }
+  const {checkId:unused,...unchecked}=issue(dayId);
+  assert.deepEqual(await f.call(unchecked),{ok:false});
+  assert.equal((await f.call(issue(dayId))).error,'review');
+  assert.equal(checks,0);
+  const original=await checked(f.call,dayId);
+  const replacement=await checked(f.call,dayId);
+  assert.notEqual(original.checkId,replacement.checkId);
+  assert.equal((await f.call(original)).error,'review');
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
+  f.restart(adapter);
+  assert.equal((await f.call(replacement)).error,'review');
+  const beforeFailure=await checked(f.call,dayId);
+  preview={status:'failed',detail:{code:'format',command:64}};
+  assert.deepEqual(await f.call(inspect(dayId)),{ok:false,error:'preflight',detail:preview.detail});
+  assert.equal((await f.call(beforeFailure)).error,'review');
+  preview=ready();
+  const changed=await checked(f.call,dayId);
+  baselineAtIssue={...baseline,previousClosure:baseline.previousClosure+1};
+  assert.equal((await f.call(changed)).error,'review');
+  baselineAtIssue=baseline;
+  assert.equal((await f.call(changed)).error,'review');
+  preview={...ready(),previousDocumentNumber:'0000023'};
+  const warning=await checked(f.call,dayId);
+  const {warningDocument:ignored,...withoutWarning}=warning;
+  assert.equal((await f.call(withoutWarning)).error,'review');
+  assert.equal(writes,0);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
+  preview=ready();
+  assert.deepEqual(await f.call(await checked(f.call,dayId)),{ok:true});
+  assert.equal(writes,1);
+});
+
+test('a delayed read cannot return a usable result to a changed identity or a changed period',async t=>{
+  let finish,mayRead;
+  const f=fixture(t,device(assert.fail,assert.fail,(_expected,guard)=>{
+    mayRead=guard;
+    return new Promise(resolve=>{finish=resolve;});
+  }));
+  payment(f.db,1); const id=await f.closeDay();
+  const first=f.call(inspect(id));
+  assert.equal(f.list()[0].fiscal.status,'checking');
+  assert.equal(mayRead(),true);
+  f.switchActor(2); assert.equal(mayRead(),false); finish(ready());
+  assert.deepEqual(await first,{ok:false,denied:true});
+  f.switchActor(1);
+  const second=f.call(inspect(id));
+  payment(f.db,2,{document:23,receiptCount:2});
+  assert.equal(mayRead(),false);
+  finish(ready());
+  assert.equal((await second).error,'review');
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
 });

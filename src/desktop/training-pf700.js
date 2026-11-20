@@ -160,10 +160,11 @@ function matchRecordedSale(file, snapshot, attempt) {
 }
 
 function openTrainingPipe(file, operation, now) {
-  const db = openMemory(file);
+  const db = operation === 'ReadDailyReport' ? new DatabaseSync(file, {readOnly: true}) : openMemory(file);
   let issued = false;
-  // A real serial handle is exclusive throughout the preflight and close.
-  try { db.exec('BEGIN IMMEDIATE'); } catch (error) { db.close(); throw error; }
+  // Preview reads one snapshot; issuance reserves the simulated device until the Z.
+  try { db.exec(operation === 'ReadDailyReport' ? 'BEGIN' : 'BEGIN IMMEDIATE'); }
+  catch (error) { db.close(); throw error; }
   return {
     exchange(request) {
       const cmd = request[3], seq = request[2];
@@ -233,7 +234,8 @@ function createTrainingPf700(directory, now = () => new Date()) {
       return result;
     },
     dailyReport: Object.freeze({
-      mode: 'simulation', issueDailyReport: reports.issueDailyReport, reconcileDailyReport: reports.reconcileDailyReport,
+      mode: 'simulation', checkDailyReport: reports.checkDailyReport,
+      issueDailyReport: reports.issueDailyReport, reconcileDailyReport: reports.reconcileDailyReport,
       simulatedDocumentNumber(billId) {
         if (!fs.existsSync(file)) return null;
         const db = new DatabaseSync(file, { readOnly: true });
