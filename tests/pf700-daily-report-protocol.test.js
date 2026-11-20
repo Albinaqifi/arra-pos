@@ -60,8 +60,8 @@ function device(mutate = () => {}) {
       close() {}
     };
   }
-  const adapter = () => createPf700DailyReportWithTransport({ mode: 'simulation', expectedSerial: serial, openPipe });
-  return { adapter, traffic, operations };
+  const adapter = options => createPf700DailyReportWithTransport({ mode: 'simulation', expectedSerial: serial, openPipe, ...options });
+  return { adapter, traffic, operations, openPipe };
 }
 
 test('one registered Z with its exact closure, tax groups and reset registers', async () => {
@@ -77,6 +77,97 @@ test('one registered Z with its exact closure, tax groups and reset registers', 
   assert.deepEqual(printer.operations, ['DailyReport', 'ReadDailyReport']);
   assert.equal((await reports.issueDailyReport(expected, { beforeIssue() { assert.fail(); } })).status, 'failed');
   assert.equal(printer.traffic.filter(c => c === 69).length, 1);
+});
+
+test('preview reads the registers with the write-disabled transport and stops before a Z; issue checks them again', async () => {
+  let extra = false;
+  const printer = device(r => {
+    if (extra && r.cmd === 65) r.value = [205, 130, 0, 75, 0].map(amount).join(',');
+  });
+  const adapter = printer.adapter();
+  assert.deepEqual(await adapter.checkDailyReport(expected), {status: 'ready', ...baseline});
+  assert.deepEqual(printer.operations, ['ReadDailyReport']);
+  assert.deepEqual(printer.traffic, preflight);
+  extra = true;
+  const issue = await adapter.issueDailyReport(expected, {beforeIssue() { assert.fail('Should not reserve the Z'); }});
+  assert.deepEqual(issue, {status: 'failed', detail: {code: 'amount', command: 65, field: 'total', expected: 20000, actual: 20500}});
+  assert.deepEqual(printer.traffic.slice(preflight.length), [90, 74, 76, 62, 64, 65]);
+});
+
+test('preview reports the offending register or field without any command that can print', async () => {
+  const cases = [
+    [90, r => { r.status[2] |= 0x08; }, {code: 'receipt-open'}],
+    [74, r => { r.status[2] |= 0x08; }, {code: 'receipt-open'}],
+    [110, r => { r.value = r.value.split(',').slice(0, 5).join(','); }, {code: 'fields', command: 110, expected: 6, actual: 5}],
+    [64, () => { throw Error('transport error'); }, {code: 'read', command: 64}],
+    [64, r => { r.value = r.value.replace(amount(0) + ',', ''); }, {code: 'fields', command: 64, expected: 6, actual: 5}],
+    [64, r => { r.value = r.value.replace('181126', 'INVALID'); }, {code: 'format', command: 64}],
+    [64, r => { r.value = r.value.replace('181126', '191126'); }, {code: 'last-close-date'}],
+    [65, r => { r.value = r.value.replace(amount(0), 'MALFORMED'); }, {code: 'format', command: 65}],
+    [65, r => { r.value = [200, 120, 0, 80, 0].map(amount).join(','); },
+      {code: 'amount', command: 65, field: 'vat', group: 0, expected: 13000, actual: 12000}],
+    [67, r => { r.value = r.value.replace('0002,0000', '0003,0000'); },
+      {code: 'count', command: 67, field: 'receipts', expected: 2, actual: 3}],
+    [110, r => { r.value = r.value.replace(amount(70), amount(75)); },
+      {code: 'amount', command: 110, field: 'cash', expected: 7000, actual: 7500}],
+    [113, r => { r.value = '9999999'; }, {code: 'limit'}]
+  ];
+  for (const [command, mutate, detail] of cases) {
+    const printer = device(r => { if (r.cmd === command) mutate(r); });
+    assert.deepEqual(await printer.adapter().checkDailyReport(expected), {status: 'failed', detail});
+    assert.deepEqual(printer.operations, ['ReadDailyReport']);
+    assert.equal(printer.traffic.at(-1), command);
+    assert.ok(printer.traffic.every(cmd => preflight.includes(cmd)));
+  }
+});
+
+test('preview returns the actual document number for the service to review', async () => {
+  const printer = device(r => { if (r.cmd === 113) r.value = '0000028'; });
+  assert.deepEqual(await printer.adapter().checkDailyReport(expected), {status: 'ready', ...baseline, previousDocumentNumber: '0000028'});
+  assert.deepEqual(printer.traffic, preflight);
+  assert.deepEqual(printer.operations, ['ReadDailyReport']);
+});
+
+test('a daily check and receipt workers exclude each other only during printer access', async t => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const {createFastPayPrinterAccess} = require('../src/desktop/fast-pay-printer-access');
+  const previous = process.env.LOCALAPPDATA;
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'arra-check-queue-'));
+  process.env.LOCALAPPDATA = folder;
+  t.after(() => {
+    if (previous === undefined) delete process.env.LOCALAPPDATA;
+    else process.env.LOCALAPPDATA = previous;
+    fs.rmSync(folder, {recursive:true, force:true});
+  });
+  const worker = createFastPayPrinterAccess();
+  const printerWait = createFastPayPrinterAccess();
+  const printer = device();
+  const {promise:opened, resolve:openedPort} = Promise.withResolvers();
+  const {promise:resume, resolve:continueCheck} = Promise.withResolvers();
+  const adapter = printer.adapter({printerWait, async openPipe(operation) {
+    openedPort();
+    await resume;
+    return printer.openPipe(operation);
+  }});
+  const occupied = await worker.acquire(() => false);
+  try {
+    const busy = {status:'failed',detail:{code:'busy'}};
+    assert.deepEqual(await adapter.checkDailyReport(expected), busy);
+    assert.deepEqual(await adapter.issueDailyReport(expected, {beforeIssue:assert.fail}), busy);
+    assert.deepEqual(await adapter.reconcileDailyReport(expected,baseline), {status:'uncertain'});
+    assert.deepEqual(printer.traffic, []);
+  } finally { occupied.close(); }
+  assert.deepEqual(await adapter.checkDailyReport(expected, () => false), {status:'review'});
+  const checking = adapter.checkDailyReport(expected, () => true);
+  await opened;
+  try { assert.equal(await worker.acquire(() => false), null); }
+  finally { continueCheck(); }
+  assert.deepEqual(await checking, {status:'ready',...baseline});
+  const betweenClicks = await worker.acquire(() => false);
+  assert.ok(betweenClicks);
+  betweenClicks.close();
+  assert.deepEqual(printer.traffic, preflight);
 });
 
 test('empty or malformed local evidence and absent journal never acquire the transport', async () => {
@@ -292,4 +383,7 @@ test('a changed document number requires a fresh warning before issue',async()=>
   const result=await printer.adapter().issueDailyReport(expected,{warningDocument:'0000028',beforeIssue(){assert.fail('stale warning');}});
   assert.deepEqual(result,{status:'document-warning',saleDocument:'0000026',printerDocument:'0000029',deviceDate:'191126'});
   assert.equal(printer.traffic.includes(69),false);
+  const nowMatches = device();
+  assert.deepEqual(await nowMatches.adapter().issueDailyReport(expected,{warningDocument:'0000028',beforeIssue:assert.fail}), {status:'review'});
+  assert.equal(nowMatches.traffic.includes(69), false);
 });

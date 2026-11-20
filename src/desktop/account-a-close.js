@@ -44,10 +44,13 @@ function handleAccountA(event, req, allowed, db, session, adapter, dailyAdapter)
   const keys = Reflect.ownKeys(req).length;
   const readOnly = keys === 1 && Object.hasOwn(req, 'action') &&
     ['accountAList', 'accountAPf700Profile', 'accountAPf700Simulate'].includes(req.action);
+  const hasRetry = Object.hasOwn(req, 'retryAfter');
   const fiscalRequest = Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['device','simulation'].includes(req.mode) &&
-    ((req.action === 'accountAFiscalClose' && req.confirmed === true &&
-      keys === 4 + (Object.hasOwn(req,'retryAfter') ? 1 : 0) + (Object.hasOwn(req,'warningDocument') ? 1 : 0) &&
-      (!Object.hasOwn(req,'retryAfter') || (Number.isSafeInteger(req.retryAfter) && req.retryAfter > 0)) &&
+    (!hasRetry || (Number.isSafeInteger(req.retryAfter) && req.retryAfter > 0)) &&
+    ((req.action === 'accountAFiscalCheck' && keys === 3 + Number(hasRetry)) ||
+     (req.action === 'accountAFiscalClose' && req.confirmed === true && typeof req.checkId === 'string' &&
+      /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(req.checkId) &&
+      keys === 5 + Number(hasRetry) + Number(Object.hasOwn(req,'warningDocument')) &&
       (!Object.hasOwn(req,'warningDocument') || (typeof req.warningDocument === 'string' && /^[0-9]{7}$/.test(req.warningDocument)))) ||
      (req.action === 'accountAFiscalReconcile' && keys === 3));
   const valid = readOnly || fiscalRequest || (req.action === 'accountAClose' && keys === 3 && Number.isSafeInteger(req.dayId) && req.dayId > 0 && ['en','sq'].includes(req.language)) ||

@@ -1,11 +1,15 @@
 const { recordAudit } = require('./audit');
 const { isCommissioned } = require('./pf700-commissioning');
+const { randomUUID } = require('node:crypto');
 
 const working = new WeakMap();
-const warnings = new WeakMap();
-function warningMap(db) { if (!warnings.has(db)) warnings.set(db,new Map()); return warnings.get(db); }
+const checks = new WeakMap();
+function dayChecks(db) {
+  if (!checks.has(db)) checks.set(db, new Map());
+  return checks.get(db);
+}
 function flights(db) {
-  if (!working.has(db)) working.set(db, new Set());
+  if (!working.has(db)) working.set(db, new Map());
   return working.get(db);
 }
 
@@ -36,7 +40,8 @@ function matches(adapter, record) {
 }
 
 function validAdapter(adapter) {
-  return typeof adapter?.issueDailyReport === 'function' && typeof adapter.reconcileDailyReport === 'function' &&
+  return typeof adapter?.checkDailyReport === 'function' && typeof adapter.issueDailyReport === 'function' &&
+    typeof adapter.reconcileDailyReport === 'function' &&
     ((adapter.mode === 'simulation' && !adapter.deviceId && typeof adapter.simulatedDocumentNumber === 'function') ||
      (adapter.mode === 'device' && typeof adapter.deviceId === 'string' && /^[A-Za-z0-9._-]{1,80}$/.test(adapter.deviceId)));
 }
@@ -95,7 +100,8 @@ function coverage(db, dayId, report, adapter) {
     let documentNumber;
     if (adapter.mode === 'device') {
       const proof = JSON.parse(row.evidence);
-      if (row.supervisedCard && proof.debitAmountMinor !== row.amount * 100) return {reason:'coverage'};
+      if (row.supervisedCard && proof?.debitAmountMinor !== row.amount * 100) return {reason:'coverage'};
+      if (!Number.isInteger(proof?.fiscalReceiptCount) || !Number.isInteger(proof?.reversalCount)) return {reason:'receipt-evidence'};
       if (proof.fiscalReceiptCount !== index + 1 || proof.reversalCount !== 0) return {reason:'period'};
       documentNumber = row.reference;
     } else {
@@ -127,7 +133,7 @@ function describe(db, dayId, report, alreadyClosed, adapter) {
   }
   if (requiresDevice(db,dayId) && adapter?.mode !== 'device') return {mode:'device',status:'blocked',reason:'unavailable'};
   if (!adapter) return null;
-  if (flights(db).has(dayId)) return {mode:adapter.mode,status:'pending'};
+  if (flights(db).has(dayId)) return {mode:adapter.mode,status:flights(db).get(dayId)};
   const {reason} = coverage(db,dayId,report,adapter);
   if (reason) return {mode:adapter.mode,status:'blocked',reason};
   const retryAfter = lastUnissuedAttempt(db,dayId);
@@ -169,25 +175,46 @@ function currentDate() {
   return [date.getDate(),date.getMonth()+1,date.getFullYear()%100].map(n=>String(n).padStart(2,'0')).join('');
 }
 
+function usableBaseline(baseline) {
+  return baseline && typeof baseline.previousDocumentNumber === 'string' && /^[0-9]{7}$/.test(baseline.previousDocumentNumber) &&
+    Number(baseline.previousDocumentNumber) < 9999999 && Number.isInteger(baseline.previousClosure) &&
+    baseline.previousClosure >= 0 && baseline.previousClosure < 9999;
+}
+
+function preflightFailure(detail) {
+  return detail ? {ok:false,error:'preflight',detail} : {ok:false,error:'preflight'};
+}
+
 async function handle(db, req, actor, authorized, adapter, report, originalCloseId, generation) {
   const {dayId,mode} = req;
   if (!adapter || mode !== adapter.mode || !authorized()) return {ok:false};
+  const checking = req.action === 'accountAFiscalCheck';
+  const readiness = dayChecks(db).get(dayId);
+  // A new check replaces the last preview, including when it fails. A matching
+  // confirmation consumes its preview even if the final register read fails.
+  if (checking || (readiness && readiness.checkId === req.checkId)) dayChecks(db).delete(dayId);
   if (require('./supervised-card').blocksClose(db)) return {ok:false,error:'unresolved'};
   let record = saved(db,dayId);
   if (record && !matches(adapter,record)) return {ok:false,error:'unavailable'};
-  if (record?.reportNumber) return {ok:true};
+  if (record?.reportNumber) return checking ? {ok:false,error:'review'} : {ok:true};
   if (flights(db).has(dayId)) return {ok:false,error:'pending'};
   const reconcile = req.action === 'accountAFiscalReconcile';
   if (reconcile !== !!record) return {ok:false,error:record ? 'uncertain' : 'unavailable'};
   if (!report || (mode !== 'device' && requiresDevice(db,dayId))) return {ok:false,error:'coverage'};
-  flights(db).add(dayId);
+  flights(db).set(dayId, checking ? 'checking' : 'pending');
   let reserved = false;
   let acceptingBaseline = true;
+  let changed = false;
   try {
     let result;
     if (reconcile) {
       const {previousClosure,previousDocumentNumber,deviceDate} = record;
-      result = await adapter.reconcileDailyReport(JSON.parse(record.expected),{previousClosure,previousDocumentNumber,deviceDate});
+      const mayRead = () => {
+        const current = saved(db,dayId);
+        return authorized() && current?.attemptId === record.attemptId && !current.reportNumber &&
+          !require('./supervised-card').blocksClose(db);
+      };
+      result = await adapter.reconcileDailyReport(JSON.parse(record.expected),{previousClosure,previousDocumentNumber,deviceDate},mayRead);
       if (result?.status === 'not-issued') {
         const proof = result.evidence;
         if (proof?.closure !== previousClosure || proof.documentNumber !== previousDocumentNumber ||
@@ -202,22 +229,46 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
       const {expected,reason} = coverage(db,dayId,report,adapter);
       if (!expected) return {ok:false,error:reason};
       const frozen = JSON.stringify(expected);
-      const warning = warningMap(db).get(dayId);
-      if (req.warningDocument !== undefined && (!warning || warning.actor !== actor || warning.generation !== generation || warning.mode !== mode ||
-          warning.document !== req.warningDocument || warning.expected !== frozen || warning.retryAfter !== req.retryAfter)) return {ok:false,error:'review'};
-      warningMap(db).delete(dayId);
+      const periodUnchanged = () =>
+        !saved(db,dayId) && req.retryAfter === lastUnissuedAttempt(db,dayId) &&
+        (db.prepare('SELECT id FROM account_a_closes WHERE day_id=?').get(dayId)?.id ?? null) === originalCloseId &&
+        JSON.stringify(coverage(db,dayId,report,adapter).expected) === frozen;
+      const mayRead = () => authorized() && periodUnchanged();
+      if (checking) {
+        // This wire operation only has the read-only transport. Do not reserve
+        // a fiscal report or lock checkout while waiting for the operator.
+        const preview = await adapter.checkDailyReport(expected,mayRead);
+        if (!authorized()) return {ok:false,denied:true};
+        if (preview?.status === 'review') return {ok:false,error:'review'};
+        if (preview?.status !== 'ready' || !usableBaseline(preview)) return preflightFailure(preview?.detail);
+        if (preview.deviceDate !== currentDate()) return preflightFailure({code:'clock'});
+        if (!periodUnchanged()) return {ok:false,error:'review'};
+        const {previousClosure, previousDocumentNumber, deviceDate} = preview;
+        const warningDocument = previousDocumentNumber === expected.lastDocumentNumber ? undefined : previousDocumentNumber;
+        const checkId = randomUUID();
+        dayChecks(db).set(dayId, {checkId, actor, generation, mode, deviceId:adapter.deviceId, frozen,
+          retryAfter:req.retryAfter, originalCloseId, previousClosure, previousDocumentNumber, deviceDate, warningDocument});
+        return {ok:true,outcome:'ready',checkId,...(warningDocument ? {
+          saleDocument:expected.lastDocumentNumber, printerDocument:warningDocument} : {})};
+      }
+      if (!readiness || readiness.checkId !== req.checkId || readiness.actor !== actor || readiness.generation !== generation ||
+          readiness.mode !== mode || readiness.deviceId !== adapter.deviceId || readiness.retryAfter !== req.retryAfter ||
+          readiness.originalCloseId !== originalCloseId || readiness.frozen !== frozen ||
+          readiness.warningDocument !== req.warningDocument || readiness.deviceDate !== currentDate()) return {ok:false,error:'review'};
       // Preflight reads are repeatable. Only the winner of this transaction
       // may issue a Z. A process crash before the callback can send no Z.
-      result = await adapter.issueDailyReport(expected,{warningDocument:req.warningDocument,beforeIssue(baseline) {
-        if (!acceptingBaseline || reserved || !authorized() || !baseline ||
-            baseline.deviceDate !== currentDate() || !/^[0-9]{7}$/.test(baseline.previousDocumentNumber) || Number(baseline.previousDocumentNumber) >= 9999999 ||
-            !(baseline.previousDocumentNumber === expected.lastDocumentNumber && req.warningDocument === undefined ||
-              baseline.previousDocumentNumber === req.warningDocument && baseline.previousDocumentNumber !== expected.lastDocumentNumber) ||
-            !Number.isInteger(baseline.previousClosure) || baseline.previousClosure < 0 || baseline.previousClosure >= 9999) throw Error('Invalid report baseline');
+      result = await adapter.issueDailyReport(expected,{mayRead,warningDocument:req.warningDocument,beforeIssue(baseline) {
+        if (!acceptingBaseline || reserved || !authorized()) throw Error('Report unavailable');
+        if (!baseline || baseline.deviceDate !== currentDate() || baseline.deviceDate !== readiness.deviceDate ||
+            baseline.previousClosure !== readiness.previousClosure || baseline.previousDocumentNumber !== readiness.previousDocumentNumber) {
+          changed = true;
+          throw Error('Printer changed after check');
+        }
         transaction(db, () => {
-          if (req.retryAfter !== lastUnissuedAttempt(db,dayId) ||
-              (db.prepare('SELECT id FROM account_a_closes WHERE day_id=?').get(dayId)?.id ?? null) !== originalCloseId ||
-              JSON.stringify(coverage(db,dayId,report,adapter).expected) !== frozen) throw Error('Report period changed');
+          if (!periodUnchanged()) {
+            changed = true;
+            throw Error('Report period changed');
+          }
           db.prepare(`INSERT INTO fiscal_daily_reports(day_id,actor_id,mode,device_id,expected,previous_closure,previous_document,device_date,started_at)
             VALUES(?,?,?,?,?,?,?,?,?)`).run(dayId,actor,mode,adapter.deviceId ?? '',frozen,baseline.previousClosure,
               baseline.previousDocumentNumber,baseline.deviceDate,Date.now());
@@ -225,20 +276,16 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
         });
         reserved = true;
       }});
-      if (!reserved && result?.status === 'document-warning' && authorized() &&
-          result.deviceDate === currentDate() && result.saleDocument === expected.lastDocumentNumber &&
-          req.retryAfter === lastUnissuedAttempt(db,dayId) &&
-          (db.prepare('SELECT id FROM account_a_closes WHERE day_id=?').get(dayId)?.id ?? null) === originalCloseId &&
-          JSON.stringify(coverage(db,dayId,report,adapter).expected) === frozen &&
-          typeof result.printerDocument === 'string' && /^[0-9]{7}$/.test(result.printerDocument) &&
-          Number(result.printerDocument) < 9999999 && result.printerDocument !== expected.lastDocumentNumber)
-        { warningMap(db).set(dayId,{actor,generation,mode,document:result.printerDocument,expected:frozen,retryAfter:req.retryAfter});
-          return {ok:false,error:'document-warning',saleDocument:result.saleDocument,printerDocument:result.printerDocument}; }
-      if (!reserved) return authorized() ? {ok:false,error:'preflight'} : {ok:false,denied:true};
+      if (!reserved) {
+        if (!authorized()) return {ok:false,denied:true};
+        if (changed || result?.status === 'review' || result?.status === 'document-warning') return {ok:false,error:'review'};
+        return preflightFailure(result?.detail);
+      }
     }
     const ok = confirm(db,record,report,result,actor);
     return authorized() ? (ok ? {ok:true} : {ok:false,error:'uncertain'}) : {ok:false,denied:true};
   } catch {
+    if (changed && !reserved && authorized()) return {ok:false,error:'review'};
     return authorized() ? {ok:false,error:(reconcile || reserved) ? 'uncertain' : 'preflight'} : {ok:false,denied:true};
   } finally { acceptingBaseline = false; flights(db).delete(dayId); }
 }

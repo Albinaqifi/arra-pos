@@ -27,7 +27,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-087 | In progress | Three-stage close implemented; independent review and focused tests passed. Desktop, offline and printer verification and PR merge outstanding. |
 | S-086 | In progress | Print an Account A bill list and sum without closing; independent printer selection. |
 | S-085 | In progress | PR #122 merged; independent review and focused tests passed; desktop verification outstanding. |
-| S-084 | In progress | Daily-control document warning implemented and simulated close verified; independent review and on-site register, paper and reset checks remain open. [Release handoff](handoffs/S-084.md#pf700-release-handoff) · [Go-live stories](../stories/backlog.md#pf700-restaurant-go-live) |
+| S-084 | In progress | Separate PF700 check and Z confirmation verified with simulated hardware in Electron, independent review and testing passed. PR merge and on-site register, paper and reset checks remain open. [Handoff](handoffs/S-084.md#check-before-closing) |
 | S-083 | In progress | Independent review and focused tests passed; desktop, offline and physical paper verification outstanding. |
 
 | S-082 | Done | Independent review and automated tests passed; owner reports all checks passed; PR #119 merged as `9cb9f72`. |

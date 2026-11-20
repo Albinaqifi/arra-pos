@@ -86,6 +86,8 @@ Use the S-100 Pay flow for Card A. Record the full amount as card on Account A a
 
 **Daily report milestone, 2026-11-19.** Connect the Combined administrator's Close Account A action to the PF700 daily Z report. The printer produces this report from its registered sales. Arra uses saved payments and receipt acknowledgements to reconcile the selected day. Exercise the feature offline only and leave the physical fiscal day open.
 
+**Check before closing.** On the selected closed day, let the operator check the printer without issuing a Z or recording a close attempt. Explain a failed check on the POS, including comparable amounts when available. After a pass, offer an explicit Z confirmation on the same screen. Repeat the checks before issuing and preserve the existing document-number warning and recovery for a missing Z reply.
+
 **Acceptance:**
 
 - In Combined's Financial information, provide an Account A closing option for a shared business day closed after the feature is installed. When multiple days await Account A closing, let the owner select and close each pending day. Clearly identify the day, opening and closing times, and whether its Account A close is pending or complete. The main day close continues to start the next shared day; the separate A close does not close or interrupt that new day. Account B closing is outside this story.

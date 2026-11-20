@@ -194,6 +194,7 @@ test('the closed local day includes one Cash A payment while the device report h
   let handleDays;
   registerBusinessDays({handle(name,handler) { handleDays = handler; }}, () => true, f.db, owner,
     () => 'accepted', {mode:'device',deviceId:f.device.serial,
+      checkDailyReport() { commands.push('check'); },
       issueDailyReport() { commands.push('issue'); }, reconcileDailyReport() { commands.push('reconcile'); }});
   const days = request => handleDays({},request);
   const {id:dayId} = days({action:'list'}).data.days.find(day => day.closedAt === null);
@@ -201,9 +202,11 @@ test('the closed local day includes one Cash A payment while the device report h
   await new Promise(setImmediate);
   const summary = days({action:'accountAList'}).data.days.find(day => day.id === dayId);
   assert.deepEqual([summary.count,summary.cash,summary.card,summary.total],[1,150,0,150]);
-  assert.deepEqual(summary.fiscal,{mode:'device',status:'blocked',reason:'period'});
-  assert.deepEqual(await days({action:'accountAFiscalClose',dayId,mode:'device',confirmed:true}),
-    {ok:false,error:'period'});
+  assert.deepEqual(summary.fiscal,{mode:'device',status:'blocked',reason:'receipt-evidence'});
+  assert.deepEqual(await days({action:'accountAFiscalCheck',dayId,mode:'device'}),
+    {ok:false,error:'receipt-evidence'});
+  assert.deepEqual(await days({action:'accountAFiscalClose',dayId,mode:'device',confirmed:true,
+    checkId:'00000000-0000-0000-0000-000000000000'}),{ok:false,error:'receipt-evidence'});
   assert.deepEqual(commands,[]);
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n,0);
 });

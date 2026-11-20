@@ -27,12 +27,13 @@ function inspectIdentity(frame, sequence, expectedSerial, allowOpen = false) {
     return { ok: false, reason: 'layout', layout: 'header widths ' + widths(header.split(' ')) +
       ', remaining field widths ' + widths(fields.slice(1)) };
   }
-  return serial === expectedSerial ? { ok: true, onsiteFirmware: onsite } : { ok: false, reason: 'serial' };
+  if (serial !== expectedSerial) return { ok: false, reason: 'serial' };
+  return { ok: true, onsiteFirmware: onsite, ...(allowOpen && (status[2] & 0x08) ? {receiptOpen:true} : {}) };
 }
 
-async function probeIdentity(pipe, sequence, expectedSerial) {
+async function probeIdentity(pipe, sequence, expectedSerial, allowOpen = false) {
   const probe = encodeRequest({ sequence, command: 90, data: Buffer.from('0') });
-  return inspectIdentity(await pipe.exchange(probe), sequence, expectedSerial);
+  return inspectIdentity(await pipe.exchange(probe), sequence, expectedSerial, allowOpen);
 }
 
 // The child owns one exclusive SerialPort. Each private stdin line releases

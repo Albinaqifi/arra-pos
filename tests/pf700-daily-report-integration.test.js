@@ -20,7 +20,21 @@ const { registerBusinessDays } = require('../src/desktop/business-days');
 const { selectPf700Checkout } = require('../src/desktop/pf700-checkout-mode');
 
 const espresso = 'arra-product-11-0', beer = 'arra-product-12-0';
-const issue = dayId => ({ action: 'accountAFiscalClose', dayId, mode: 'simulation', confirmed: true });
+const preview = dayId => ({action:'accountAFiscalCheck', dayId, mode:'simulation'});
+const issue = (dayId, checkId='00000000-0000-0000-0000-000000000000') =>
+  ({action:'accountAFiscalClose', dayId, mode:'simulation', confirmed:true, checkId});
+async function passedCheck(f,dayId,warning) {
+  const result = await f.days(preview(dayId));
+  assert.equal(result.outcome,'ready');
+  assert.equal(typeof result.checkId,'string');
+  assert.equal(result.saleDocument, warning?.[0]);
+  assert.equal(result.printerDocument, warning?.[1]);
+  return {...issue(dayId,result.checkId), ...(warning ? {warningDocument:result.printerDocument} : {})};
+}
+function assertMismatch(result,command,expected,actual) {
+  assert.deepEqual([result.ok,result.error,result.detail?.code,result.detail?.command,result.detail?.expected,result.detail?.actual],
+    [false,'preflight','amount',command,expected,actual]);
+}
 const reconcile = dayId => ({ action: 'accountAFiscalReconcile', dayId, mode: 'simulation' });
 
 function trainingRestaurant(t) {
@@ -112,12 +126,14 @@ test('training checkout, authenticated Combined close and restart preserve each 
   await f.checkout([espresso], 'cash', 'B');
   f.signIn('combined');
   assert.equal((await f.days(issue(f.activeDay()))).ok, false);
+  assert.equal((await f.days(preview(f.activeDay()))).ok, false);
   const firstDay = await f.closeSharedDay();
   const nextDay = f.activeDay();
   for (const role of ['owner-a', 'owner-b', 'waiter']) {
     f.signIn(role);
     assert.equal(f.days({ action: 'accountAList' }).ok, false);
     assert.equal((await f.days(issue(firstDay))).ok, false);
+    assert.equal((await f.days(preview(firstDay))).ok, false);
   }
   assert.deepEqual(f.reports(), []);
   f.signIn('combined');
@@ -125,7 +141,18 @@ test('training checkout, authenticated Combined close and restart preserve each 
   assert.deepEqual([first.id, first.count, first.cash, first.card, first.total, first.fiscal.status],
     [firstDay, 2, 250, 180, 430, 'ready']);
   assert.equal((await f.days({ ...issue(firstDay), mode: 'device' })).ok, false);
-  const [one, two] = await Promise.all([f.days(issue(firstDay)), f.days(issue(firstDay))]);
+  f.db.exec('PRAGMA query_only=ON');
+  let previousSession;
+  try { previousSession = await passedCheck(f,firstDay); }
+  finally { f.db.exec('PRAGMA query_only=OFF'); }
+  assert.equal(f.call('sign-out', {}).ok, true);
+  assert.deepEqual(await f.days(previousSession), {ok:false,denied:true});
+  f.signIn('combined');
+  assert.deepEqual(await f.days(previousSession), {ok:false,error:'review'});
+  assert.deepEqual(f.reports(),[]);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n, 0);
+  const firstRequest = await passedCheck(f,firstDay);
+  const [one, two] = await Promise.all([f.days(firstRequest), f.days(firstRequest)]);
   assert.deepEqual(one, { ok: true });
   assert.deepEqual(two, { ok: false, error: 'pending' });
   assert.equal(f.activeDay(), nextDay);
@@ -134,7 +161,7 @@ test('training checkout, authenticated Combined close and restart preserve each 
   f.restart();
   assert.equal(f.days({ action: 'accountAList' }).ok, false);
   f.signIn('combined');
-  assert.equal((await f.days(issue(firstDay))).ok, true);
+  assert.equal((await f.days(firstRequest)).ok, true);
   assert.deepEqual(f.reports(), [firstTotals]);
   assert.deepEqual(f.days({ action: 'accountAList' }).data.days[0].fiscal,
     { mode: 'simulation', status: 'complete', reportNumber: '0002' });
@@ -143,10 +170,10 @@ test('training checkout, authenticated Combined close and restart preserve each 
   await f.checkout([espresso], 'card');
   f.signIn('combined');
   assert.equal(await f.closeSharedDay(), nextDay);
-  assert.deepEqual(await f.days(issue(nextDay)), { ok: false, error: 'preflight' });
+  assert.deepEqual(await f.days(preview(nextDay)), { ok: false, error: 'preflight',detail:{code:'last-close-date'} });
   assert.deepEqual(f.reports(), [firstTotals]);
   t.mock.timers.setTime(new Date(2026, 10, 20, 18).getTime());
-  assert.deepEqual(await f.days(issue(nextDay)), { ok: true });
+  assert.deepEqual(await f.days(await passedCheck(f,nextDay)), { ok: true });
   assert.deepEqual(f.reports(), [firstTotals, { z: 3, cash: 0, card: 70, taxA: 0, taxV: 70 }]);
   const history = f.days({ action: 'accountAList' }).data.days;
   assert.deepEqual(history.map(d => [d.id, d.total, d.fiscal.reportNumber]), [[nextDay, 70, '0003'], [firstDay, 430, '0002']]);
@@ -162,16 +189,19 @@ test('tender or VAT disagreement blocks before issue, and an interrupted POS con
   const dayId = await f.closeSharedDay();
   // Disagree on tender without changing the gross amount, count or document number.
   f.device(db => db.exec('UPDATE documents SET cash=0,card=250 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days(issue(dayId)), { ok: false, error: 'preflight' });
+  const cashMismatch = await f.days(preview(dayId));
+  assertMismatch(cashMismatch,110,25000,0);
   assert.deepEqual(f.reports(), []);
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n, 0);
   f.device(db => db.exec('UPDATE documents SET cash=250,card=0,taxA=70,taxV=180 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days(issue(dayId)), { ok: false, error: 'preflight' });
+  const taxMismatch = await f.days(preview(dayId));
+  assertMismatch(taxMismatch,65,18000,7000);
+  assert.equal(taxMismatch.detail.group,0);
   assert.deepEqual(f.reports(), []);
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_reports').get().n, 0);
   f.device(db => db.exec('UPDATE documents SET taxA=180,taxV=70 WHERE bill IS NOT NULL'));
   f.db.exec("CREATE TEMP TRIGGER fail_confirmation BEFORE INSERT ON fiscal_daily_confirmations BEGIN SELECT RAISE(ABORT,'test interruption'); END");
-  assert.deepEqual(await f.days(issue(dayId)), { ok: false, error: 'uncertain' });
+  assert.deepEqual(await f.days(await passedCheck(f,dayId)), { ok: false, error: 'uncertain' });
   const onlyReport = [{ z: 2, cash: 250, card: 0, taxA: 180, taxV: 70 }];
   assert.deepEqual(f.reports(), onlyReport);
   assert.equal(f.db.prepare('SELECT count(*) n FROM account_a_closes').get().n, 0);
@@ -197,6 +227,7 @@ test('a transfer into A stays in the shared-day totals and prevents issuing a fi
   const summary = f.days({ action: 'accountAList' }).data.days[0];
   assert.deepEqual([summary.count, summary.cash, summary.fiscal.reason], [2, 140, 'coverage']);
   assert.deepEqual(await f.days(issue(dayId)), { ok: false, error: 'coverage' });
+  assert.deepEqual(await f.days(preview(dayId)), { ok: false, error: 'coverage' });
   assert.deepEqual(f.reports(), []);
 });
 
@@ -222,18 +253,19 @@ test('document warning permits a verified simulated Z but never overrides cash o
   f.signIn('combined'); const dayId=await f.closeSharedDay();
   assert.equal((await f.days({...issue(dayId),warningDocument:'0000121'})).ok,false);
   f.device(db=>db.exec('UPDATE documents SET cash=0,card=250 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days(issue(dayId)),{ok:false,error:'preflight'});
+  assertMismatch(await f.days(preview(dayId)),110,25000,0);
   f.device(db=>db.exec('UPDATE documents SET cash=250,card=0,taxA=70,taxV=180 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days(issue(dayId)),{ok:false,error:'preflight'});
+  assertMismatch(await f.days(preview(dayId)),65,18000,7000);
   f.device(db=>db.exec('UPDATE documents SET taxA=180,taxV=70 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days(issue(dayId)),{ok:false,error:'document-warning',saleDocument:'0000120',printerDocument:'0000121'});
+  const expectedDocs = ['0000120','0000121'];
+  const warned = await passedCheck(f,dayId,expectedDocs);
   assert.deepEqual(f.reports(),[]);
   f.device(db=>db.exec('UPDATE documents SET cash=0,card=250 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await f.days({...issue(dayId),warningDocument:'0000121'}),{ok:false,error:'preflight'});
+  assertMismatch(await f.days(warned),110,25000,0);
   assert.deepEqual(f.reports(),[]);
   f.device(db=>db.exec('UPDATE documents SET cash=250,card=0 WHERE bill IS NOT NULL'));
-  assert.equal((await f.days(issue(dayId))).error,'document-warning');
-  assert.deepEqual(await f.days({...issue(dayId),warningDocument:'0000121'}),{ok:true});
+  assert.equal((await f.days(warned)).error,'review');
+  assert.deepEqual(await f.days(await passedCheck(f,dayId,expectedDocs)),{ok:true});
   assert.deepEqual(f.reports(),[{z:2,cash:250,card:0,taxA:180,taxV:70}]);
   assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000122');
   assert.equal(f.days({action:'accountAList'}).data.days.find(d=>d.id===dayId).fiscal.status,'complete');
@@ -244,9 +276,9 @@ test('warning close with interrupted confirmation recovers using the printer doc
     INSERT INTO documents(doc,bill,z,stamp,cash,card,taxA,taxV) VALUES(121,NULL,NULL,NULL,0,0,0,0),(122,NULL,NULL,NULL,0,0,0,0);
     PRAGMA ignore_check_constraints=OFF;`));
   f.signIn('combined'); const dayId=await f.closeSharedDay();
-  assert.equal((await f.days(issue(dayId))).error,'document-warning');
+  const warned = await passedCheck(f,dayId,['0000120','0000122']);
   f.db.exec("CREATE TEMP TRIGGER fail_warning_confirm BEFORE INSERT ON fiscal_daily_confirmations BEGIN SELECT RAISE(ABORT,'test interruption'); END");
-  assert.equal((await f.days({...issue(dayId),warningDocument:'0000122'})).error,'uncertain');
+  assert.equal((await f.days(warned)).error,'uncertain');
   assert.equal(f.reports().length,1); f.restart(); f.signIn('combined');
   assert.deepEqual(await f.days(reconcile(dayId)),{ok:true});
   assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000123');
@@ -259,19 +291,19 @@ test('a two-document difference warns and closes once; new cash and tax mismatch
       (121,NULL,NULL,NULL,0,0,0,0),(122,NULL,NULL,NULL,0,0,0,0);
     PRAGMA ignore_check_constraints=OFF;`));
   f.signIn('combined'); const dayId=await f.closeSharedDay();
-  const warn=()=>f.days(issue(dayId)); const confirm=()=>f.days({...issue(dayId),warningDocument:'0000122'});
-  assert.deepEqual(await warn(),{ok:false,error:'document-warning',saleDocument:'0000120',printerDocument:'0000122'});
+  const warn=()=>passedCheck(f,dayId,['0000120','0000122']);
+  let warned=await warn();
   f.device(db=>db.exec('UPDATE documents SET cash=0,card=250 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await confirm(),{ok:false,error:'preflight'}); assert.equal(f.reports().length,0);
+  assertMismatch(await f.days(warned),110,25000,0); assert.equal(f.reports().length,0);
   f.device(db=>db.exec('UPDATE documents SET cash=250,card=0 WHERE bill IS NOT NULL'));
-  assert.equal((await warn()).error,'document-warning');
+  warned=await warn();
   f.device(db=>db.exec('UPDATE documents SET taxA=70,taxV=180 WHERE bill IS NOT NULL'));
-  assert.deepEqual(await confirm(),{ok:false,error:'preflight'}); assert.equal(f.reports().length,0);
+  assertMismatch(await f.days(warned),65,18000,7000); assert.equal(f.reports().length,0);
   f.device(db=>db.exec('UPDATE documents SET taxA=180,taxV=70 WHERE bill IS NOT NULL'));
-  assert.equal((await warn()).error,'document-warning');
-  assert.deepEqual(await confirm(),{ok:true});
+  warned=await warn();
+  assert.deepEqual(await f.days(warned),{ok:true});
   assert.deepEqual(f.reports(),[{z:2,cash:250,card:0,taxA:180,taxV:70}]);
   assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_confirmations').get().n,1);
   assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000123');
-  assert.deepEqual(await f.days(issue(dayId)),{ok:true}); assert.equal(f.reports().length,1);
+  assert.deepEqual(await f.days(warned),{ok:true}); assert.equal(f.reports().length,1);
 });
