@@ -86,10 +86,9 @@ app.whenReady().then(() => {
   registerBills(require('electron').ipcMain, isAllowedSender, database, session, fiscalCheckout);
   const windowsPrinter = process.platform === 'win32' ? printTestJob : null;
   const preparation = selectPreparationPrinting(process.argv, database, fiscalCheckout, windowsPrinter);
-  // Fiscal checkout selects only its PF700 for receipts. The preparation
-  // adapter is never passed to payment, bill history or reporting.
   const localPrinter = fiscalCheckout ? null : windowsPrinter;
-  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout);
+  const cashBBarPrinter = preparation?.preparationMode === 'routine' ? windowsPrinter : null;
+  registerPayments(require('electron').ipcMain, isAllowedSender, database, session, localPrinter, fiscalCheckout, null, cashBBarPrinter);
   registerTransferCorrection(require('electron').ipcMain, isAllowedSender, database, session);
 
   registerBusinessDays(require('electron').ipcMain, isAllowedSender, database, session,

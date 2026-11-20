@@ -1,0 +1,21 @@
+Arra POS 1.0.10 RC3 - Cash B customer bills on the bar printer
+
+Extract this ZIP into its own new folder. Keep the previous RC2 folder
+and verified backup. Close the previous Arra session. Use the same Windows
+account and start Arra-Cash-A.cmd from the new folder for routine checkout.
+
+In Administration > Overview > Preparation tickets, check the Bar queue.
+If needed, enter the exact Windows queue name for your bar printer and
+choose Save queue. The bar station and Cash B bills use this same setting.
+
+After receiving cash, generate the bill, select the Arra logo at the top
+right for Cash B, and choose Confirm bill once. This records the payment,
+releases the table, and sends the itemized non-fiscal customer bill to Bar.
+
+If the paper is missing, keep the bill number and check the printer first.
+An authorized owner can open Administration > Overview, find the bill in
+Account B bill, and use Retry after checking. This retries the paper only.
+An uncertain earlier attempt may already have printed a copy.
+
+The restaurant's RC2 launcher and recovery notes follow below. Read
+READ-BEFORE-USE.txt for the existing Cash A and supervised Card A procedures.

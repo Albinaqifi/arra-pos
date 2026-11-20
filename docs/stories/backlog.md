@@ -1,5 +1,11 @@
 # Development backlog
 
+### S-102 — Print confirmed Cash B bills on the bar printer
+
+In the restaurant checkout, confirming a new Cash B payment sends the full non-fiscal customer bill once to the Windows queue configured for Bar. Use the existing Bar queue setting. Sending an order still prints its separate preparation tickets.
+
+Repeat confirmation and restart must preserve one payment and avoid automatic duplicate paper. A failed or uncertain print must leave the paid table released and allow an authorized operator to check the paper and retry just that bill. Preserve account access, corrections, historical records and the behavior of training and commissioning modes. The owner requested one Windows package combining this change with the S-100 and S-101 Pay button. Verify immediate local settlement for both A tenders, background PF700 receipts, and Cash B paper from the same release.
+
 ### S-100 — Pay Cash A immediately and send one fiscal receipt
 
 For a new, eligible Account A bill on the enrolled Windows POS, the waiter chooses Cash A and presses Pay. In one local transaction, record one cash payment for the bill, assign it to the shift and business day, complete the order, and save its fiscal receipt for dispatch. Dismiss the bill and free the table as soon as the transaction succeeds. Preserve owner checks, tax groups, origin and quantities. A failed transaction must leave the bill available and send nothing.

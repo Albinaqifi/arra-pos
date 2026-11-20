@@ -34,3 +34,20 @@ test('scoped financial detail retains sample bill printing without exposing corr
   const control=new print.type(print.props); assert.match(JSON.stringify(control.render()),/not a fiscal receipt/);
   assert.doesNotMatch(JSON.stringify(tree),/Original account|Account correction history/);
 });
+
+test('routine Bar bill recovery appears only in the admin panel, separately from preparation jobs', () => {
+  class Component { constructor(props) { this.props = props; } }
+  const React = {Component, Fragment:'fragment', createElement:(type,props,...children) => ({type,props,children})};
+  const context = {React};
+  const {moduleSource} = require('./support/renderer-bundle');
+  vm.runInNewContext(moduleSource(require.resolve('../src/printing/QueueJobs'),'Panel'),context);
+  const panel = new context.Panel.QueueJobs({printing:{},language:'en'});
+  panel.state.data = {preparationMode:'routine',queues:[],jobs:[],notices:[],
+    barBills:[{destination:'bill',id:5,billId:12,queue:'Counter bar',attempts:1,result:'failed'}]};
+  const admin = JSON.stringify(panel.render());
+  assert.match(admin,/Account B bill/);
+  assert.match(admin,/Bill #12/);
+  assert.match(admin,/Retry after checking/);
+  panel.props.waiter = true;
+  assert.equal(panel.render(),null);
+});
