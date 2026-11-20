@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-103 | In progress | Windows launcher built and reviewed. A disposable desktop shortcut opened verified RC4 checkout without a console. Restaurant installation and PR merge remain open. [Handoff](handoffs/S-103.md) |
 | S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |
 | S-101 | In progress | Separate-terminal Card A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-101.md) |
 | S-100 | In progress | Immediate Cash A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-100.md) |

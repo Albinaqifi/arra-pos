@@ -1,5 +1,9 @@
 # Development backlog
 
+### S-103 — Open restaurant RC4 from a desktop icon
+
+For the existing enrolled RC4 installation, provide a Windows application that creates a desktop shortcut and opens the POS from that shortcut. An operator enters their existing PF700 settings and authorizes live startup once in a graphical setup screen. Protect the saved settings for the original Windows user. Starting from the icon opens the same checkout with no console or repeated setup. Reopening setup allows the operator to update the settings. Preserve the original restaurant data, receipt recovery, payment routes and Bar queue. Verify with disposable settings, an actual Windows shortcut and the RC4 package.
+
 ### S-102 — Print confirmed Cash B bills on the bar printer
 
 In the restaurant checkout, confirming a new Cash B payment sends the full non-fiscal customer bill once to the Windows queue configured for Bar. Use the existing Bar queue setting. Sending an order still prints its separate preparation tickets.
