@@ -41,7 +41,7 @@ function recordPayment(db, request, bill, actor, printing, fiscal) {
   // previously printed unpaid bill is never automatically printed again.
   let attempt = null;
   if (!db.prepare('SELECT 1 FROM test_print_jobs WHERE bill_id=?').get(request.billId)) {
-    const jobId = createBillJob(db, request.billId);
+    const jobId = createBillJob(db, request.billId, printing?.destination);
     if (printing && fiscal?.mode !== 'device') attempt = reserveAttempt(db, jobId, 'payment-' + id, actor);
   }
   return { response: success(id, fiscal ? { ...fiscal, status: 'accepted' } : null), printAttempt: attempt };
@@ -306,7 +306,7 @@ function recoverSimulatedCard(db, session, request, adapter) {
   return {ok:true};
 }
 
-function registerPayments(ipcMain, isAllowedSender, db, session, printing = null, fiscalCheckout = null, journalRecovery = null) {
+function registerPayments(ipcMain, isAllowedSender, db, session, localPrinter = null, fiscalCheckout = null, journalRecovery = null, cashBBarPrinter = null) {
   if (fiscalCheckout && !validFiscalAdapter(fiscalCheckout)) {
     throw Error('Unsupported fiscal checkout adapter');
   }
@@ -334,6 +334,10 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
           (request.method === 'card' && Object.hasOwn(request,'terminalApproved') && request.terminalApproved === true) ||
           (request.method === 'cash' && request.account === 'A' && Object.hasOwn(request,'simulateInterrupt') &&
             ['before_open','after_items','after_tender','after_close','after_ack'].includes(request.simulateInterrupt))))))) return { ok: false, error: 'Invalid request' };
+    // Only the routine restaurant launcher supplies this printer. Never use it
+    // for a fiscal receipt, a supervised trial or a simulated payment.
+    const barBill = cashBBarPrinter && fiscalCheckout?.mode === 'device' && request.method === 'cash' && request.account === 'B';
+    const printing = barBill ? { adapter: cashBBarPrinter, destination: 'bar' } : localPrinter && { adapter: localPrinter };
     const actor = session.currentUserId();
     const authenticated = session.authenticatedUserId();
     const generation = session.identityGeneration?.();
@@ -389,7 +393,7 @@ function registerPayments(ipcMain, isAllowedSender, db, session, printing = null
           if (step?.response?.data?.fiscal?.status === 'accepted') error.fiscalSubmitted = true;
           throw error;
         }
-        if (step.printAttempt) dispatch(db, printing, step.printAttempt);
+        if (step.printAttempt) dispatch(db, printing.adapter, step.printAttempt);
         if (step.inspection) return (async()=>{
           let handle;
           try {

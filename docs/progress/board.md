@@ -4,6 +4,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 
 | Story | Status | Note |
 | --- | --- | --- |
+| S-102 | In progress | RC3 package built. Independent review and testing passed. PR merge and restaurant paper check remain open. [Handoff](handoffs/S-102.md) |
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |
 | S-097 | In progress | Simulated Card A approval, durable hold and training receipt recovery reviewed and tested. Physical Card A remains disabled pending S-096. [Handoff](handoffs/S-097.md) |

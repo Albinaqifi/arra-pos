@@ -1,5 +1,11 @@
 # Development backlog
 
+### S-102 — Print confirmed Cash B bills on the bar printer
+
+In the restaurant RC2 routine checkout, confirming a new Cash B payment sends the full non-fiscal customer bill once to the Windows queue configured for Bar. Use the existing payment confirmation and Bar queue setting. Sending an order still prints its separate preparation tickets.
+
+Repeat confirmation and restart must preserve one payment and avoid automatic duplicate paper. A failed or uncertain print must leave the paid table released and allow an authorized operator to check the paper and retry just that bill. Preserve account access, corrections, historical records, Cash A and Card A fiscal handling and the behavior of training and commissioning modes. Deliver a side-by-side update for the existing RC2 profile and verify the actual package with synthetic data.
+
 ### S-087 — Make closing the shared business day clear
 
 **Goal:** Simplify the shared business-day close into a clear review, confirmation and completion flow. The operator should know which day is being closed, what needs attention, and whether the day and its restaurant report have succeeded. **Depends on:** existing S-026, S-057, S-058 and S-061 behavior; inspect their implementation and outstanding verification before starting. Preserve the existing worktree, including any uncommitted S-058 recovery changes.
