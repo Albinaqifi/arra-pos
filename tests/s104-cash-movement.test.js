@@ -7,8 +7,8 @@ const { createPf700PrinterControl } = require('../src/desktop/pf700-printer-cont
 const { encodeRequest } = require('../src/desktop/pf700-frame');
 
 const serial = 'SYNTHETIC01';
-function reply(sequence, command, value) {
-  const data = Buffer.from(value), status = Buffer.from('888080e1809a', 'hex');
+function reply(sequence, command, value, statusHex = '888080e1809a') {
+  const data = Buffer.from(value), status = Buffer.from(statusHex, 'hex');
   const body = Buffer.concat([Buffer.from([43 + data.length, sequence, command]), data, Buffer.from([4]), status, Buffer.from([5])]);
   const sum = body.reduce((a, b) => a + b, 0);
   return Buffer.concat([Buffer.from([1]), body, Buffer.from([12, 8, 4, 0].map(x => 48 + (sum >> x & 15))), Buffer.from([3])]);
@@ -65,6 +65,26 @@ test('cash response distinguishes fulfilled, declined and unreadable replies', a
         ? reply(frame[2],90,'1.00 231014 1230,ABCD,0011,1,' + serial) : reply(frame[2],70,value); }, close:async () => {}
     })});
     assert.equal(await adapter.printCashMovement('1.00', () => true), expected, value);
+    assert.deepEqual(commands, [90,70]);
+  }
+});
+
+test('explicit cash refusal with an open fiscal receipt is declined, not uncertain', async () => {
+  for (const [value, status, expected] of [
+    ['F,0,0,0', '888088e1809a', 'declined'],
+    ['P,0,0,0', '888088e1809a', 'unknown'],
+    ['F,0,0,0', '888089e1809a', 'unknown'],
+    ['F,0,0', '888088e1809a', 'unknown']
+  ]) {
+    const commands = [];
+    const adapter = createPf700PrinterControl({expectedSerial:serial, openPipe:async () => ({
+      exchange:async frame => {
+        commands.push(frame[3]);
+        return frame[3] === 90 ? reply(frame[2],90,'1.00 231014 1230,ABCD,0011,1,' + serial)
+          : reply(frame[2],70,value,status);
+      }, close:async () => {}
+    })});
+    assert.equal(await adapter.printCashMovement('1.00', () => true), expected, value + ' ' + status);
     assert.deepEqual(commands, [90,70]);
   }
 });

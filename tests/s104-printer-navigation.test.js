@@ -32,6 +32,8 @@ test('cash result survives leaving financial information, but an identity change
   pending[0].resolve({ok:false,outcome:'unknown'}); await first;
   assert.equal(current.screen.state.cashResult,'unknown');
   assert.match(JSON.stringify(current.screen.render()),/The printer may already have recorded this cash movement/);
+  assert.match(JSON.stringify(current.screen.render()),/Cash in:/);
+  assert.match(JSON.stringify(current.screen.render()),/5\.00/);
   assert.equal(current.screen.state.cashBusy,false);
   assert.equal(pending.length,1);
   current.screen.setState({view:'cash',amount:'6',review:true});
@@ -39,6 +41,7 @@ test('cash result survives leaving financial information, but an identity change
   workspace.setIdentity({generation:2,name:'Other'});
   assert.equal(current.screen.state.cashResult,'');
   assert.equal(current.screen.state.cashBusy,false);
+  assert.doesNotMatch(JSON.stringify(current.screen.render()),/The printer may already have recorded this cash movement/);
   pending[1].resolve({ok:false,outcome:'declined'}); await second;
   assert.equal(current.screen.state.cashResult,'');
   current.screen.componentWillUnmount();

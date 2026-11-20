@@ -397,6 +397,7 @@
   "status.unavailable": "Aplikacioni nuk eshte i disponueshem. Mbyllni dhe rinisni Arra POS; kerkoni ndihme nese problemi vazhdon.",
   "status.demo": "Demonstrim ne shfletues — vetem te dhena shembull dhe veprime te simuluara",
   "status.development": "Zhvillim",
+  "status.waitingForPrinter": "Ne pritje te pergjigjes se printerit",
   "waiter.Unknown destination": "Destinacion i panjohur",
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Duke ngarkuar faturen…",

@@ -397,6 +397,7 @@
   "status.unavailable": "Desktop application unavailable. Close and restart Arra POS; seek support if the problem continues.",
   "status.demo": "Browser demo — sample data and simulated actions only",
   "status.development": "Development",
+  "status.waitingForPrinter": "Waiting for printer response",
   "waiter.Unknown destination": "Unknown destination",
   "waiter.Bar": "Bar",
   "waiter.Loading bill…": "Loading bill…",

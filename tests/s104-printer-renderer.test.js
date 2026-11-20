@@ -52,3 +52,43 @@ test('cash outcomes are explained in English and Albanian, including an uncertai
     assert.equal(calls,1);
   }
 });
+
+test('new review is distinct from the prior result and uncertain movements keep their direction and amount',async()=>{
+  class Component { constructor(props){this.props=props;} setState(value){Object.assign(this.state,value);} }
+  const strings={
+    en:{tab:'Cash in / out',in:'Cash in:',out:'Cash out:',review:'Review cash out:',required:'Confirmation required.',sent:'Cash movement request sent.',unknown:'The printer may already have recorded this cash movement. Check before entering it again.'},
+    sq:{tab:'Para brenda / jashte',in:'Hyrje e parave:',out:'Dalje e parave:',review:'Shqyrtoni daljen e parave:',required:'Kërkohet konfirmimi.',sent:'Kerkesa per levizjen e parave u dergua.',unknown:'Printeri mund ta ketë regjistruar tashmë këtë lëvizje të parave. Kontrolloni para se ta regjistroni përsëri.'}
+  };
+  const nodes=node=>Array.isArray(node)?node.flatMap(nodes):node&&typeof node==='object'?[node,...node.children.flatMap(nodes)]:[node];
+  const text=node=>nodes(node).filter(x=>typeof x==='string').join(' ');
+  for (const language of ['en','sq']) for (const firstOutcome of ['accepted','unknown']) {
+    const labels=strings[language], calls=[]; let resolve;
+    const context={React:{Component,Fragment:'fragment',createElement:(type,props,...children)=>({type,props:props||{},children})},window:{arra:{businessDays:req=>{calls.push({...req}); return new Promise(r=>resolve=r);}}}};
+    vm.runInNewContext(moduleSource(path.resolve('src/admin/AccountAPrinter.js'),'Feature'),context);
+    const screen=new context.Feature.AccountAPrinter({language}); screen.componentDidMount();
+    const render=()=>nodes(screen.render());
+    const button=label=>render().find(x=>x?.type==='button'&&x.children[0]===label);
+    const submit=()=>render().find(x=>x?.type==='form').props.onSubmit({preventDefault(){}});
+    const amount=value=>render().find(x=>x?.type==='input'&&x.props.type==='text').props.onChange({target:{value}});
+    button(labels.tab).props.onClick(); amount('2000'); submit(); submit();
+    resolve({ok:firstOutcome==='accepted',outcome:firstOutcome}); await new Promise(setImmediate);
+    const prior=render().find(x=>x?.props?.role===(firstOutcome==='accepted'?'status':'alert'));
+    assert.ok(text(prior).includes(firstOutcome==='accepted'?labels.sent:labels.unknown));
+    assert.ok(text(prior).includes(labels.in)); assert.ok(text(prior).includes('2000.00'));
+    render().find(x=>x?.type==='input'&&x.props.value==='out').props.onChange(); amount('500'); submit();
+    const review=render().find(x=>x?.props?.className==='fiscal-confirm');
+    assert.ok(text(review).includes(labels.review)); assert.ok(text(review).includes('500.00')); assert.ok(text(review).includes(labels.required));
+    assert.equal(calls.length,1, 'review must not send the withdrawal');
+    const stillPrior=render().find(x=>x?.props?.role===(firstOutcome==='accepted'?'status':'alert'));
+    assert.ok(text(stillPrior).includes(labels.in)); assert.ok(text(stillPrior).includes('2000.00'));
+    submit(); assert.equal(calls.length,2); assert.deepEqual(calls[1],{action:'accountAPrinterCashMovement',direction:'out',amount:'500.00'});
+    resolve({ok:true,outcome:'accepted'}); await new Promise(setImmediate);
+    if (firstOutcome==='unknown') {
+      const warning=render().find(x=>x?.props?.role==='alert');
+      assert.ok(text(warning).includes(labels.unknown)); assert.ok(text(warning).includes(labels.in)); assert.ok(text(warning).includes('2000.00'));
+      const latest=render().find(x=>x?.props?.role==='status');
+      assert.ok(text(latest).includes(labels.out)); assert.ok(text(latest).includes('500.00'));
+    }
+    screen.componentWillUnmount();
+  }
+});

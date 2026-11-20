@@ -24,7 +24,7 @@ test('preload and IPC round trip restrict the exposed API and reject untrusted r
   vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'), 'utf8'), {
     require(name) { assert.equal(name, 'electron'); return { contextBridge: { exposeInMainWorld(name, value) { assert.equal(name, 'arra'); api = value; } }, ipcRenderer }; },
   });
-  assert.deepEqual(Object.keys(api), ['legacyOrderAssignment', 'language', 'testPrinting', 'activityReport', 'operationalReports', 'transferCorrection', 'adminSentCorrection', 'businessDays', 'billHistory', 'financialVisibility', 'payment', 'bill', 'orderHistory', 'printJobs', 'employeeConfig', 'menuConfig', 'tableConfig', 'getWaiters', 'getEntryTables', 'identifyStaff', 'adminAccess', 'selectWaiter', 'clearWaiter', 'signIn', 'signOut', 'authorizeCancellation', 'revokeCancellationApproval', 'orderItems', 'getApplicationInfo', 'getMenu', 'moveOrder', 'openOrder', 'getTables']);
+  assert.deepEqual(Object.keys(api), ['legacyOrderAssignment', 'language', 'testPrinting', 'activityReport', 'operationalReports', 'transferCorrection', 'adminSentCorrection', 'businessDays', 'getFiscalPrinterWaiting', 'onFiscalPrinterWaiting', 'billHistory', 'financialVisibility', 'payment', 'bill', 'orderHistory', 'printJobs', 'employeeConfig', 'menuConfig', 'tableConfig', 'getWaiters', 'getEntryTables', 'identifyStaff', 'adminAccess', 'selectWaiter', 'clearWaiter', 'signIn', 'signOut', 'authorizeCancellation', 'revokeCancellationApproval', 'orderItems', 'getApplicationInfo', 'getMenu', 'moveOrder', 'openOrder', 'getTables']);
   assert.deepEqual(JSON.parse(JSON.stringify(await api.getApplicationInfo())), { ok: true, data: { name: 'Arra POS', mode: 'development' } });
   assert.deepEqual(handler({}, {}), { ok: false, error: 'Invalid request' });
   assert.deepEqual(handler(trusted, { unexpected: true }), { ok: false, error: 'Invalid request' });
@@ -32,6 +32,26 @@ test('preload and IPC round trip restrict the exposed API and reject untrusted r
   assert.deepEqual(JSON.parse(JSON.stringify(await api.getApplicationInfo())), { ok: false, error: 'Application information unavailable' });
   ipcRenderer.invoke = () => Promise.resolve({ ok: true, data: { name: 'bad', mode: 'development' } });
   assert.equal((await api.getApplicationInfo()).ok, false);
+});
+
+test('printer wait notifications expose only a boolean and unsubscribe on demand', async () => {
+  const { EventEmitter } = require('node:events');
+  const ipcRenderer = new EventEmitter();
+  const channel = 'arra:fiscal-printer-waiting';
+  ipcRenderer.invoke = async name => { assert.equal(name, channel); return true; };
+  let api;
+  vm.runInNewContext(fs.readFileSync(require.resolve('../src/desktop/preload.js'), 'utf8'), {
+    require: () => ({ contextBridge: { exposeInMainWorld(_name, value) { api = value; } }, ipcRenderer }),
+  });
+  assert.equal(await api.getFiscalPrinterWaiting(), true);
+  const seen = [];
+  const unsubscribe = api.onFiscalPrinterWaiting((...args) => seen.push(args));
+  ipcRenderer.emit(channel, {}, true);
+  ipcRenderer.emit(channel, {}, { waiting: true });
+  ipcRenderer.emit(channel, {}, false);
+  assert.equal(unsubscribe(), undefined);
+  ipcRenderer.emit(channel, {}, true);
+  assert.deepEqual(seen, [[true], [false]]);
 });
 
 test('preload forwards only known correction rejection codes and keeps failures uncertain', async () => {

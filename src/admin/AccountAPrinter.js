@@ -12,8 +12,8 @@ function cashAmount(value, direction) {
 }
 
 export class AccountAPrinter extends React.Component {
-  constructor(props) { super(props); this.cashMovement=props.cashMovement || new AccountAPrinterCashMovement(); this.state={busy:false,cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result,result:'',view:'daily',direction:'in',amount:'',review:false,error:false}; this.busy=false; this.mounted=false; }
-  componentDidMount() { this.mounted=true; this.unsubscribe=this.cashMovement.subscribe(()=>this.setState({cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result})); this.setState({cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result}); }
+  constructor(props) { super(props); this.cashMovement=props.cashMovement || new AccountAPrinterCashMovement(); this.state={busy:false,cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result,cashMovement:this.cashMovement.movement,uncertainMovements:this.cashMovement.uncertainMovements,result:'',view:'daily',direction:'in',amount:'',review:false,error:false}; this.busy=false; this.mounted=false; }
+  componentDidMount() { this.mounted=true; const update=()=>this.setState({cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result,cashMovement:this.cashMovement.movement,uncertainMovements:this.cashMovement.uncertainMovements}); this.unsubscribe=this.cashMovement.subscribe(update); update(); }
   componentWillUnmount() { this.mounted=false; this.unsubscribe?.(); }
   async print() {
     if (this.busy || this.cashMovement.busy) return;
@@ -41,8 +41,11 @@ export class AccountAPrinter extends React.Component {
     const cash=s.view==='cash';
     const messages={sent:'Daily control request sent.',failed:'Could not confirm the print request. Check the printer.',accepted:'Cash movement request sent.',declined:'The printer declined this cash movement.',unknown:'The printer may already have recorded this cash movement. Check before entering it again.',not_sent:'Cash movement request was not sent.'};
     const outcome=cash?s.cashResult:(s.result||s.cashResult), busy=s.busy||s.cashBusy;
-    const result=outcome ? h('p',{role:['sent','accepted'].includes(outcome)?'status':'alert',className:'fiscal-result'},t(messages[outcome]))
-      : s.cashBusy && h('p',{role:'status',className:'fiscal-result'},t('Cash movement request in progress.'));
+    const movementLabel=movement=>movement && h('span',null,' ',t(movement.direction==='in'?'Cash in:':'Cash out:'),' ',movement.amount,' MKD');
+    const result=h(React.Fragment,null,
+      outcome && outcome!=='unknown' ? h('p',{role:['sent','accepted'].includes(outcome)?'status':'alert',className:'fiscal-result'},t(messages[outcome]),['sent','failed'].includes(outcome)?null:movementLabel(s.cashMovement))
+        : s.cashBusy && h('p',{role:'status',className:'fiscal-result'},t('Cash movement request in progress.'),movementLabel(s.cashMovement)),
+      s.uncertainMovements.map((movement,index)=>h('p',{key:index,role:'alert',className:'fiscal-result'},t(messages.unknown),movementLabel(movement))));
     return h('div',{className:'fiscal-printer'},
       h('p',{className:'fiscal-device'},'Synergy PF700'),
       h('div',{className:'fiscal-switcher',role:'group','aria-label':t('Printer actions')},
@@ -56,7 +59,7 @@ export class AccountAPrinter extends React.Component {
               ...['in','out'].map(direction=>h('label',{key:direction},h('input',{type:'radio',name:'fiscal-direction',value:direction,checked:s.direction===direction,onChange:()=>this.setState({direction,error:false,result:''})}),t(direction==='in'?'Cash in':'Cash out')))),
             h('label',{className:'fiscal-field'},t('Amount (MKD)'),h('input',{type:'text',inputMode:'decimal',autoComplete:'off',value:s.amount,disabled:busy||s.review,onChange:e=>this.setState({amount:e.target.value,error:false,result:''})})),
             s.error && h('p',{role:'alert',className:'fiscal-result'},t('Enter a positive amount with up to two decimal places that fits the printer limit.')),
-            s.review && h('p',{className:'fiscal-confirm'},t(s.direction==='in'?'Register cash in:':'Register cash out:'),' ',cashAmount(s.amount,s.direction),' MKD'),
+            s.review && h('p',{className:'fiscal-confirm'},t(s.direction==='in'?'Review cash in:':'Review cash out:'),' ',cashAmount(s.amount,s.direction),' MKD. ',t('Confirmation required.')),
             h('div',{className:'fiscal-actions'},h('button',{type:'submit',className:'fiscal-print',disabled:busy},t(s.review?(s.direction==='in'?'Confirm cash in and print':'Confirm cash out and print'):(s.direction==='in'?'Review cash in':'Review cash out'))),
               s.review && h('button',{type:'button',disabled:busy,onClick:()=>this.setState({review:false})},t('Cancel')))),result)
         : h('section',{className:'fiscal-panel'},h('h2',null,t('Daily fiscal control')),
