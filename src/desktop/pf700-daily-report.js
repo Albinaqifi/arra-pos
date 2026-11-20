@@ -60,8 +60,8 @@ function checkExpected(expected) {
 function checkBaseline(baseline, expected) {
   requireMatch(baseline && Number.isInteger(baseline.previousClosure) &&
     baseline.previousClosure >= 0 && baseline.previousClosure < 9999 &&
-    /^[0-9]{7}$/.test(baseline.previousDocumentNumber) &&
-    (baseline.previousDocumentNumber === expected.lastDocumentNumber || Number(baseline.previousDocumentNumber) === Number(expected.lastDocumentNumber) + 1));
+    typeof baseline.previousDocumentNumber === 'string' && /^[0-9]{7}$/.test(baseline.previousDocumentNumber) &&
+    Number(baseline.previousDocumentNumber) < 9999999);
   calendarDate(baseline.deviceDate);
 }
 
@@ -152,7 +152,6 @@ function createPf700DailyReportWithTransport({ mode, expectedSerial, openPipe })
       requireMatch(calendarDate(previous.date) < calendarDate(deviceDate));
       const previousDocumentNumber = await checkOpenPeriod(send, expected, previous.closure);
       if (previousDocumentNumber !== expected.lastDocumentNumber) {
-        requireMatch(Number(previousDocumentNumber) === Number(expected.lastDocumentNumber) + 1);
         if (context.warningDocument !== previousDocumentNumber) return { status:'document-warning', saleDocument:expected.lastDocumentNumber, printerDocument:previousDocumentNumber, deviceDate };
       } else requireMatch(context.warningDocument === undefined);
       baseline = { previousClosure: previous.closure, previousDocumentNumber, deviceDate };

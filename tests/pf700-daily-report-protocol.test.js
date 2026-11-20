@@ -86,7 +86,7 @@ test('empty or malformed local evidence and absent journal never acquire the tra
     assert.deepEqual(await reports.issueDailyReport({ ...expected, ...changed }, { beforeIssue() {} }), { status: 'failed' });
   }
   assert.deepEqual(await reports.issueDailyReport(expected, {}), { status: 'failed' });
-  for (const changed of [{ previousClosure: 9999 }, { deviceDate: '311126' }, { previousDocumentNumber: '0000025' }]) {
+  for (const changed of [{ previousClosure: 9999 }, { deviceDate: '311126' }, { previousDocumentNumber: 'invalid' }]) {
     assert.deepEqual(await reports.reconcileDailyReport(expected, { ...baseline, ...changed }), { status: 'uncertain' });
   }
   assert.deepEqual(printer.operations, []);
@@ -115,7 +115,7 @@ test('wrong device, unsafe status, unbound period or wrong tender stops before d
     [110, r => { r.value = r.value.replace(amount(0), amount(1)); }],
     [110, r => { r.value = r.value.replace('0008,0003', '0007,0003'); }],
     [110, r => { r.value = r.value.replace('0008,0003', '0008,0002'); }],
-    [113, r => { r.value = '0000025'; }],
+    [113, r => { r.value = '9999999'; }],
     [113, r => { r.sequence ^= 1; }]
   ];
   for (const [command, change] of cases) {
@@ -259,4 +259,18 @@ test('Windows report exchange restricts command and payload, permits a long busy
   const result = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand',
     Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
+});
+test('any valid document difference warns without printing, including a lower number',async()=>{
+  for(const document of ['0000024','0000028','0009999']) {
+    const printer=device(r=>{if(r.cmd===113 && !r.issued) r.value=document;});
+    const result=await printer.adapter().issueDailyReport(expected,{beforeIssue(){assert.fail('No issue before warning');}});
+    assert.deepEqual(result,{status:'document-warning',saleDocument:'0000026',printerDocument:document,deviceDate:'191126'});
+    assert.equal(printer.traffic.includes(69),false);
+  }
+});
+test('a changed document number requires a fresh warning before issue',async()=>{
+  const printer=device(r=>{if(r.cmd===113 && !r.issued) r.value='0000029';});
+  const result=await printer.adapter().issueDailyReport(expected,{warningDocument:'0000028',beforeIssue(){assert.fail('stale warning');}});
+  assert.deepEqual(result,{status:'document-warning',saleDocument:'0000026',printerDocument:'0000029',deviceDate:'191126'});
+  assert.equal(printer.traffic.includes(69),false);
 });

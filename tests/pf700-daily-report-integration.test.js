@@ -241,14 +241,37 @@ test('document warning permits a verified simulated Z but never overrides cash o
 test('warning close with interrupted confirmation recovers using the printer document baseline',async t=>{
   const f=trainingRestaurant(t); f.signIn('waiter'); await f.checkout([espresso]);
   f.device(db=>db.exec(`UPDATE documents SET doc=120 WHERE bill IS NOT NULL; PRAGMA ignore_check_constraints=ON;
-    INSERT INTO documents(doc,bill,z,stamp,cash,card,taxA,taxV) VALUES(121,NULL,NULL,NULL,0,0,0,0);
+    INSERT INTO documents(doc,bill,z,stamp,cash,card,taxA,taxV) VALUES(121,NULL,NULL,NULL,0,0,0,0),(122,NULL,NULL,NULL,0,0,0,0);
     PRAGMA ignore_check_constraints=OFF;`));
   f.signIn('combined'); const dayId=await f.closeSharedDay();
   assert.equal((await f.days(issue(dayId))).error,'document-warning');
   f.db.exec("CREATE TEMP TRIGGER fail_warning_confirm BEFORE INSERT ON fiscal_daily_confirmations BEGIN SELECT RAISE(ABORT,'test interruption'); END");
-  assert.equal((await f.days({...issue(dayId),warningDocument:'0000121'})).error,'uncertain');
+  assert.equal((await f.days({...issue(dayId),warningDocument:'0000122'})).error,'uncertain');
   assert.equal(f.reports().length,1); f.restart(); f.signIn('combined');
   assert.deepEqual(await f.days(reconcile(dayId)),{ok:true});
-  assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000122');
+  assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000123');
   assert.equal(f.reports().length,1);
+});
+test('a two-document difference warns and closes once; new cash and tax mismatches still block',async t=>{
+  const f=trainingRestaurant(t); f.signIn('waiter'); await f.checkout([espresso,beer]);
+  f.device(db=>db.exec(`UPDATE documents SET doc=120 WHERE bill IS NOT NULL; PRAGMA ignore_check_constraints=ON;
+    INSERT INTO documents(doc,bill,z,stamp,cash,card,taxA,taxV) VALUES
+      (121,NULL,NULL,NULL,0,0,0,0),(122,NULL,NULL,NULL,0,0,0,0);
+    PRAGMA ignore_check_constraints=OFF;`));
+  f.signIn('combined'); const dayId=await f.closeSharedDay();
+  const warn=()=>f.days(issue(dayId)); const confirm=()=>f.days({...issue(dayId),warningDocument:'0000122'});
+  assert.deepEqual(await warn(),{ok:false,error:'document-warning',saleDocument:'0000120',printerDocument:'0000122'});
+  f.device(db=>db.exec('UPDATE documents SET cash=0,card=250 WHERE bill IS NOT NULL'));
+  assert.deepEqual(await confirm(),{ok:false,error:'preflight'}); assert.equal(f.reports().length,0);
+  f.device(db=>db.exec('UPDATE documents SET cash=250,card=0 WHERE bill IS NOT NULL'));
+  assert.equal((await warn()).error,'document-warning');
+  f.device(db=>db.exec('UPDATE documents SET taxA=70,taxV=180 WHERE bill IS NOT NULL'));
+  assert.deepEqual(await confirm(),{ok:false,error:'preflight'}); assert.equal(f.reports().length,0);
+  f.device(db=>db.exec('UPDATE documents SET taxA=180,taxV=70 WHERE bill IS NOT NULL'));
+  assert.equal((await warn()).error,'document-warning');
+  assert.deepEqual(await confirm(),{ok:true});
+  assert.deepEqual(f.reports(),[{z:2,cash:250,card:0,taxA:180,taxV:70}]);
+  assert.equal(f.db.prepare('SELECT count(*) n FROM fiscal_daily_confirmations').get().n,1);
+  assert.equal(f.db.prepare('SELECT document_number FROM fiscal_daily_confirmations').get().document_number,'0000123');
+  assert.deepEqual(await f.days(issue(dayId)),{ok:true}); assert.equal(f.reports().length,1);
 });

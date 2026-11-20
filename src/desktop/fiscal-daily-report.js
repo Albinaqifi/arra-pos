@@ -212,7 +212,7 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
         if (!acceptingBaseline || reserved || !authorized() || !baseline ||
             baseline.deviceDate !== currentDate() || !/^[0-9]{7}$/.test(baseline.previousDocumentNumber) || Number(baseline.previousDocumentNumber) >= 9999999 ||
             !(baseline.previousDocumentNumber === expected.lastDocumentNumber && req.warningDocument === undefined ||
-              baseline.previousDocumentNumber === req.warningDocument && Number(baseline.previousDocumentNumber) === Number(expected.lastDocumentNumber) + 1) ||
+              baseline.previousDocumentNumber === req.warningDocument && baseline.previousDocumentNumber !== expected.lastDocumentNumber) ||
             !Number.isInteger(baseline.previousClosure) || baseline.previousClosure < 0 || baseline.previousClosure >= 9999) throw Error('Invalid report baseline');
         transaction(db, () => {
           if (req.retryAfter !== lastUnissuedAttempt(db,dayId) ||
@@ -230,8 +230,8 @@ async function handle(db, req, actor, authorized, adapter, report, originalClose
           req.retryAfter === lastUnissuedAttempt(db,dayId) &&
           (db.prepare('SELECT id FROM account_a_closes WHERE day_id=?').get(dayId)?.id ?? null) === originalCloseId &&
           JSON.stringify(coverage(db,dayId,report,adapter).expected) === frozen &&
-          /^[0-9]{7}$/.test(result.printerDocument) &&
-          Number(result.printerDocument) === Number(expected.lastDocumentNumber) + 1)
+          typeof result.printerDocument === 'string' && /^[0-9]{7}$/.test(result.printerDocument) &&
+          Number(result.printerDocument) < 9999999 && result.printerDocument !== expected.lastDocumentNumber)
         { warningMap(db).set(dayId,{actor,generation,mode,document:result.printerDocument,expected:frozen,retryAfter:req.retryAfter});
           return {ok:false,error:'document-warning',saleDocument:result.saleDocument,printerDocument:result.printerDocument}; }
       if (!reserved) return authorized() ? {ok:false,error:'preflight'} : {ok:false,denied:true};
