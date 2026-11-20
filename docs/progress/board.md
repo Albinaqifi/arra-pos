@@ -12,7 +12,7 @@ The backlog is in `../stories/backlog.md`; this board is the source of status. W
 | S-104 | In progress | Focused checks passed on `5ffa168`. Owner deferred two admin message fixes and printer-tab navigation so the next story can proceed. PR merge and physical printer verification remain open. [Deferred TODOs](handoffs/S-104.md#deferred-review-todos) |
 | S-103 | In progress | Windows launcher and RC5 source integration are under review. Restaurant installation and PR merge remain open. [Integration handoff](handoffs/RC5-integration.md) |
 | S-102 | In progress | RC4 combines Cash B Bar printing and both A Pay flows. Independent review and packaged Electron rehearsal passed. Restaurant installation, paper and PR merge are open. [Handoff](handoffs/S-102.md) |
-| S-101 | In progress | Separate-terminal Card A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-101.md) |
+| S-101 | In progress | [PR #164](https://github.com/Albinaqifi/arra-pos/pull/164) corrects Fast Pay card counter validation. The first restaurant review stopped before printer contact. The revised review, physical recovery and real Card A checkout are pending. [Handoff](handoffs/S-101.md) |
 | S-100 | In progress | Immediate Cash A Pay is packaged in RC4 and verified offline on Windows. Restaurant verification remains open. [Handoff](handoffs/S-100.md) |
 | S-099 | Todo | [Install and upgrade the live Windows POS](../stories/backlog.md#s-099--install-and-upgrade-the-live-windows-pos) |
 | S-098 | In progress | Offline preparation printing during PF700 checkout passed independent review and testing. PR merge and same-order restaurant paper check remain open. [Handoff](handoffs/S-098.md) |

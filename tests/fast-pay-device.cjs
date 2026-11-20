@@ -86,6 +86,41 @@ test('a different tender register moving after the debit leaves the printed docu
   assert.equal(f.acknowledgements.length, f.commands.length - 1);
 });
 
+test('Fast Pay card accepts a stable offset between independent register and opening counters', async () => {
+  const f = fixture('card', { receiptCountOffset: 14 });
+  const result = await f.printer.registerSale(f.receipt, f.journal);
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.reference, '0000002');
+  assert.equal(result.evidence.debitAmountMinor, 7500);
+  assert.equal(f.fake.state.tenders, 1);
+  assert.equal(f.fake.state.closes, 1);
+});
+
+test('Fast Pay card rejects changed receipt progression, fiscal day, other register or open-close count', async () => {
+  for (const config of [{postCloseReceiptOffset:1}, {postCloseClosureDelta:1},
+    {postCloseRegisterDelta:1}, {postCloseDebitDelta:1}, {closeCounterDelta:1}, {debitRegister:0}]) {
+    const f = fixture('card', {receiptCountOffset:14, ...config});
+    assert.equal((await f.printer.registerSale(f.receipt, f.journal)).status, 'uncertain');
+    assert.equal(f.fake.state.tenders, 1);
+    assert.equal(f.fake.state.closes, 1);
+    assert.equal(f.commands.filter(command => command === 53).length, 1);
+    assert.equal(f.commands.filter(command => command === 56).length, 1);
+  }
+});
+
+test('lost open and first item responses stop without replay and retain command stage', async () => {
+  for (const [command,mode] of [[48,'before'],[48,'after'],[49,'before'],[49,'after']]) {
+    const f = fixture('card', {receiptCountOffset:14});
+    f.fake.fault(command, mode);
+    assert.equal((await f.printer.registerSale(f.receipt, f.journal)).status, 'uncertain');
+    assert.equal(f.commands.at(-1), command);
+    assert.equal(f.acknowledgements.length, f.commands.length - 1);
+    assert.equal(f.commands.filter(value => value === command).length, 1);
+    assert.equal(f.fake.state.tenders, 0);
+    assert.equal(f.fake.state.closes, 0);
+  }
+});
+
 test('receipt scope, card enrollment and a durable baseline callback are checked before launch', async () => {
   const f = fixture('cash', { enrolled: false });
   for (const request of [

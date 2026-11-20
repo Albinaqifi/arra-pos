@@ -118,8 +118,9 @@ function checkAmounts(fields, expected) {
 async function executePf700Checkout(snapshot, operator, exchange) {
   let openAttempted = false;
   try {
-    const { domesticProduct = false, onsiteFirmware = false } = operator;
-    requireMatch(typeof onsiteFirmware === 'boolean');
+    const { domesticProduct = false, onsiteFirmware = false, fastPayCardCounters = false } = operator;
+    requireMatch(typeof onsiteFirmware === 'boolean' && typeof fastPayCardCounters === 'boolean' &&
+      (!fastPayCardCounters || (operator.supervisedCardTrial && snapshot.method === 'card')));
     const { items, sums, total, method } = prepare(snapshot, domesticProduct, onsiteFirmware ? MAX_ONSITE_TOTAL : MAX_AMOUNT);
     const { firstSequence, operatorNumber, operatorPassword, tillNumber } = operator;
     requireMatch(Number.isInteger(firstSequence) && firstSequence >= 0x20 && firstSequence <= 0x7f &&
@@ -168,7 +169,7 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     if (operator.beforeOpen) await operator.beforeOpen({ previousDocumentNumber: priorDocument });
     openAttempted = true;
     const before = counters(await send(48, ascii([operatorNumber, operatorPassword, tillNumber].join(',')), true, [], data => {
-      const pair=counters(data); requireMatch(pair[0]<9999 && (!priorRegisters || priorRegisters.nextReceipt === pair[0] + 1));
+      const pair=counters(data); requireMatch(pair[0]<9999 && (!priorRegisters || fastPayCardCounters || priorRegisters.nextReceipt === pair[0] + 1));
       return {fiscalReceiptCount:pair[0],reversalCount:pair[1]};
     }));
     requireMatch(before[0] < 9999);
@@ -202,7 +203,8 @@ async function executePf700Checkout(snapshot, operator, exchange) {
     if (priorRegisters) {
       await send(110, undefined, false, [], data => {
         const current = paymentRegisters(data.toString('latin1'));
-        requireMatch(current.closure === priorRegisters.closure && current.nextReceipt === after[0] + 1 &&
+        requireMatch(current.closure === priorRegisters.closure &&
+          current.nextReceipt === (fastPayCardCounters ? priorRegisters.nextReceipt + 1 : after[0] + 1) &&
           current.amounts.every((amount, index) => amount === priorRegisters.amounts[index] + (index === 2 ? total * 100 : 0)));
         return {cardTenderMatched:true};
       });

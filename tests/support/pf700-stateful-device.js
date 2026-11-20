@@ -15,7 +15,9 @@ function response(sequence, command, data, open) {
   return Buffer.concat([Buffer.from([1]), body, Buffer.from([12, 8, 4, 0].map(shift => 48 + ((sum >> shift) & 15))), Buffer.from([3])]);
 }
 
-function createStatefulPf700({legacy = false, method = null, debitRegister = 2, receiptCountOffset = 0} = {}) {
+function createStatefulPf700({legacy = false, method = null, debitRegister = 2, receiptCountOffset = 0,
+  postCloseReceiptOffset = 0, postCloseClosureDelta = 0, postCloseRegisterDelta = 0,
+  postCloseDebitDelta = 0, closeCounterDelta = 0} = {}) {
   const state = { open: false, items: 0, sums: [0, 0, 0, 0], paid: 0, tenders: 0, closes: 0, document: 1 };
   const registers = [10, 20, 30, 40];
   const transcript = [];
@@ -48,7 +50,10 @@ function createStatefulPf700({legacy = false, method = null, debitRegister = 2, 
       case 97: value = '18.00,5.00,10.00,0.00'; break;
       case 110:
         if (method === 'cash' || state.open || payload) throw Error('Invalid synthetic tender register query');
-        value = [...registers.map(amount), '0007', String(1 + state.closes + receiptCountOffset).padStart(4, '0')].join(',');
+        value = [...registers.map((n,i) => amount(n + (state.closes && i === 0 ? postCloseRegisterDelta : 0) +
+          (state.closes && i === 2 ? postCloseDebitDelta : 0))),
+          String(7 + (state.closes ? postCloseClosureDelta : 0)).padStart(4,'0'),
+          String(1 + state.closes + receiptCountOffset + (state.closes ? postCloseReceiptOffset : 0)).padStart(4, '0')].join(',');
         break;
       case 113: value = String(state.document).padStart(7, '0'); break;
       case 48:
@@ -76,7 +81,7 @@ function createStatefulPf700({legacy = false, method = null, debitRegister = 2, 
         state.paid += total; state.tenders++; value = 'R+000000000'; break;
       case 56:
         if (!state.open || state.paid !== total || !total) throw Error('Invalid synthetic close');
-        state.open = false; state.closes++; state.document++; value = '0001,0000'; break;
+        state.open = false; state.closes++; state.document++; value = String(1+closeCounterDelta).padStart(4,'0')+',0000'; break;
       default: throw Error('Unsupported synthetic command');
     }
     const reply = response(sequence, command, value, state.open);

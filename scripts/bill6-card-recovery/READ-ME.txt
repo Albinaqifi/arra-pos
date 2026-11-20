@@ -1,0 +1,22 @@
+Recover an existing paid Card A bill
+
+Use the enrolled Windows account and the original PF700 on COM3. Keep the
+bank approval and paper. Close Arra and other programs using the printer.
+Leave the fiscal printer powered on. Extract all files into a new folder,
+separate from the Arra installation.
+
+1. Run Review-Receipt.cmd. Sign in locally with the Combined administrator
+   username and password. It checks the existing local payment and printer
+   state. The printer inquiries can replace the last cached reply.
+   Review cannot register items, tender the bill or close the receipt.
+2. If the review reports STOP, save that line and leave the receipt as it is.
+   Do not select Pay again or use a cash recovery tool.
+3. The separately authorized Finish operation asks you to verify the displayed
+   items, amount, successful terminal payment and uninterrupted custody of
+   the original receipt before entering its fiscal card tender. It can print
+   items and close that existing document. It never starts a second receipt,
+   charges a bank terminal or creates a second Arra payment. If interrupted,
+   preserve both the restaurant database and the local commissioning ledger.
+   An attempted device write cannot be retried automatically.
+4. After confirmed completion, compare the paper with the original bill and
+   save its fiscal document number. Existing unrelated fiscal holds remain.

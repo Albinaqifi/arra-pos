@@ -1,0 +1,9 @@
+*
+!/.gitignore
+!/Arra.ico
+!/ArraPos.cs
+!/ReleaseFiles.cs
+!/START-HERE.txt
+!/build.py
+!/verify-compat.ps1
+!/verify-launcher.ps1
