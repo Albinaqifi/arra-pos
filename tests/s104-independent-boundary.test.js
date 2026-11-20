@@ -28,7 +28,7 @@ test('cash movement rechecks authorization after the device identity probe', asy
     trusted = true; db.exec("INSERT OR IGNORE INTO user_permissions VALUES(1,'employees.view')"); commands.length = 0;
     const pending = handler({}, {action:'accountAPrinterCashMovement', direction:'out', amount:'500'});
     await new Promise(setImmediate); change(); release();
-    assert.deepEqual(await pending, {ok:false}); assert.deepEqual(commands, [90]);
+    assert.deepEqual(await pending, {ok:false,outcome:'not_sent'}); assert.deepEqual(commands, [90]);
   }
 });
 

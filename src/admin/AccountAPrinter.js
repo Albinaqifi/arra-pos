@@ -1,4 +1,5 @@
 import { financeText } from './finance-i18n.js';
+import { AccountAPrinterCashMovement } from './AccountAPrinterCashMovement.js';
 
 // Work with decimal text so validation and the printer limit do not depend on floating point.
 function cashAmount(value, direction) {
@@ -11,11 +12,11 @@ function cashAmount(value, direction) {
 }
 
 export class AccountAPrinter extends React.Component {
-  constructor(props) { super(props); this.state={busy:false,result:'',view:'daily',direction:'in',amount:'',review:false,error:false}; this.busy=false; this.mounted=false; }
-  componentDidMount() { this.mounted=true; }
-  componentWillUnmount() { this.mounted=false; }
+  constructor(props) { super(props); this.cashMovement=props.cashMovement || new AccountAPrinterCashMovement(); this.state={busy:false,cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result,result:'',view:'daily',direction:'in',amount:'',review:false,error:false}; this.busy=false; this.mounted=false; }
+  componentDidMount() { this.mounted=true; this.unsubscribe=this.cashMovement.subscribe(()=>this.setState({cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result})); this.setState({cashBusy:this.cashMovement.busy,cashResult:this.cashMovement.result}); }
+  componentWillUnmount() { this.mounted=false; this.unsubscribe?.(); }
   async print() {
-    if (this.busy) return;
+    if (this.busy || this.cashMovement.busy) return;
     this.busy=true; this.setState({busy:true,result:''});
     let ok=false;
     try { ok=(await window.arra.businessDays({action:'accountAPrinterDailyControl'}))?.ok===true; } catch (_) {}
@@ -23,44 +24,45 @@ export class AccountAPrinter extends React.Component {
     if (this.mounted) this.setState({busy:false,result:ok?'sent':'failed'});
   }
   reviewCash() {
-    if (this.busy) return;
+    if (this.busy || this.cashMovement.busy) return;
     if (!cashAmount(this.state.amount,this.state.direction)) { this.setState({error:true,result:''}); return; }
     this.setState({review:true,error:false,result:''});
   }
   async confirmCash() {
     const {direction,amount,review}=this.state;
     const normalized=cashAmount(amount,direction);
-    if (this.busy || !review || !normalized) return;
-    this.busy=true; this.setState({busy:true,result:''});
-    let ok=false;
-    try { ok=(await window.arra.businessDays({action:'accountAPrinterCashMovement',direction,amount:normalized}))?.ok===true; } catch (_) {}
-    this.busy=false;
-    if (this.mounted) this.setState({busy:false,review:false,amount:'',result:ok?'cashSent':'failed'});
+    if (this.busy || this.cashMovement.busy || !review || !normalized) return;
+    const pending=this.cashMovement.send(direction,normalized);
+    this.setState({review:false,amount:''});
+    await pending;
   }
   render() {
     const h=React.createElement,t=key=>financeText(this.props.language,key),s=this.state;
     const cash=s.view==='cash';
-    const result=s.result && h('p',{role:s.result==='failed'?'alert':'status',className:'fiscal-result'},t(s.result==='sent'?'Daily control request sent.':s.result==='cashSent'?'Cash movement request sent.':'Could not confirm the print request. Check the printer.'));
+    const messages={sent:'Daily control request sent.',failed:'Could not confirm the print request. Check the printer.',accepted:'Cash movement request sent.',declined:'The printer declined this cash movement.',unknown:'The printer may already have recorded this cash movement. Check before entering it again.',not_sent:'Cash movement request was not sent.'};
+    const outcome=cash?s.cashResult:(s.result||s.cashResult), busy=s.busy||s.cashBusy;
+    const result=outcome ? h('p',{role:['sent','accepted'].includes(outcome)?'status':'alert',className:'fiscal-result'},t(messages[outcome]))
+      : s.cashBusy && h('p',{role:'status',className:'fiscal-result'},t('Cash movement request in progress.'));
     return h('div',{className:'fiscal-printer'},
       h('p',{className:'fiscal-device'},'Synergy PF700'),
       h('div',{className:'fiscal-switcher',role:'group','aria-label':t('Printer actions')},
-        h('button',{type:'button','aria-pressed':!cash,disabled:s.busy,onClick:()=>this.setState({view:'daily',result:'',review:false,error:false})},t('Daily control')),
-        h('button',{type:'button','aria-pressed':cash,disabled:s.busy,onClick:()=>this.setState({view:'cash',result:'',review:false,error:false})},t('Cash in / out'))),
+        h('button',{type:'button','aria-pressed':!cash,disabled:busy,onClick:()=>this.setState({view:'daily',result:'',review:false,error:false})},t('Daily control')),
+        h('button',{type:'button','aria-pressed':cash,disabled:busy,onClick:()=>this.setState({view:'cash',result:'',review:false,error:false})},t('Cash in / out'))),
       h('div',{className:'fiscal-desk'},
         cash ? h('section',{className:'fiscal-panel'},h('h2',null,t('Register cash in or out')),
           h('p',{className:'fiscal-intro'},t('Enter the amount you are adding to or taking from the Account A wallet.')),
           h('form',{onSubmit:e=>{e.preventDefault(); if(s.review) this.confirmCash(); else this.reviewCash();}},
-            h('fieldset',{className:'fiscal-choice',disabled:s.busy||s.review},h('legend',null,t('Movement')),
+            h('fieldset',{className:'fiscal-choice',disabled:busy||s.review},h('legend',null,t('Movement')),
               ...['in','out'].map(direction=>h('label',{key:direction},h('input',{type:'radio',name:'fiscal-direction',value:direction,checked:s.direction===direction,onChange:()=>this.setState({direction,error:false,result:''})}),t(direction==='in'?'Cash in':'Cash out')))),
-            h('label',{className:'fiscal-field'},t('Amount (MKD)'),h('input',{type:'text',inputMode:'decimal',autoComplete:'off',value:s.amount,disabled:s.busy||s.review,onChange:e=>this.setState({amount:e.target.value,error:false,result:''})})),
+            h('label',{className:'fiscal-field'},t('Amount (MKD)'),h('input',{type:'text',inputMode:'decimal',autoComplete:'off',value:s.amount,disabled:busy||s.review,onChange:e=>this.setState({amount:e.target.value,error:false,result:''})})),
             s.error && h('p',{role:'alert',className:'fiscal-result'},t('Enter a positive amount with up to two decimal places that fits the printer limit.')),
             s.review && h('p',{className:'fiscal-confirm'},t(s.direction==='in'?'Register cash in:':'Register cash out:'),' ',cashAmount(s.amount,s.direction),' MKD'),
-            h('div',{className:'fiscal-actions'},h('button',{type:'submit',className:'fiscal-print',disabled:s.busy},t(s.review?(s.direction==='in'?'Confirm cash in and print':'Confirm cash out and print'):(s.direction==='in'?'Review cash in':'Review cash out'))),
-              s.review && h('button',{type:'button',disabled:s.busy,onClick:()=>this.setState({review:false})},t('Cancel')))),result)
+            h('div',{className:'fiscal-actions'},h('button',{type:'submit',className:'fiscal-print',disabled:busy},t(s.review?(s.direction==='in'?'Confirm cash in and print':'Confirm cash out and print'):(s.direction==='in'?'Review cash in':'Review cash out'))),
+              s.review && h('button',{type:'button',disabled:busy,onClick:()=>this.setState({review:false})},t('Cancel')))),result)
         : h('section',{className:'fiscal-panel'},h('h2',null,t('Daily fiscal control')),
           h('p',{className:'fiscal-intro'},t('Print the figures registered so far. Service continues with the fiscal day open.')),
           h('div',{className:'fiscal-figure'},h('span',null,t('Expected Account A cash')),h('strong',null,t('See printed report'))),
-          h('button',{type:'button',className:'fiscal-print',disabled:s.busy,onClick:()=>this.print()},t('Print daily fiscal control')),result),
+          h('button',{type:'button',className:'fiscal-print',disabled:busy,onClick:()=>this.print()},t('Print daily fiscal control')),result),
         h('aside',{className:'fiscal-tray','aria-label':t('Example paper')},h('div',{className:'fiscal-tray-title'},t('Example paper'),h('span',null,'PF700')),
           h('div',{className:'fiscal-paper',lang:'mk'},h('strong',null,'АРРА'),h('small',null,'ПРИМЕРОК'),cash ? null : h('p',null,'КОНТРОЛЕН ФИНАНСИСКИ ИЗВЕШТАЈ'),h('hr'),h('p',null,'КОНТРОЛНА СМЕТКА')),
           h('small',null,t('Illustrative excerpt · firmware determines the layout')))));

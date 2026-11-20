@@ -1,5 +1,6 @@
 import * as Pages from './index.js';
 import { FeatureState } from '../shared/FeatureState.js';
+import { AccountAPrinterCashMovement } from './AccountAPrinterCashMovement.js';
 
 const pages = { operationalReports: Pages.OperationalReports, financialVisibility: Pages.FinancialVisibility, orderHistory: Pages.OrderHistory, adminSentCorrections: Pages.AdminSentCorrections, legacyOrderAssignment: Pages.LegacyOrderAssignment, employeeConfig: Pages.EmployeeConfig, menuConfig: Pages.MenuConfig, tableConfig: Pages.TableConfig };
 const editors = new Set(['tableConfig', 'menuConfig', 'employeeConfig', 'adminSentCorrections', 'legacyOrderAssignment']);
@@ -9,9 +10,10 @@ export class AdminWorkspace extends FeatureState {
     super({ page: 'admin' });
     Object.assign(this, { signOut, refreshAccess });
     this.identity = { generation: 0 };
+    this.cashMovement = new AccountAPrinterCashMovement();
   }
   setIdentity(identity) {
-    if (identity.generation !== this.identity.generation) { this.editor = null; this._set({ page: 'admin' }); }
+    if (identity.generation !== this.identity.generation) { this.editor = null; this.cashMovement.reset(); this._set({ page: 'admin' }); }
     this.identity = identity;
   }
   canLeave() { return !editors.has(this.state.page) || !this.editor || (!this.editor.state.busy && this.editor.leaveEditor()); }
@@ -36,6 +38,7 @@ export class AdminWorkspace extends FeatureState {
       language, onJobsChanged: page === 'adminSentCorrections' ? jobsChanged : undefined, onBack: () => this.returnToOverview(), onAccessChanged: () => this.refreshAccess(generation),
       onReviewOrders: page === 'financialVisibility' ? () => this.navigate('orderHistory') : undefined,
       onReviewCancellationNotices: page === 'financialVisibility' ? () => this.navigate('admin') : undefined,
+      cashMovement: page === 'financialVisibility' ? this.cashMovement : undefined,
     }) : React.createElement(React.Fragment, null, settings, printing));
   }
 }
