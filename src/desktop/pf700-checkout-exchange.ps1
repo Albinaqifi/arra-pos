@@ -1,6 +1,6 @@
 # Windows PowerShell 5.1. The checkout process owns the private stdin/stdout
 # pipes. Running this helper with no valid identity probe opens no port.
-param([ValidateSet('Checkout', 'CardTrial', 'DailyReport', 'ReadDailyReport', 'ReadCheckout')][string]$Operation = 'Checkout')
+param([ValidateSet('Checkout', 'CardTrial', 'DailyReport', 'ReadDailyReport', 'ReadCheckout', 'PrinterControl')][string]$Operation = 'Checkout')
 
 function Read-Pf700CheckoutReply($Port, $Deadline = 20000) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
@@ -64,6 +64,11 @@ function Invoke-Pf700CheckoutPort($Port, $InputReader, $OutputWriter, $Operation
                 $queries = @{ 90 = '0'; 76 = 'T'; 103 = ''; 113 = '' }
                 $command = [int]$request[3]
                 if (!$queries.ContainsKey($command) -or $queries[$command] -cne $payload) { throw 'Invalid checkout inquiry' }
+            } elseif ($Operation -eq 'PrinterControl') {
+                $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
+                if ($request[3] -eq 90 -and !$identified -and $payload -ceq '0') { }
+                elseif ($request[3] -eq 69 -and $identified -and !$reportSent -and $payload -ceq '2') { $reportSent = $true }
+                else { throw 'Invalid printer control command' }
             } else {
                 $payload = [Text.Encoding]::ASCII.GetString($request, 4, $request.Length - 10)
                 $queries = @{ 90 = '0'; 74 = 'X'; 76 = 'T'; 62 = ''; 64 = ''; 65 = ''; 67 = ''; 110 = ''; 113 = '' }

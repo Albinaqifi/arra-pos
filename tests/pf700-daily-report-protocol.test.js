@@ -230,6 +230,11 @@ test('Windows report exchange restricts command and payload, permits a long busy
     "  if (!$port.Disposed -or $port.Writes -ne $writes -or $outbox.ToString().Contains('FAIL') -ne $denied) { throw 'Invalid report stream' }",
     '}',
     ...[
+      ['PrinterControl', [probe, packet(69, '2')], 2, false],
+      ['PrinterControl', [probe, packet(69, '2'), packet(69, '2')], 2, true],
+      ['PrinterControl', [probe, report], 1, true],
+      ['PrinterControl', [probe, read], 1, true],
+      ['PrinterControl', [packet(69, '2')], 0, true],
       ['DailyReport', [probe, read, packet(65, ''), report], 4, false],
       ['DailyReport', [probe, report, report], 2, true],
       ['DailyReport', [probe, packet(69, '2')], 1, true],

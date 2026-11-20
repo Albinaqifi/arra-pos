@@ -44,9 +44,10 @@ function dispatch(db, adapter, attempt) {
     db.prepare('INSERT INTO day_print_results VALUES(?,?,?)').run(attempt.attemptId,result === 'accepted' ? 'accepted' : 'failed',Date.now());
   }).catch(() => {}).finally(() => inFlight(db).delete(attempt.attemptId));
 }
-function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = () => 'failed', dailyAdapter = null) {
+function registerBusinessDays(ipcMain, isAllowedSender, db, session, adapter = () => 'failed', dailyAdapter = null, printerAdapter = null) {
   if (dailyAdapter && !require('./fiscal-daily-report').validAdapter(dailyAdapter)) throw Error('Invalid daily report adapter');
   ipcMain.handle(CHANNEL, (event, req) => {
+    if (req && typeof req.action === 'string' && req.action.startsWith('accountAPrinter')) return require('./account-a-printer').handle(event, req, isAllowedSender, db, session, printerAdapter);
     if (req && typeof req.action === 'string' && req.action.startsWith('accountABills')) return require('./account-a-bills').handle(event, req, isAllowedSender, db, session, adapter);
     if (req && typeof req.action === 'string' && req.action.startsWith('accountA')) return require('./account-a-close').handleAccountA(event, req, isAllowedSender, db, session, adapter, dailyAdapter);
     if (!isAllowedSender(event) || !req || typeof req !== 'object' || Array.isArray(req) || Object.getPrototypeOf(req) !== Object.prototype || typeof req.action !== 'string' ||
